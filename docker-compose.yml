@@ -1,0 +1,19 @@
+services:
+  fuse-app:
+    build: .
+    container_name: fuse-go-app
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+      - DAC_READ_SEARCH
+    devices:
+      - /dev/fuse
+    volumes:
+      - /dev/fuse:/dev/fuse
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - GO_ENV=development
+      - HTTP_PROXY=host.docker.internal:9090
+      - HTTPS_PROXY=host.docker.internal:9090
+    stdin_open: true
+    tty: true
