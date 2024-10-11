@@ -1,7 +1,7 @@
 package main
 
 import (
-	"debrid_drive/fuse"
+	"debrid_drive/vfs"
 	// "debrid_drive/config"
 	// "debrid_drive/stream"
 	// "fmt"
@@ -11,7 +11,7 @@ import (
 // Implement the Read and Seek methods as per your previous implementation...
 
 func main() {
-    fuse.Start()
+	vfs.Start()
 
 	// // Create a new SeekableVideoStream
 	// videoStream, err := stream.NewPartialReader(config.VideoURL)
@@ -30,7 +30,7 @@ func main() {
 	// 		fmt.Printf("Error seeking to position %d: %v\n", pos, err)
 	// 		continue
 	// 	}
-	// 	
+	//
 	// 	// Read data
 	// 	buffer := make([]byte, 4096) // Read 4 KB
 	// 	n, err := videoStream.Read(buffer)
@@ -59,7 +59,7 @@ func main() {
 	//
 	// fmt.Printf("Read %d bytes from the end of the video\n", n)
 	//
- //    videoStream.CheckIsMKV()
+	//    videoStream.CheckIsMKV()
 	//
 	// // Check if the stream is MKV
 	// if !videoStream.IsMkv {
@@ -68,4 +68,3 @@ func main() {
 	// }
 	// fmt.Println("The stream is a valid MKV file.")
 }
-

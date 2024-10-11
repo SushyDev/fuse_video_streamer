@@ -2,17 +2,16 @@ package stream
 
 import (
 	"debrid_drive/config"
-    "fmt"
+	"fmt"
 )
 
-type Chunk struct {
+type cacheChunk struct {
 	number      int64
 	startOffset int64
 	endOffset   int64
 }
 
-// getChunkByNumber creates a Chunk based on its number.
-func getChunkByNumber(chunkNumber, fileSize int64) Chunk {
+func getChunkByNumber(chunkNumber, fileSize int64) cacheChunk {
 	startOffset := chunkNumber * config.CacheChunkSize
 	endOffset := startOffset + config.CacheChunkSize
 
@@ -24,16 +23,14 @@ func getChunkByNumber(chunkNumber, fileSize int64) Chunk {
 		endOffset = fileSize
 	}
 
-	// endOffset = endOffset - 1
-
-	return Chunk{
+	return cacheChunk{
 		number:      chunkNumber,
 		startOffset: startOffset,
 		endOffset:   endOffset,
 	}
 }
 
-func getChunkByStartOffset(startOffset, fileSize int64) Chunk {
+func getChunkByStartOffset(startOffset, fileSize int64) cacheChunk {
 	chunkNumber := startOffset / config.CacheChunkSize
 
 	if chunkNumber < 0 {
@@ -43,23 +40,22 @@ func getChunkByStartOffset(startOffset, fileSize int64) Chunk {
 	return getChunkByNumber(chunkNumber, fileSize)
 }
 
-func getRelativeRangeInChunk(requestedReadSize int64, chunk Chunk, readerOffset int64) (int64, int64) {
+func getRelativeRangeInChunk(requestedReadSize int64, chunk cacheChunk, readerOffset int64) (int64, int64) {
 	relativeOffset := readerOffset - chunk.startOffset
 	if relativeOffset < 0 {
 		relativeOffset = 0
 	}
 
+	start := relativeOffset
+	end := relativeOffset + requestedReadSize
 
-    start := relativeOffset
-    end := relativeOffset + requestedReadSize
+	if end > chunk.endOffset {
+		end = chunk.endOffset
+	}
 
-    if end > chunk.endOffset {
-        end = chunk.endOffset
-    }
-
-    if end - start != requestedReadSize {
-        fmt.Printf("Requested size is not equal to read size: %d/%d\n", end - start, requestedReadSize)
-    }
+	if end-start != requestedReadSize {
+		fmt.Printf("Requested size is not equal to read size: %d/%d\n", end-start, requestedReadSize) // --- Investigate why this happens with the last chunk
+	}
 
 	return start, end
 }
