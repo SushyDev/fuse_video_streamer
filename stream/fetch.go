@@ -1,9 +1,11 @@
 package stream
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"debrid_drive/config"
 )
@@ -41,7 +43,7 @@ func (pr *PartialReader) preFetchHeaders() error {
 		return fmt.Errorf("failed to prefetch headers: %w", err)
 	}
 
-	chunk := storeAsChunkInCache(pr, int64(start), body)
+	chunk := pr.storeAsChunkInCache(int64(start), body)
 
 	fmt.Printf("Prefetched video headers in chunk %d\n", chunk.number)
 	return nil
@@ -63,17 +65,15 @@ func (pr *PartialReader) preFetchTail() error {
 		return err
 	}
 
-	chunk := storeAsChunkInCache(pr, start, body)
+	chunk := pr.storeAsChunkInCache(start, body)
 
 	fmt.Printf("Prefetched video tail in chunk %d\n", chunk.number)
 
 	return nil
 }
 
-func (pr *PartialReader) fetchAndCacheChunk(buffer []byte, requestedReadSize int64, chunk cacheChunk) (int, error) {
-	rangeHeader := fmt.Sprintf("bytes=%d-%d", chunk.startOffset, chunk.endOffset-1)
-
-	body, err := pr.fetchBytesInRange(rangeHeader)
+func (pr *PartialReader) fetchAndCacheChunk(buffer []byte, bufferSize int64, chunk cacheChunk) (int, error) {
+	body, err := pr.fetchChunk(chunk)
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch chunk %d: %w", chunk.number, err)
 	}
@@ -83,9 +83,9 @@ func (pr *PartialReader) fetchAndCacheChunk(buffer []byte, requestedReadSize int
 		fmt.Printf("Chunk %d is not the expected size: %d/%d\n", chunk.number, len(body), config.CacheChunkSize)
 	}
 
-	storeAsChunkInCache(pr, chunk.startOffset, body)
+	pr.storeAsChunkInCache(chunk.startOffset, body)
 
-	readBytes, err := pr.readFromCache(buffer, requestedReadSize, chunk, body)
+	readBytes, err := pr.readFromCache(buffer, bufferSize, chunk, body)
 	if err != nil {
 		return readBytes, err
 	}
@@ -93,8 +93,17 @@ func (pr *PartialReader) fetchAndCacheChunk(buffer []byte, requestedReadSize int
 	return readBytes, nil
 }
 
+func (pr *PartialReader) fetchChunk(chunk cacheChunk) ([]byte, error) {
+	rangeHeader := fmt.Sprintf("bytes=%d-%d", chunk.startOffset, chunk.endOffset-1)
+
+	return pr.fetchBytesInRange(rangeHeader)
+}
+
 func (pr *PartialReader) fetchBytesInRange(rangeHeader string) ([]byte, error) {
-	req, err := http.NewRequest("GET", pr.url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), config.FetchTimeout*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", pr.url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}

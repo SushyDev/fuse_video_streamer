@@ -1,68 +1,57 @@
 package vfs
 
 import (
-	"flag"
-	"fmt"
-	"log"
-	"os"
+	"debrid_drive/logger"
+	"strings"
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 )
 
-func usage() {
-	log.Printf("Usage of %s:\n", os.Args[0])
-	log.Printf("  %s MOUNTPOINT VIDEO_URL\n", os.Args[0])
-	flag.PrintDefaults()
+type AddFileRequest struct {
+	Path     string
+	VideoUrl string
+	Size     int64
 }
 
-func Start() {
-	flag.Usage = usage
-	flag.Parse()
-
-	if flag.NArg() < 2 {
-		usage()
-		os.Exit(2)
-	}
-
-	mountpoint := flag.Arg(0)
-
-	Mount(mountpoint)
-}
-
-func Mount(mountpoint string) {
-	fileSystem := &FileSystem{
-		files: make(map[string]*File),
-	}
-
-	videoUrl := flag.Arg(1)
-
-	fmt.Println("Video URL:", videoUrl)
-
-	// Add the initial file to the filesystem
-	fileSystem.files["video.mkv"] = &File{
-		VideoUrl: videoUrl,
-	}
-
-	channel, err := fuse.Mount(
-		mountpoint,
-		fuse.FSName("videostreamfs"),
-		fuse.Subtype("videostreamfs"),
-		fuse.AllowOther(),
-	)
+func Mount(mountpoint string, done chan bool, request chan AddFileRequest) {
+	channel, err := fuse.Mount(mountpoint)
 	if err != nil {
-		log.Fatalf("Failed to mount FUSE filesystem: %v", err)
+		logger.Logger.Fatalf("Failed to mount FUSE filesystem: %v", err)
 	}
 	defer channel.Close()
+	logger.Logger.Info("Mounted FUSE filesystem")
 
-	err = fs.Serve(channel, fileSystem)
+	fileSystem := NewFileSystem()
+
+	go serve(channel, fileSystem)
+	logger.Logger.Info("Serving FUSE filesystem")
+
+	for request := range request {
+		handleAddFileRequest(request, fileSystem)
+	}
+}
+
+func handleAddFileRequest(request AddFileRequest, fileSystem *FileSystem) {
+	components := strings.Split(request.Path, "/")
+
+	name := components[len(components)-1]
+
+	directory, err := fileSystem.FindDirectory(components[0])
 	if err != nil {
-		log.Fatalf("Failed to serve FUSE filesystem: %v", err)
+		directory, err = fileSystem.AddDirectory(fileSystem.directory, components[0])
+		if err != nil {
+			logger.Logger.Errorf("Error adding directory %s: %v", components[0], err)
+			return
+		}
 	}
 
-	// Check if the mount process has any errors to report.
-	// <-c.Ready
-	// if err := c.MountError; err != nil {
-	// 	log.Fatalf("Mount process encountered an error: %v", err)
-	// }
+	fileSystem.AddFile(directory, name, request.VideoUrl, request.Size)
+}
+
+func serve(channel *fuse.Conn, fileSystem *FileSystem) {
+	err := fs.Serve(channel, fileSystem)
+	if err != nil {
+		logger.Logger.Fatalf("Failed to serve FUSE filesystem: %v", err)
+	}
 }

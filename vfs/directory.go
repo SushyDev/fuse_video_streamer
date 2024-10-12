@@ -2,8 +2,9 @@ package vfs
 
 import (
 	"context"
-	"fmt"
+	"debrid_drive/logger"
 	"os"
+	"sync"
 	"syscall"
 
 	"bazil.org/fuse"
@@ -11,66 +12,86 @@ import (
 )
 
 type Directory struct {
-	fileSystem *FileSystem
+	name        string
+	iNode       uint64
+	fileSystem  *FileSystem
+	directories map[string]*Directory
+	files       map[string]*File
+	mu          sync.RWMutex
 }
 
 func (directory *Directory) Attr(ctx context.Context, a *fuse.Attr) error {
-	fmt.Println("Setting root directory attributes")
-
-	a.Inode = 1
+	a.Inode = directory.iNode
 	a.Mode = os.ModeDir
 
 	return nil
 }
 
 func (directory *Directory) Lookup(ctx context.Context, name string) (fs.Node, error) {
-	directory.fileSystem.mu.Lock()
-	defer directory.fileSystem.mu.Unlock()
+	directory.mu.RLock()
+	defer directory.mu.RUnlock()
 
-	fileNode, exists := directory.fileSystem.files[name]
-	if !exists {
-		return nil, syscall.ENOENT
+	file, fileExists := directory.files[name]
+	if fileExists && file != nil {
+		return file, nil
 	}
 
-	fmt.Println("Found file", name)
+	directory, directoryExists := directory.directories[name]
+	if directoryExists && directory != nil {
+		return directory, nil
+	}
 
-	return fileNode, nil
+	return nil, syscall.ENOENT
 }
 
 func (directory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
-	directory.fileSystem.mu.Lock()
-	defer directory.fileSystem.mu.Unlock()
+	directory.mu.RLock()
+	defer directory.mu.RUnlock()
 
 	var entries []fuse.Dirent
-	inode := uint64(2)
 
-	for name := range directory.fileSystem.files {
+	for _, file := range directory.files {
 		entries = append(entries, fuse.Dirent{
-			Name:  name,
+			Name:  file.name,
 			Type:  fuse.DT_File,
-			Inode: inode,
+			Inode: file.iNode,
 		})
-		inode++
+	}
+
+	for _, directory := range directory.directories {
+		entries = append(entries, fuse.Dirent{
+			Name:  directory.name,
+			Type:  fuse.DT_Dir,
+			Inode: directory.iNode,
+		})
 	}
 
 	return entries, nil
 }
 
 func (directory *Directory) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
-	directory.fileSystem.mu.Lock()
-	defer directory.fileSystem.mu.Unlock()
+	directory.mu.Lock()
+	defer directory.mu.Unlock()
+
+	logger.Logger.Infof("Remove request: %v\n", removeRequest)
 
 	if removeRequest.Dir {
 		return syscall.ENOSYS
 	}
 
-	fmt.Println("Removing file", removeRequest.Name)
-
-	file, exists := directory.fileSystem.files[removeRequest.Name]
+	file, exists := directory.files[removeRequest.Name]
 	if !exists {
-		fmt.Println("File does not exist")
+		logger.Logger.Warnf("File %s does not exist\n", removeRequest.Name)
 		return syscall.ENOENT
 	}
 
-	return file.Remove(ctx)
+	if err := file.Remove(ctx); err != nil {
+		return err
+	}
+
+	delete(directory.files, removeRequest.Name)
+
+	logger.Logger.Infof("Removed file %s\n", removeRequest.Name)
+
+	return nil
 }
