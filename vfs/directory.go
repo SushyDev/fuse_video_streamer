@@ -23,7 +23,7 @@ type Directory struct {
 func (directory *Directory) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Inode = directory.iNode
 	a.Mode = os.ModeDir
-    a.Valid = 1
+	a.Valid = 1
 
 	return nil
 }
@@ -46,9 +46,9 @@ func (directory *Directory) Lookup(ctx context.Context, name string) (fs.Node, e
 }
 
 func (directory *Directory) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-    // openResponse.Flags |= fuse.OpenDirectIO
+	// openResponse.Flags |= fuse.OpenDirectIO
 
-    return directory, nil
+	return directory, nil
 }
 
 func (directory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
@@ -77,7 +77,7 @@ func (directory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, erro
 }
 
 func (directory *Directory) ReadDir(ctx context.Context) ([]fuse.Dirent, error) {
-    return directory.ReadDirAll(ctx)
+	return directory.ReadDirAll(ctx)
 }
 
 func (directory *Directory) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {

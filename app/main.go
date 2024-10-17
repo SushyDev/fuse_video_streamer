@@ -59,8 +59,8 @@ func Start() {
 
 	logger.Logger.Info("Files added to VFS")
 
-    done := make(chan bool)
-    <-done
+	done := make(chan bool)
+	<-done
 }
 
 func InitDatabase() {

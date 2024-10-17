@@ -98,7 +98,7 @@ func (buffer *Buffer) Cap() int64 {
 }
 
 func (buffer *Buffer) ReadAt(p []byte, position int64) (int, error) {
-    buffer.UpdateDataChannel(position)
+	buffer.UpdateDataChannel(position)
 
 	relativePosition := buffer.GetRelativePosition(position)
 
@@ -139,7 +139,7 @@ func (buffer *Buffer) Close() {
 	buffer.mu.Lock()
 	defer buffer.mu.Unlock()
 
-    buffer.data = make([]byte, 0, buffer.maxSize)
+	buffer.data = make([]byte, 0, buffer.maxSize)
 	buffer.data = nil
 
 	buffer.closed.Store(true)

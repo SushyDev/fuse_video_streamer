@@ -31,7 +31,7 @@ func NewPartialReader(url string, size int64) (*PartialReader, error) {
 	}
 
 	pr := &PartialReader{
-		url: url,
+		url:          url,
 		cacheManager: cacheManager,
 		client:       &http.Client{},
 		closed:       false,

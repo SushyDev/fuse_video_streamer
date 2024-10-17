@@ -37,7 +37,7 @@ func (file *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Atime = time.Unix(0, 0)
 	a.Mtime = time.Unix(0, 0)
 	a.Ctime = time.Unix(0, 0)
-    a.Valid = 1
+	a.Valid = 1
 
 	return nil
 }
@@ -65,19 +65,19 @@ func (file *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseReque
 
 	logger.Logger.Infof("Releasing file %s", file.name)
 
-    file.videoStreams.Range(func(key, value interface{}) bool {
-        stream := value.(*vlc.Stream)
-        stream.Close()
+	file.videoStreams.Range(func(key, value interface{}) bool {
+		stream := value.(*vlc.Stream)
+		stream.Close()
 
-        return true
-    })
+		return true
+	})
 
 	file.videoStreams.Clear()
 
 	return nil
 }
 
-var staticBuffer = make([]byte, 1024*1024 * 4)
+var staticBuffer = make([]byte, 1024*1024*4)
 
 func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
 	file.mu.Lock()
@@ -107,7 +107,7 @@ func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 	// so we need to throttle the buffer here based on how much bytes read
 
 	buffer := staticBuffer[:bufferSize]
-    bytesRead, err := stream.Read(buffer)
+	bytesRead, err := stream.Read(buffer)
 	if err != nil {
 		return fmt.Errorf("failed to read from video stream: %w", err)
 	}

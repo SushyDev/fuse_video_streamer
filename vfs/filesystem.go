@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/anacrolix/fuse/fs"
 	"debrid_drive/logger"
+	"github.com/anacrolix/fuse/fs"
 )
 
 type FileSystem struct {
@@ -47,7 +47,7 @@ func (fileSystem *FileSystem) NewFile(name string, videoUrl string, videoSize in
 		iNode:    fileSystem.iNodeCounter,
 		videoUrl: videoUrl,
 		chunks:   0,
-        size:     videoSize,
+		size:     videoSize,
 	}
 }
 

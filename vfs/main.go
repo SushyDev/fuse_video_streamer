@@ -21,11 +21,11 @@ func Mount(mountpoint string, request chan AddFileRequest) {
 		fuse.Subtype("debrid_drive"),
 		fuse.FSName("debrid_drive"),
 
-        fuse.NoAppleDouble(),
-        fuse.NoBrowse(),
+		fuse.NoAppleDouble(),
+		fuse.NoBrowse(),
 
-        fuse.LocalVolume(),
-        // fuse.AsyncRead(),
+		fuse.LocalVolume(),
+		// fuse.AsyncRead(),
 	)
 	if err != nil {
 		logger.Logger.Fatalf("Failed to mount FUSE filesystem: %v", err)
@@ -36,7 +36,7 @@ func Mount(mountpoint string, request chan AddFileRequest) {
 
 	fileSystem := NewFileSystem()
 
-    go serveChannel(channel, fileSystem)
+	go serveChannel(channel, fileSystem)
 
 	for request := range request {
 		handleAddFileRequest(request, fileSystem)
@@ -63,10 +63,10 @@ func handleAddFileRequest(request AddFileRequest, fileSystem *FileSystem) {
 }
 
 func serveChannel(channel *fuse.Conn, fileSystem *FileSystem) {
-    logger.Logger.Info("Serving FUSE filesystem")
+	logger.Logger.Info("Serving FUSE filesystem")
 
-    err := fs.Serve(channel, fileSystem)
-    if err != nil {
-        logger.Logger.Fatalf("Failed to serve FUSE filesystem: %v", err)
-    }
+	err := fs.Serve(channel, fileSystem)
+	if err != nil {
+		logger.Logger.Fatalf("Failed to serve FUSE filesystem: %v", err)
+	}
 }
