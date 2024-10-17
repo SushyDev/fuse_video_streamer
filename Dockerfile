@@ -1,5 +1,5 @@
 # Dockerfile
-FROM golang:1.21-alpine
+FROM golang:1.23.2-alpine
 
 # Install necessary packages
 RUN apk update && apk add --no-cache \

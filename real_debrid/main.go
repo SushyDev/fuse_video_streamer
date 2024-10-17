@@ -2,7 +2,6 @@ package real_debrid
 
 import (
 	"context"
-	"debrid_drive/config"
 	"flag"
 	"fmt"
 	"net/http"
@@ -17,9 +16,9 @@ type RealDebridClient struct {
 	RateLimiter *rate.Limiter
 }
 
-func NewRealDebridClient(token string) *RealDebridClient {
+func NewRealDebridClient() *RealDebridClient {
 	flag.Parse()
-	token = flag.Arg(1)
+	token := flag.Arg(1)
 
 	return &RealDebridClient{
 		Token:       token,
@@ -52,4 +51,4 @@ var apiPath = "/rest/1.0"
 
 // var sugar = logger.Sugar()
 
-var client = NewRealDebridClient(config.Token)
+var client = NewRealDebridClient()

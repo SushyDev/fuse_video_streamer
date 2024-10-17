@@ -4,8 +4,8 @@ import (
 	"debrid_drive/logger"
 	"strings"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
 )
 
 type AddFileRequest struct {
@@ -14,22 +14,35 @@ type AddFileRequest struct {
 	Size     int64
 }
 
-func Mount(mountpoint string, done chan bool, request chan AddFileRequest) {
-	channel, err := fuse.Mount(mountpoint)
+func Mount(mountpoint string, request chan AddFileRequest) {
+	channel, err := fuse.Mount(
+		mountpoint,
+		fuse.VolumeName("debrid_drive"),
+		fuse.Subtype("debrid_drive"),
+		fuse.FSName("debrid_drive"),
+
+        fuse.NoAppleDouble(),
+        fuse.NoBrowse(),
+
+        fuse.LocalVolume(),
+        // fuse.AsyncRead(),
+	)
 	if err != nil {
 		logger.Logger.Fatalf("Failed to mount FUSE filesystem: %v", err)
 	}
 	defer channel.Close()
+	defer logger.Logger.Info("FUSE filesystem unmounted")
 	logger.Logger.Info("Mounted FUSE filesystem")
 
 	fileSystem := NewFileSystem()
 
-	go serve(channel, fileSystem)
-	logger.Logger.Info("Serving FUSE filesystem")
+    go serveChannel(channel, fileSystem)
 
 	for request := range request {
 		handleAddFileRequest(request, fileSystem)
 	}
+
+	<-channel.Ready
 }
 
 func handleAddFileRequest(request AddFileRequest, fileSystem *FileSystem) {
@@ -49,9 +62,11 @@ func handleAddFileRequest(request AddFileRequest, fileSystem *FileSystem) {
 	fileSystem.AddFile(directory, name, request.VideoUrl, request.Size)
 }
 
-func serve(channel *fuse.Conn, fileSystem *FileSystem) {
-	err := fs.Serve(channel, fileSystem)
-	if err != nil {
-		logger.Logger.Fatalf("Failed to serve FUSE filesystem: %v", err)
-	}
+func serveChannel(channel *fuse.Conn, fileSystem *FileSystem) {
+    logger.Logger.Info("Serving FUSE filesystem")
+
+    err := fs.Serve(channel, fileSystem)
+    if err != nil {
+        logger.Logger.Fatalf("Failed to serve FUSE filesystem: %v", err)
+    }
 }

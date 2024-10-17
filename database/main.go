@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 var Database *sql.DB
@@ -33,7 +33,7 @@ type RealDebridFile struct {
 
 func Start() {
 	var err error
-	Database, err = sql.Open("sqlite3", "database.db")
+	Database, err = sql.Open("sqlite", "database.db")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -8,34 +8,36 @@ import (
 	"sync"
 	"time"
 
-	"bazil.org/fuse"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
 
 	"debrid_drive/logger"
 	"debrid_drive/real_debrid"
-	"debrid_drive/stream"
+	"debrid_drive/vlc"
 )
 
 type File struct {
-	name        string
-	iNode       uint64
-	videoUrl    string                // URL of the video file
-	videoStream *stream.PartialReader // Holds the open connection stream
-	mu          sync.RWMutex
-	chunks      int64
-	size        int64
+	name         string
+	iNode        uint64
+	videoUrl     string
+	videoStreams sync.Map // map[uint64]*vlc.Stream // map of video streams per PID
+	mu           sync.RWMutex
+	chunks       int64
+	size         int64
 }
 
-// Attr is called to retrieve the attributes (metadata) of the file.
 func (file *File) Attr(ctx context.Context, a *fuse.Attr) error {
-	logger.Logger.Infof("Getting attributes for file %s\n inode %d", file.name, file.iNode)
+	file.mu.Lock()
+	defer file.mu.Unlock()
 
+	a.Size = uint64(file.size)
 	a.Inode = file.iNode
 	a.Mode = os.ModePerm
-	a.Size = uint64(file.size)
-	// a.Blocks = (uint64(f.VideoStream.Size) + 511) / 512 // File system blocks
+
 	a.Atime = time.Unix(0, 0)
 	a.Mtime = time.Unix(0, 0)
 	a.Ctime = time.Unix(0, 0)
+    a.Valid = 1
 
 	return nil
 }
@@ -44,64 +46,119 @@ func (file *File) Remove(ctx context.Context) error {
 	file.mu.Lock()
 	defer file.mu.Unlock()
 
-	videoStream, err := file.getVideoStream()
-	if err != nil {
-		return err
-	}
-
-	return videoStream.Close()
-}
-
-func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readReponse *fuse.ReadResponse) error {
-	file.mu.Lock()
-	defer file.mu.Unlock()
-
-	start, bufferSize, err := file.calculateReadBoundaries(readRequest.Offset, int64(readRequest.Size))
-	if err != nil {
-		return err
-	}
-
-	if err := file.seekVideoStream(start); err != nil {
-		return err
-	}
-
-	buffer, totalBytesRead, err := file.readFromVideoStream(bufferSize)
-	if err != nil {
-		return err
-	}
-
-	file.populateReadResponse(readReponse, buffer, totalBytesRead)
+	logger.Logger.Infof("Removing file %s", file.name)
 
 	return nil
 }
 
-func (file *File) getVideoStream() (*stream.PartialReader, error) {
-	if file.videoStream != nil {
-		return file.videoStream, nil
+func (file *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+	logger.Logger.Infof("Opening file %s - %d", file.name, file.size)
+
+	openResponse.Flags |= fuse.OpenDirectIO
+
+	return file, nil
+}
+
+func (file *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
+	file.mu.Lock()
+	defer file.mu.Unlock()
+
+	logger.Logger.Infof("Releasing file %s", file.name)
+
+    file.videoStreams.Range(func(key, value interface{}) bool {
+        stream := value.(*vlc.Stream)
+        stream.Close()
+
+        return true
+    })
+
+	file.videoStreams.Clear()
+
+	return nil
+}
+
+var staticBuffer = make([]byte, 1024*1024 * 4)
+
+func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
+	file.mu.Lock()
+	defer file.mu.Unlock()
+
+	// fmt.Printf("Reading %d bytes at offset %d\n", readRequest.Size, readRequest.Offset)
+
+	if readRequest.Dir {
+		return fmt.Errorf("read request is for a directory")
 	}
 
-	var err error
+	stream, err := file.getVideoStream(readRequest.Pid)
+	if err != nil {
+		return fmt.Errorf("failed to get video stream: %w", err)
+	}
+
+	start, bufferSize, err := file.calculateReadBoundaries(readRequest.Offset, int64(readRequest.Size))
+	if err != nil {
+		return fmt.Errorf("failed to calculate read boundaries: %w", err)
+	}
+
+	_, err = stream.Seek(start, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("failed to seek in video stream: %w", err)
+	}
+
+	// so we need to throttle the buffer here based on how much bytes read
+
+	buffer := staticBuffer[:bufferSize]
+    bytesRead, err := stream.Read(buffer)
+	if err != nil {
+		return fmt.Errorf("failed to read from video stream: %w", err)
+	}
+
+	readResponse.Data = buffer[:bytesRead]
+
+	return nil
+}
+
+func (file *File) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) error {
+	file.mu.Lock()
+	defer file.mu.Unlock()
+
+	logger.Logger.Infof("Flushing file %s", file.name)
+
+	// stream, err := file.getVideoStream(flushRequest.Pid)
+	// if err != nil {
+	//     return fmt.Errorf("failed to get video stream: %w", err)
+	// }
+	//
+	// if stream != nil {
+	//     err := stream.Close()
+	//     if err != nil {
+	//         return fmt.Errorf("failed to close video stream: %w", err)
+	//     }
+	// }
+
+	return nil
+}
+
+// --- Helpers ---
+
+func (file *File) getVideoStream(pid uint32) (*vlc.Stream, error) {
+	stream, ok := file.videoStreams.Load(pid)
+	if ok {
+		return stream.(*vlc.Stream), nil
+	}
 
 	unrestrictedFile, err := real_debrid.UnrestrictLink(file.videoUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unrestrict link: %w", err)
 	}
 
-	file.videoStream, err = stream.NewPartialReader(unrestrictedFile.Download, file.size)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize video stream: %w", err)
-	}
+	videoStream := vlc.NewStream(unrestrictedFile.Download, file.size)
 
-	logger.Logger.Infof("Initialized video stream for file %s\n", file.videoUrl)
+	file.videoStreams.Store(pid, videoStream)
 
-	if file.videoStream.Size != file.size {
-		logger.Logger.Error("Size mismatch between file and video stream")
-	}
-
-	return file.videoStream, nil
+	return videoStream, nil
 }
 
-func (file *File) calculateReadBoundaries(start, requestedSize int64) (int64, int64, error) {
+func (file *File) calculateReadBoundaries(start int64, requestedSize int64) (int64, int64, error) {
 	if start >= file.size {
 		return 0, 0, io.EOF
 	}
@@ -111,47 +168,4 @@ func (file *File) calculateReadBoundaries(start, requestedSize int64) (int64, in
 	}
 
 	return start, requestedSize, nil
-}
-
-func (file *File) seekVideoStream(start int64) error {
-	videoStream, err := file.getVideoStream()
-	if err != nil {
-		return err
-	}
-
-	if _, err := videoStream.Seek(start, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek in video stream: %w", err)
-	}
-
-	return nil
-}
-
-func (file *File) readFromVideoStream(bufferSize int64) ([]byte, int, error) {
-	videoStream, err := file.getVideoStream()
-	if err != nil {
-		return nil, 0, err
-	}
-
-	buffer := make([]byte, bufferSize)
-
-	// Read data from the VideoStream (PartialReader) into the buffer
-	n, err := videoStream.Read(buffer[0:bufferSize])
-	if err != nil {
-		if err == io.EOF {
-			return nil, 0, fmt.Errorf("end of file: %w", err)
-		}
-
-		return nil, 0, fmt.Errorf("failed to read from video stream: %w", err)
-	}
-
-	return buffer, n, nil
-}
-
-func (file *File) populateReadResponse(fileResponse *fuse.ReadResponse, buffer []byte, totalBytesRead int) {
-	if totalBytesRead < len(buffer) {
-		logger.Logger.Infof("Read less than buffer size: %d/%d\n", totalBytesRead, len(buffer))
-	}
-
-	// Slice the buffer to the exact amount of bytes read
-	fileResponse.Data = buffer[:totalBytesRead]
 }

@@ -1,23 +1,57 @@
 package stream
 
 import (
-	"io"
+	"fmt"
+	"sync"
+
+	"github.com/hashicorp/golang-lru"
+
+	"debrid_drive/config"
 )
 
-func (pr *PartialReader) storeAsChunkInCache(startOffset int64, data []byte) cacheChunk {
-	chunk := pr.getChunkByOffset(startOffset)
-
-	pr.cacheMu.Lock()
-	pr.cache.Add(chunk.number, data)
-	pr.cacheMu.Unlock()
-
-	return chunk
+type cacheManager struct {
+	cache  *lru.Cache
+	mu     sync.RWMutex
+	closed bool
 }
 
-func (pr *PartialReader) getFromCache(chunkNumber int64) ([]byte, bool) {
-	pr.cacheMu.Lock()
-	data, ok := pr.cache.Get(chunkNumber)
-	pr.cacheMu.Unlock()
+func newCacheManager(fileSize int64) (*cacheManager, error) {
+	cacheSize := fileSize / config.CacheChunkSize
+	if cacheSize < 1 {
+		cacheSize = 1
+	}
+
+	cache, err := lru.New(int(cacheSize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create LRU cache: %w", err)
+	}
+
+	return &cacheManager{
+		cache:  cache,
+		closed: false,
+	}, nil
+}
+
+func (cacheManager *cacheManager) storeChunkDataInCache(chunkNumber int64, data []byte) bool {
+	if cacheManager.closed {
+		return false
+	}
+
+	cacheManager.mu.Lock()
+	cacheManager.cache.Add(chunkNumber, data)
+	cacheManager.mu.Unlock()
+
+	return true
+}
+
+func (cacheManager *cacheManager) getChunkDataFromCache(chunkNumber int64) ([]byte, bool) {
+	if cacheManager.closed {
+		return nil, false
+	}
+
+	cacheManager.mu.Lock()
+	data, ok := cacheManager.cache.Get(chunkNumber)
+	cacheManager.mu.Unlock()
 
 	if !ok {
 		return nil, false
@@ -26,19 +60,10 @@ func (pr *PartialReader) getFromCache(chunkNumber int64) ([]byte, bool) {
 	return data.([]byte), true
 }
 
-func (pr *PartialReader) readFromCache(buffer []byte, bufferSize int64, chunk cacheChunk, chunkData []byte) (int, error) {
-	start, end := getRelativeRangeInChunk(bufferSize, chunk, pr.offset)
+func (cacheManager *cacheManager) Close() {
+	cacheManager.mu.Lock()
+	cacheManager.cache.Purge()
+	cacheManager.mu.Unlock()
 
-	if start >= int64(len(chunkData)) {
-		return 0, io.EOF
-	}
-
-	if end > int64(len(chunkData)) {
-		end = int64(len(chunkData))
-	}
-
-	requestedBytes := chunkData[start:end]
-	copySize := copy(buffer, requestedBytes)
-
-	return copySize, nil
+	cacheManager.closed = true
 }

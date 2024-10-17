@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"bazil.org/fuse/fs"
+	"github.com/anacrolix/fuse/fs"
 	"debrid_drive/logger"
 )
 
@@ -47,7 +47,7 @@ func (fileSystem *FileSystem) NewFile(name string, videoUrl string, videoSize in
 		iNode:    fileSystem.iNodeCounter,
 		videoUrl: videoUrl,
 		chunks:   0,
-		size:     videoSize,
+        size:     videoSize,
 	}
 }
 

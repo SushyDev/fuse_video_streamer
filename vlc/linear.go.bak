@@ -1,0 +1,98 @@
+// package vlc
+//
+// import (
+// 	"fmt"
+// 	"io"
+// 	"net/http"
+// )
+//
+// func (pr *PartialReader) startLinearRequest(startOffset int64) error {
+// 	// Make a linear request from the given startOffset
+// 	req, err := http.NewRequest("GET", pr.url, nil)
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	rangeHeader := fmt.Sprintf("bytes=%d-", startOffset) // Start at offset, read till the end
+// 	req.Header.Set("Range", rangeHeader)
+//
+// 	// Execute the request
+// 	resp, err := pr.client.Do(req)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+// 		return fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
+// 	}
+//
+// 	// Start buffering the incoming data
+// 	go pr.bufferData(resp.Body, startOffset)
+// 	return nil
+// }
+//
+// func (pr *PartialReader) bufferData(body io.ReadCloser, startOffset int64) {
+// 	defer body.Close()
+//
+// 	buffer := make([]byte, 4096) // Define your buffer chunk size
+//
+// 	pr.bufferMutex.Lock()
+// 	pr.bufferOffset = startOffset // Set the starting offset of the buffer
+// 	pr.bufferMutex.Unlock()
+//
+// 	for {
+// 		n, err := body.Read(buffer)
+// 		if err != nil {
+// 			if err != io.EOF {
+// 				fmt.Printf("Error reading data: %v\n", err)
+// 			}
+// 			break
+// 		}
+//
+// 		pr.bufferMutex.Lock()
+// 		pr.buffer = append(pr.buffer, buffer[:n]...) // Append the read bytes to the buffer
+// 		pr.bufferMutex.Unlock()
+// 	}
+// }
+//
+// func (pr *PartialReader) restartLinearRequestAndRead(buffer []byte) (int, error) {
+// 	// Close any existing connection (if needed)
+// 	pr.closeCurrentRequest()
+//
+// 	// Restart the request from the current offset
+// 	err := pr.startLinearRequest(pr.offset)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+//
+// 	// Wait for new data to arrive in buffer
+// 	pr.bufferMutex.RLock()
+// 	defer pr.bufferMutex.RUnlock()
+//
+// 	// Try to serve from buffer again
+// 	if pr.canServeFromBuffer(pr.offset, len(buffer)) {
+// 		return pr.readFromBuffer(buffer), nil
+// 	}
+//
+// 	return 0, fmt.Errorf("failed to fetch the required data")
+// }
+//
+// func (pr *PartialReader) closeCurrentRequest() {
+// 	// Optionally implement to clean up or close the current HTTP connection
+// 	// if you need to manually close the body.
+//
+//     // For example:
+//     pr.client.CloseIdleConnections()
+// }
+//
+// func (pr *PartialReader) canServeFromBuffer(offset int64, length int) bool {
+//     // Determine if the buffer contains the requested data range
+//     return (offset >= pr.bufferOffset && offset+int64(length) <= pr.bufferOffset+int64(len(pr.buffer)))
+// }
+//
+// func (pr *PartialReader) readFromBuffer(buffer []byte) int {
+//     start := pr.offset - pr.bufferOffset
+//     n := copy(buffer, pr.buffer[start:start+int64(len(buffer))])
+//     pr.offset += int64(n)
+//     return n
+// }
+//

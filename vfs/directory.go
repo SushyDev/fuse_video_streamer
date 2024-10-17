@@ -7,8 +7,8 @@ import (
 	"sync"
 	"syscall"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
 )
 
 type Directory struct {
@@ -23,6 +23,7 @@ type Directory struct {
 func (directory *Directory) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Inode = directory.iNode
 	a.Mode = os.ModeDir
+    a.Valid = 1
 
 	return nil
 }
@@ -42,6 +43,12 @@ func (directory *Directory) Lookup(ctx context.Context, name string) (fs.Node, e
 	}
 
 	return nil, syscall.ENOENT
+}
+
+func (directory *Directory) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+    // openResponse.Flags |= fuse.OpenDirectIO
+
+    return directory, nil
 }
 
 func (directory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
@@ -69,11 +76,15 @@ func (directory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, erro
 	return entries, nil
 }
 
+func (directory *Directory) ReadDir(ctx context.Context) ([]fuse.Dirent, error) {
+    return directory.ReadDirAll(ctx)
+}
+
 func (directory *Directory) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
 	directory.mu.Lock()
 	defer directory.mu.Unlock()
 
-	logger.Logger.Infof("Remove request: %v\n", removeRequest)
+	logger.Logger.Infof("Remove request: %v", removeRequest)
 
 	if removeRequest.Dir {
 		return syscall.ENOSYS
@@ -81,7 +92,7 @@ func (directory *Directory) Remove(ctx context.Context, removeRequest *fuse.Remo
 
 	file, exists := directory.files[removeRequest.Name]
 	if !exists {
-		logger.Logger.Warnf("File %s does not exist\n", removeRequest.Name)
+		logger.Logger.Warnf("File %s does not exist", removeRequest.Name)
 		return syscall.ENOENT
 	}
 
@@ -91,7 +102,7 @@ func (directory *Directory) Remove(ctx context.Context, removeRequest *fuse.Remo
 
 	delete(directory.files, removeRequest.Name)
 
-	logger.Logger.Infof("Removed file %s\n", removeRequest.Name)
+	logger.Logger.Infof("Removed file %s", removeRequest.Name)
 
 	return nil
 }

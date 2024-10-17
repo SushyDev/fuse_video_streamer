@@ -5,40 +5,40 @@ import (
 	"io"
 	"net/http"
 	"sync"
-
-	lru "github.com/hashicorp/golang-lru"
+	"sync/atomic"
 
 	"debrid_drive/config"
 	"debrid_drive/logger"
 )
 
 type PartialReader struct {
-	url      string
-	offset   int64
-	offsetMu sync.Mutex
-	Size     int64
-	Chunks   int64
-	mu       sync.RWMutex
-	cache    *lru.Cache
-	cacheMu  sync.Mutex
-	client   *http.Client
-	closed   bool
+	url          string
+	offset       int64
+	Size         int64
+	mu           sync.RWMutex
+	cacheManager *cacheManager
+	client       *http.Client
+	closed       bool
+
+	prefetchingChunks sync.Map // map[int64]struct{}
+
 }
 
 func NewPartialReader(url string, size int64) (*PartialReader, error) {
-	pr := &PartialReader{
-		url:    url,
-		client: &http.Client{},
+	cacheManager, err := newCacheManager(size)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache manager: %w", err)
 	}
 
-	cache, err := lru.New(config.CacheSize)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create LRU cache: %w", err)
+	pr := &PartialReader{
+		url: url,
+		cacheManager: cacheManager,
+		client:       &http.Client{},
+		closed:       false,
 	}
-	pr.cache = cache
 
 	if config.FetchFileSize {
-		if err := pr.fetchFileSize(); err != nil {
+		if err := pr.preFetchFileSize(); err != nil {
 			logger.Logger.Errorf("Failed to fetch file size: %v", err)
 		}
 	} else {
@@ -60,54 +60,42 @@ func NewPartialReader(url string, size int64) (*PartialReader, error) {
 	return pr, nil
 }
 
-func (pr *PartialReader) setOffset(offset int64) {
-	pr.offsetMu.Lock()
-	defer pr.offsetMu.Unlock()
-
-	pr.offset = offset
-}
-
-func (pr *PartialReader) getOffset() int64 {
-	pr.offsetMu.Lock()
-	defer pr.offsetMu.Unlock()
-
-	return pr.offset
-}
-
-func (pr *PartialReader) Read(buffer []byte) (n int, err error) {
-	currentOffset := pr.getOffset()
-
+func (pr *PartialReader) Read(buffer []byte) (readBytes int, err error) {
 	if pr.closed {
 		return 0, fmt.Errorf("reader is closed")
 	}
 
-	start, bufferSize, err := pr.calculateReadBoundaries(currentOffset, int64(len(buffer)))
+	offset := atomic.LoadInt64(&pr.offset)
+
+	bufferSize, err := getBufferSize(offset, int64(len(buffer)), pr.Size)
 	if err != nil {
 		return 0, err
 	}
 
-	chunk := pr.getChunkByOffset(start)
+	chunk := GetChunkByOffset(offset)
 
-	var readBytes int
-	var readErr error
-
-	cachedData, ok := pr.getFromCache(chunk.number)
-	if ok {
-		readBytes, readErr = pr.readFromCache(buffer, bufferSize, chunk, cachedData)
-		if readErr != nil {
-			logger.Logger.Errorf("readFromCache failed: %v", readErr)
-			return readBytes, readErr
-		}
-	} else {
-		readBytes, readErr = pr.fetchAndCacheChunk(buffer, bufferSize, chunk)
-
-		if readErr != nil {
-			logger.Logger.Errorf("fetchAndCacheChunk failed: %v", readErr)
-			return readBytes, readErr
-		}
+	data, err := chunk.getData(pr)
+	if err != nil {
+		return 0, err
 	}
 
-	pr.setOffset(pr.offset)
+	readBytes, err = readData(chunk, data, buffer, bufferSize, offset)
+	if err != nil {
+		return 0, err
+	}
+
+	atomic.StoreInt64(&pr.offset, offset+int64(readBytes))
+
+	chunkSize := chunk.getSize()
+	chunkConsumed := float64(offset%chunkSize) / float64(chunkSize)
+	if chunkConsumed > 0.75 {
+		nextChunk := GetChunkByNumber(chunk.number + 1)
+		nextChunkStart, _ := nextChunk.getRange()
+
+		if nextChunkStart < pr.Size {
+			go pr.preFetchChunkData(nextChunk)
+		}
+	}
 
 	return readBytes, nil
 }
@@ -135,12 +123,12 @@ func (pr *PartialReader) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	if newOffset >= pr.Size {
-		pr.setOffset(pr.Size)
+		atomic.StoreInt64(&pr.offset, pr.Size)
 
 		return pr.offset, io.EOF
 	}
 
-	pr.setOffset(newOffset)
+	atomic.StoreInt64(&pr.offset, newOffset)
 
 	return pr.offset, nil
 }
@@ -153,26 +141,56 @@ func (pr *PartialReader) Close() error {
 		return fmt.Errorf("reader is already closed")
 	}
 
-	pr.cache.Purge()
-	pr.closed = true
+	if pr.cacheManager != nil {
+		pr.cacheManager.Close()
+	}
 
 	if pr.client != nil {
 		pr.client.CloseIdleConnections()
 	}
 
-	logger.Logger.Infof("Closed PartialReader for URL: %s", pr.url)
+	pr.closed = true
 
 	return nil
 }
 
-func (pr *PartialReader) calculateReadBoundaries(start, requestedSize int64) (int64, int64, error) {
-	if start >= pr.Size {
-		return 0, 0, io.EOF
+func readData(chunk *cacheChunk, data []byte, buffer []byte, bufferSize int64, offset int64) (int, error) {
+	chunkStart, chunkEnd := chunk.getRange()
+
+	relativeOffset := offset - chunkStart
+	if relativeOffset < 0 {
+		relativeOffset = 0
 	}
 
-	if start+requestedSize > pr.Size {
-		requestedSize = pr.Size - start
+	start := relativeOffset
+	end := relativeOffset + bufferSize
+
+	if end > chunkEnd {
+		end = chunkEnd
 	}
 
-	return start, requestedSize, nil
+	if start >= int64(len(data)) {
+		return 0, io.EOF
+	}
+
+	if end > int64(len(data)) {
+		end = int64(len(data))
+	}
+
+	requestedBytes := data[start:end]
+	copySize := copy(buffer, requestedBytes)
+
+	return copySize, nil
+}
+
+func getBufferSize(start int64, requestedSize int64, fileSize int64) (int64, error) {
+	if start >= fileSize {
+		return 0, io.EOF
+	}
+
+	if start+requestedSize > fileSize {
+		requestedSize = fileSize - start
+	}
+
+	return requestedSize, nil
 }

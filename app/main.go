@@ -30,11 +30,10 @@ func Start() {
 	}
 
 	mountpoint := flag.Arg(0)
-	done := make(chan bool)
 	addFileRequest := make(chan vfs.AddFileRequest)
 
 	if useVfs {
-		go vfs.Mount(mountpoint, done, addFileRequest)
+		go vfs.Mount(mountpoint, addFileRequest)
 	}
 
 	InitDatabase()
@@ -60,10 +59,8 @@ func Start() {
 
 	logger.Logger.Info("Files added to VFS")
 
-	if useVfs {
-		<-done
-		logger.Logger.Info("FUSE filesystem unmounted")
-	}
+    done := make(chan bool)
+    <-done
 }
 
 func InitDatabase() {
