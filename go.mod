@@ -3,14 +3,15 @@ module debrid_drive
 go 1.23.2
 
 require (
-	github.com/hashicorp/golang-lru v1.0.2
+	github.com/anacrolix/fuse v0.3.1
+	github.com/hashicorp/golang-lru v0.5.5-0.20221031202041-bdf35e3f00df
+	github.com/mum4k/termdash v0.20.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/time v0.7.0
 	modernc.org/sqlite v1.33.1
 )
 
 require (
-	github.com/anacrolix/fuse v0.4.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/gdamore/tcell/v2 v2.7.4 // indirect
@@ -19,7 +20,6 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
-	github.com/mum4k/termdash v0.20.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
