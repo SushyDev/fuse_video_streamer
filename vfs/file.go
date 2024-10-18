@@ -54,7 +54,7 @@ func (file *File) Remove(ctx context.Context) error {
 func (file *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
 	logger.Logger.Infof("Opening file %s - %d", file.name, file.size)
 
-	openResponse.Flags |= fuse.OpenDirectIO
+	// openResponse.Flags |= fuse.OpenDirectIO
 
 	return file, nil
 }
@@ -103,8 +103,6 @@ func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 	if err != nil {
 		return fmt.Errorf("failed to seek in video stream: %w", err)
 	}
-
-	// so we need to throttle the buffer here based on how much bytes read
 
 	buffer := staticBuffer[:bufferSize]
 	bytesRead, err := stream.Read(buffer)

@@ -3,6 +3,7 @@ package chart
 import (
 	"context"
 	"debrid_drive/config"
+	"fmt"
 	"time"
 
 	"github.com/mum4k/termdash"
@@ -11,7 +12,6 @@ import (
 
 	// "github.com/mum4k/termdash/linestyle"
 	"github.com/mum4k/termdash/terminal/tcell"
-	"github.com/mum4k/termdash/terminal/terminalapi"
 	"github.com/mum4k/termdash/widgets/donut"
 	"github.com/mum4k/termdash/widgets/linechart"
 	"github.com/mum4k/termdash/widgets/text"
@@ -216,13 +216,7 @@ func (chart *Chart) Start() {
 		panic(err)
 	}
 
-	quitter := func(k *terminalapi.Keyboard) {
-		if k.Key == 'q' || k.Key == 'Q' {
-			cancel()
-		}
-	}
-
-	if err := termdash.Run(ctx, t, c, termdash.KeyboardSubscriber(quitter), termdash.RedrawInterval(100)); err != nil {
+	if err := termdash.Run(ctx, t, c, termdash.RedrawInterval(250)); err != nil {
 		panic(err)
 	}
 
@@ -252,6 +246,10 @@ func (chart *Chart) Close() {
 }
 
 func (chart *Chart) Log(channel chan string, message string) {
+    if !config.Chart {
+        fmt.Printf("%s", message)
+    }
+
 	select {
 	case channel <- message:
 	default:
