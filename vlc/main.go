@@ -97,7 +97,7 @@ func (stream *Stream) startStream(seekPosition int64) {
 
 	chunk := make([]byte, 8192)
 
-    var normalDelay time.Duration = 100 * time.Microsecond
+    var normalDelay time.Duration = 250 * time.Microsecond
     var retryDelay time.Duration = normalDelay
 
     timeStart := time.Now()

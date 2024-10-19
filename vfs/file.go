@@ -151,6 +151,8 @@ func (file *File) getVideoStream(pid uint32) (*vlc.Stream, error) {
 
 	file.videoStreams.Store(pid, videoStream)
 
+    fmt.Printf("Created new video stream for PID %d\n", pid)
+
 	return videoStream, nil
 }
 

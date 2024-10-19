@@ -275,7 +275,7 @@ func (buffer *Buffer) WaitForPositionInBuffer(position int64, context context.Co
 		select {
 		case <-context.Done():
 			return
-		case <-time.After(100 * time.Microsecond):
+		case <-time.After(250 * time.Microsecond):
 		}
 
 	}
