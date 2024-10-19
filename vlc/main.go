@@ -39,12 +39,12 @@ func NewStream(url string, size int64) *Stream {
 	buffer := NewBuffer(min(size, bufferCreateSize), 0)
 
 	client := &http.Client{
-		Transport: &http.Transport{
-			MaxIdleConns:        1,
-			MaxConnsPerHost:     1,
-			MaxIdleConnsPerHost: 1,
-			Proxy:               http.ProxyFromEnvironment,
-		},
+		// Transport: &http.Transport{
+		// 	MaxIdleConns:        1,
+		// 	MaxConnsPerHost:     1,
+		// 	MaxIdleConnsPerHost: 1,
+		// 	Proxy:               http.ProxyFromEnvironment,
+		// },
 		Timeout: time.Hour * 6,
 	}
 
@@ -93,69 +93,78 @@ func (stream *Stream) startStream(seekPosition int64, stopChannel chan struct{})
 
 	chunk := make([]byte, 1024*1024)
 
-    timeStart := time.Now()
-    var totalBytes int64
+	timeStart := time.Now()
+	var totalBytes int64
 
-	for {
-		select {
-		case <-ctx.Done():
-			stream.chart.LogStream(fmt.Sprintf("Context done\n"))
-			return
-		case <-stopChannel:
-			stream.chart.LogStream(fmt.Sprintf("Stop channel\n"))
-			return
-		default:
-		}
+	wg := sync.WaitGroup{}
 
-		// currentSeekPosition := stream.GetSeekPosition()
-		// bytesToOverwrite := max(stream.buffer.GetBytesToOverwrite(currentSeekPosition), 0)
-		// chunkSizeToRead := min(int64(len(chunk)), bytesToOverwrite)
-		//
-		// // TODO chunkSizeDeterminedByNetworkSpeed
-		//
-		// // if chunkSizeToRead == 0 {
-		// // 	continue
-		// // }
-		//
-		// fmt.Println("bytesToOverwrite", bytesToOverwrite)
+	wg.Add(1)
 
-		bytesRead, _ := resp.Body.Read(chunk[:1024*1024])
-
-		if bytesRead > 0 {
-			bytesWritten, err := stream.buffer.Write(chunk[:bytesRead])
-			if err != nil {
-				fmt.Printf("Write error %v\n", err)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				stream.chart.LogStream(fmt.Sprintf("Context done\n"))
+				return
+			case <-stopChannel:
+				stream.chart.LogStream(fmt.Sprintf("Stop channel\n"))
+				return
+			default:
 			}
 
-            totalBytes += int64(bytesWritten)
+			bytesToOverwrite := max(stream.buffer.GetBytesToOverwrite(), 0)
+			chunkSizeToRead := min(int64(len(chunk)), bytesToOverwrite)
+
+			// TODO chunkSizeDeterminedByNetworkSpeed
+
+			if chunkSizeToRead == 0 {
+				// timeStart = time.Now()
+				continue
+			}
+
+			// fmt.Println("bytesToOverwrite", chunkSizeToRead)
+
+			bytesRead, _ := resp.Body.Read(chunk[:chunkSizeToRead])
+
+			if bytesRead > 0 {
+				bytesWritten, err := stream.buffer.Write(chunk[:bytesRead])
+				if err != nil {
+					fmt.Printf("Write error %v\n", err)
+				}
+
+				totalBytes += int64(bytesWritten)
+			}
+
+			elapsed := time.Since(timeStart)
+			if elapsed > 0 {
+				mbps := float64(totalBytes*8) / (1024 * 1024) / elapsed.Seconds() // Convert bytes to bits and to Mbps
+				stream.chart.LogStream(fmt.Sprintf("Speed: %.2f MB/s\n", mbps))
+			}
+
+			// if seekPosition+stream.buffer.Len() >= stream.size {
+			// 	stream.chart.LogStream(fmt.Sprintf("Buffer is complete\n"))
+			// 	continue
+			// }
+
+			// if err == io.ErrUnexpectedEOF {
+			// 	stream.chart.LogStream(fmt.Sprintf("Unexpected EOF, Bytes read: %d\n", bytesRead))
+			// 	return
+			// }
+			//
+			// if err == io.EOF {
+			// 	stream.chart.LogStream(fmt.Sprintf("Read EOF, Bytes read: %d\n", bytesRead))
+			// 	continue
+			// }
+			//
+			// if err != nil {
+			// 	stream.chart.LogStream(fmt.Sprintf("Failed to read: %v\n", err))
+			// 	continue
+			// }
 		}
+	}()
 
-        elapsed := time.Since(timeStart)
-        if elapsed > 0 {
-			mbps := float64(totalBytes * 8) / (1024 * 1024) / elapsed.Seconds() // Convert bytes to bits and to Mbps
-            stream.chart.LogStream(fmt.Sprintf("Speed: %.2f MB/s\n", mbps))
-        }
-
-		// if seekPosition+stream.buffer.Len() >= stream.size {
-		// 	stream.chart.LogStream(fmt.Sprintf("Buffer is complete\n"))
-		// 	continue
-		// }
-
-		// if err == io.ErrUnexpectedEOF {
-		// 	stream.chart.LogStream(fmt.Sprintf("Unexpected EOF, Bytes read: %d\n", bytesRead))
-		// 	return
-		// }
-		//
-		// if err == io.EOF {
-		// 	stream.chart.LogStream(fmt.Sprintf("Read EOF, Bytes read: %d\n", bytesRead))
-		// 	continue
-		// }
-		//
-		// if err != nil {
-		// 	stream.chart.LogStream(fmt.Sprintf("Failed to read: %v\n", err))
-		// 	continue
-		// }
-	}
+	wg.Wait()
 }
 
 func (stream *Stream) stopStream() {
@@ -217,19 +226,22 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedS
 		stream.stopChannel = stopChannel
 		// stream.chart.LogStream(fmt.Sprintf("Check: Stream started for position %d\n", seekPosition))
 
-		// stream.chart.LogStream(fmt.Sprintf("Check: Waiting for position %d\n", seekPosition+requestedSize))
-		stream.buffer.WaitForPositionInBuffer(seekPosition + requestedSize)
-		// stream.chart.LogStream(fmt.Sprintf("Check: Position ready %d\n", seekPosition))
+		if min(seekPosition+requestedSize, stream.size) == stream.size {
+		} else {
+			stream.chart.LogStream(fmt.Sprintf("Check: Start: Waiting for position %d\n", seekPosition+requestedSize))
+			stream.buffer.WaitForPositionInBuffer(seekPosition + requestedSize)
+			stream.chart.LogStream(fmt.Sprintf("Check: Start: Position ready %d\n", seekPosition))
+		}
 
 		return
 	}
 
 	dataInBuffer := stream.buffer.IsPositionInBuffer(seekPosition + requestedSize)
 
-	if !dataInBuffer && overflow >= 0 && overflow < overflowMargin {
-		// stream.chart.LogStream(fmt.Sprintf("Check: Waiting for position %d\n", seekPosition+requestedSize))
+	if !dataInBuffer && overflow >= 0 && overflow < overflowMargin && min(seekPosition+requestedSize, stream.size) < stream.size {
+		stream.chart.LogStream(fmt.Sprintf("Check: Waiting for position %d\n", seekPosition+requestedSize))
 		stream.buffer.WaitForPositionInBuffer(seekPosition + requestedSize)
-		// stream.chart.LogStream(fmt.Sprintf("Check: Position ready %d\n", seekPosition+requestedSize))
+		stream.chart.LogStream(fmt.Sprintf("Check: Position ready %d\n", seekPosition+requestedSize))
 
 		return
 	}

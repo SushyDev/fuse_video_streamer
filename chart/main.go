@@ -4,7 +4,6 @@ import (
 	"context"
 	"debrid_drive/config"
 	"fmt"
-	"time"
 
 	"github.com/mum4k/termdash"
 	"github.com/mum4k/termdash/cell"
@@ -248,6 +247,7 @@ func (chart *Chart) Close() {
 func (chart *Chart) Log(channel chan string, message string) {
     if !config.Chart {
         fmt.Printf("%s", message)
+        return
     }
 
 	select {
@@ -258,15 +258,17 @@ func (chart *Chart) Log(channel chan string, message string) {
 
 func (chart *Chart) LogStream(message string) {
 	chart.Log(chart.StreamLogChannel, message)
-	time.Sleep(1 * time.Millisecond)
 }
 
 func (chart *Chart) LogBuffer(message string) {
 	chart.Log(chart.BufferLogChannel, message)
-	time.Sleep(1 * time.Millisecond)
 }
 
 func (chart *Chart) UpdateSeekTotal(seekPosition int64, totalSize int64) {
+    if !config.Chart {
+        return
+    }
+
 	select {
 	case chart.SeekTotal <- SeekTotal{
 		SeekPosition: seekPosition,
