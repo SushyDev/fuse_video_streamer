@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type Buffer struct {
@@ -14,7 +15,8 @@ type Buffer struct {
 
 	readPosition  atomic.Int64 // The position where the next read will happen
 	writePosition atomic.Int64 // The position where the next write will happen
-	count         atomic.Int64 // The number of bytes currently in the buffer
+
+	count atomic.Int64 // The number of bytes currently in the buffer
 
 	readPage  atomic.Int64
 	writePage atomic.Int64
@@ -34,14 +36,6 @@ func NewBuffer(size int64, startPosition int64) *Buffer {
 
 func (buffer *Buffer) Cap() int64 {
 	return int64(cap(buffer.data))
-}
-
-func (buffer *Buffer) IsFull() bool {
-	return buffer.count.Load() == buffer.Cap()
-}
-
-func (buffer *Buffer) IsEmpty() bool {
-	return buffer.count.Load() == 0
 }
 
 func (buffer *Buffer) ReadAt(p []byte, position int64) (int, error) {
@@ -116,9 +110,9 @@ func (buffer *Buffer) Write(p []byte) (int, error) {
 
 	bufferCount := buffer.count.Load()
 
-	availableSpace := bufferCap - bufferCount
+	availableSpace := buffer.GetBytesToOverwrite()
 	if requestedSize > availableSpace {
-		return 0, errors.New(fmt.Sprintf("not enough space in buffer: %d", availableSpace))
+		return 0, errors.New(fmt.Sprintf("not enough space in buffer: %d/%d", requestedSize, availableSpace))
 	}
 
 	writePosition := buffer.writePosition.Load()
@@ -281,16 +275,20 @@ func (buffer *Buffer) WaitForPositionInBuffer(position int64, context context.Co
 		select {
 		case <-context.Done():
 			return
-        default:
+		case <-time.After(100 * time.Microsecond):
 		}
 
 	}
 }
 
-func (buffer *Buffer) GetBytesToOverwrite() int64 {
-	buffer.mu.Lock()
-	defer buffer.mu.Unlock()
+func (buffer *Buffer) GetBytesToOverwriteSync() int64 {
+    buffer.mu.Lock()
+    defer buffer.mu.Unlock()
 
+    return buffer.GetBytesToOverwrite()
+}
+
+func (buffer *Buffer) GetBytesToOverwrite() int64 {
 	bufferCap := buffer.Cap()
 	bufferCount := buffer.count.Load()
 

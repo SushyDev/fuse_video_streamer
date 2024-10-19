@@ -33,7 +33,6 @@ type Stream struct {
 }
 
 var bufferCreateSize = int64(1024 * 1024 * 1024)
-var bufferMargin = int64(1024 * 1024 * 16)
 var overflowMargin = int64(1024 * 1024 * 128)
 
 func NewStream(url string, size int64) *Stream {
@@ -98,57 +97,66 @@ func (stream *Stream) startStream(seekPosition int64) {
 
 	chunk := make([]byte, 8192)
 
-	timeStart := time.Now()
-	var totalBytes int64
+    var normalDelay time.Duration = 100 * time.Microsecond
+    var retryDelay time.Duration = normalDelay
+
+    timeStart := time.Now()
+    totalBytesRead := 0
 
 	for {
 		select {
 		case <-stream.context.Done():
 			stream.chart.LogStream(fmt.Sprintf("Stream context done\n"))
+            retryDelay = 5 * time.Second // Retry after 5 seconds
 			return
-        case <-time.After(time.Millisecond):
+		case <-ctx.Done():
+            retryDelay = 5 * time.Second // Retry after 5 seconds
+			stream.chart.LogStream(fmt.Sprintf("Stream context done\n"))
+			return
+		case <-time.After(retryDelay):
 		}
 
-		bytesToOverwrite := max(stream.buffer.GetBytesToOverwrite(), 0)
+		bytesToOverwrite := max(stream.buffer.GetBytesToOverwriteSync(), 0)
 		chunkSizeToRead := min(int64(len(chunk)), bytesToOverwrite)
 
 		// TODO chunkSizeDeterminedByNetworkSpeed
 
 		if chunkSizeToRead == 0 {
+            retryDelay = 100 * time.Millisecond // Retry after 100 milliseconds
 			continue
 		}
 
 		bytesRead, err := resp.Body.Read(chunk[:chunkSizeToRead])
 
 		if bytesRead > 0 {
-			bytesWritten, err := stream.buffer.Write(chunk[:bytesRead])
+			bytesRead, err := stream.buffer.Write(chunk[:bytesRead])
 			if err != nil {
 				stream.chart.LogStream(fmt.Sprintf("Write error %v\n", err))
 				return // Crash ?
 			}
 
-			totalBytes += int64(bytesWritten)
+            totalBytesRead += bytesRead
+            retryDelay = normalDelay // Reset
 		}
 
-		if err == io.ErrUnexpectedEOF {
+        elapsed := time.Since(timeStart)
+        if elapsed > 0 && false {
+            mbps := float64(totalBytesRead * 8) / (1024 * 1024) / elapsed.Seconds() // Convert bytes to bits and to Mbps
+            stream.chart.LogStream(fmt.Sprintf("Speed: %.2f MB/s @ %d\n", mbps, seekPosition))
+        }
+
+		switch {
+		case err == io.ErrUnexpectedEOF:
 			stream.chart.LogStream(fmt.Sprintf("Unexpected EOF, Bytes read: %d\n", bytesRead))
-			return // Crash ?
-		}
-
-		if err == io.EOF {
+			return // Decide if the loop should crash or retry logic can be added.
+		case err == io.EOF:
 			stream.chart.LogStream(fmt.Sprintf("Read EOF, Bytes read: %d, Position %d\n", bytesRead, seekPosition))
-			continue // TODO handle file end
-		}
-
-		if err != nil {
+            retryDelay = 5 * time.Second // Retry after 5 seconds
+			continue // Handle end of file appropriately.
+		case err != nil:
 			stream.chart.LogStream(fmt.Sprintf("Failed to read: %v\n", err))
-			continue // TODO handle error
-		}
-
-		elapsed := time.Since(timeStart)
-		if elapsed > 0 && false {
-			mbps := float64(totalBytes*8) / (1024 * 1024) / elapsed.Seconds() // Convert bytes to bits and to Mbps
-			stream.chart.LogStream(fmt.Sprintf("Speed: %.2f MB/s\n", mbps))
+            retryDelay = 5 * time.Second // Retry after 5 seconds
+			continue // Continue to retry on other errors.
 		}
 	}
 }
@@ -173,7 +181,7 @@ func (stream *Stream) Read(p []byte) (int, error) {
 	requestedSize := int64(len(p))
 
 	if seekPosition+requestedSize >= stream.size {
-		requestedSize = max(stream.size-seekPosition - 1, 0) // MINUS ONE
+		requestedSize = max(stream.size-seekPosition-1, 0) // MINUS ONE
 	}
 
 	stream.checkAndStartBufferIfNeeded(seekPosition, requestedSize)
@@ -187,15 +195,6 @@ func (stream *Stream) Read(p []byte) (int, error) {
 }
 
 func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedSize int64) {
-	// bufferSize := stream.buffer.Cap()
-
-	// stream.chart.LogStream(fmt.Sprintf("Check: Seek position: %d, requested size: %d\n", seekPosition, requestedSize))
-
-	// if bufferSize >= stream.size {
-	// 	stream.chart.LogStream(fmt.Sprintf("Check: Buffer is complete\n"))
-	// 	return
-	// }
-
 	if seekPosition >= stream.size {
 		stream.chart.LogStream(fmt.Sprintf("Check: Seek position is at the end\n"))
 		return
@@ -220,6 +219,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedS
 		go stream.startStream(seekPosition)
 
 		waitForSize := min(seekPosition+requestedSize, stream.size)
+
 		stream.buffer.WaitForPositionInBuffer(waitForSize, stream.context)
 
         return

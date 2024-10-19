@@ -57,8 +57,10 @@ func TestWrite(t *testing.T) {
         t.Errorf("Expected error, got nil") 
     } 
 
-    if err.Error() != fmt.Sprintf("not enough space in buffer: %d", 0) {
-        t.Errorf("Expected 'not enough space in buffer: %d', got %s", 0, err)
+    requestedSize := len(bytesToOverflow)
+
+    if err.Error() != fmt.Sprintf("not enough space in buffer: %d/%d", requestedSize, 0) {
+        t.Errorf("Expected 'not enough space in buffer: %d/%d, got %s", requestedSize, 0, err)
     }
 
     newBuffer := NewBuffer(10, startPositionOffet)
@@ -70,7 +72,7 @@ func TestWrite(t *testing.T) {
         t.Errorf("Expected error, got nil")
     }
 
-    requestedSize := len(bytesToOverflow)
+    requestedSize = len(bytesToOverflow)
 
     if err.Error() != fmt.Sprintf("write data exceeds buffer size: %d", requestedSize) {
         t.Errorf("Expected 'write data exceeds buffer size: %d', got %s", requestedSize, err)
@@ -357,7 +359,7 @@ func TestGetBytesToOverwrite(t *testing.T) {
 	buffer := NewBuffer(10, startPositionOffet)
 
 	// Initial state: empty buffer
-	bytesToOverwrite := buffer.GetBytesToOverwrite()
+	bytesToOverwrite := buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 10 {
 		t.Errorf("Expected 10, got %d", bytesToOverwrite)
 	}
@@ -365,7 +367,7 @@ func TestGetBytesToOverwrite(t *testing.T) {
 	// Single Write
 	fmt.Println()
 	buffer.Write([]byte{1, 2, 3, 4, 5})
-	bytesToOverwrite = buffer.GetBytesToOverwrite()
+	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 5 {
 		t.Errorf("Expected 5 after writing 5 bytes, got %d", bytesToOverwrite)
 	}
@@ -373,7 +375,7 @@ func TestGetBytesToOverwrite(t *testing.T) {
 	// Single Read
 	fmt.Println()
 	buffer.ReadAt(make([]byte, 2), startPositionOffet + 0) // Reading 2 bytes
-	bytesToOverwrite = buffer.GetBytesToOverwrite()
+	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 7 {
 		t.Errorf("Expected 7 after reading 2 bytes, got %d", bytesToOverwrite)
 	}
@@ -381,7 +383,7 @@ func TestGetBytesToOverwrite(t *testing.T) {
 	// Overwriting: Write 3 more bytes
 	fmt.Println()
 	buffer.Write([]byte{6, 7, 8})
-	bytesToOverwrite = buffer.GetBytesToOverwrite()
+	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 4 {
 		t.Errorf("Expected 4 after writing 3 more bytes, got %d", bytesToOverwrite)
 	}
@@ -389,7 +391,7 @@ func TestGetBytesToOverwrite(t *testing.T) {
 	// Write until the buffer is full
 	fmt.Println()
 	buffer.Write([]byte{9, 10, 1, 2}) // This will fill the buffer completely
-	bytesToOverwrite = buffer.GetBytesToOverwrite()
+	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 0 {
 		t.Errorf("Expected 0 after filling the buffer, got %d", bytesToOverwrite)
 	}
@@ -397,7 +399,7 @@ func TestGetBytesToOverwrite(t *testing.T) {
 	// Read 5 bytes from the buffer w12 - r7
 	fmt.Println()
 	buffer.ReadAt(make([]byte, 5), startPositionOffet + 2)
-	bytesToOverwrite = buffer.GetBytesToOverwrite()
+	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 5 {
 		t.Errorf("Expected 5 after reading 5 bytes, got %d", bytesToOverwrite)
 	}
@@ -408,7 +410,7 @@ func TestGetBytesToOverwrite(t *testing.T) {
         t.Errorf("Expected nil, got %s", err)
     }
 
-	bytesToOverwrite = buffer.GetBytesToOverwrite()
+	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 9 {
 		t.Errorf("Expected 9 after reading 3 bytes, got %d", bytesToOverwrite)
 	}

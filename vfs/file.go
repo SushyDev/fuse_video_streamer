@@ -37,7 +37,6 @@ func (file *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Atime = time.Unix(0, 0)
 	a.Mtime = time.Unix(0, 0)
 	a.Ctime = time.Unix(0, 0)
-	// a.Valid = 1
 
 	return nil
 }
@@ -55,6 +54,7 @@ func (file *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	logger.Logger.Infof("Opening file %s - %d", file.name, file.size)
 
 	// openResponse.Flags |= fuse.OpenDirectIO
+    openResponse.Flags |= fuse.OpenKeepCache
 
 	return file, nil
 }
@@ -159,9 +159,11 @@ func (file *File) calculateReadBoundaries(start int64, requestedSize int64) (int
 		return 0, 0, io.EOF
 	}
 
-	if start+requestedSize > file.size {
-		requestedSize = file.size - start
-	}
+    end := start + requestedSize
 
-	return start, requestedSize, nil
+    if end > file.size {
+        end = file.size
+    }
+
+	return start, end - start, nil
 }
