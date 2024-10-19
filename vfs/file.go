@@ -37,7 +37,7 @@ func (file *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Atime = time.Unix(0, 0)
 	a.Mtime = time.Unix(0, 0)
 	a.Ctime = time.Unix(0, 0)
-	a.Valid = 1
+	// a.Valid = 1
 
 	return nil
 }
@@ -77,8 +77,6 @@ func (file *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseReque
 	return nil
 }
 
-var staticBuffer = make([]byte, 1024*1024*4)
-
 func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
 	file.mu.Lock()
 	defer file.mu.Unlock()
@@ -94,17 +92,17 @@ func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 		return fmt.Errorf("failed to get video stream: %w", err)
 	}
 
-	start, bufferSize, err := file.calculateReadBoundaries(readRequest.Offset, int64(readRequest.Size))
-	if err != nil {
-		return fmt.Errorf("failed to calculate read boundaries: %w", err)
-	}
+	// start, bufferSize, err := file.calculateReadBoundaries(readRequest.Offset, int64(readRequest.Size))
+	// if err != nil {
+	// 	return fmt.Errorf("failed to calculate read boundaries: %w", err)
+	// }
 
-	_, err = stream.Seek(start, io.SeekStart)
+	_, err = stream.Seek(readRequest.Offset, io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek in video stream: %w", err)
 	}
 
-	buffer := staticBuffer[:bufferSize]
+	buffer := make([]byte, readRequest.Size)
 	bytesRead, err := stream.Read(buffer)
 	if err != nil {
 		return fmt.Errorf("failed to read from video stream: %w", err)

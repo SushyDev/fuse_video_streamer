@@ -229,6 +229,7 @@ func (chart *Chart) Start() {
 	for {
 		select {
 		case <-ctx.Done():
+            cancel()
 			return
 		case <-chart.ChartStopChannel:
 			cancel()
@@ -238,6 +239,10 @@ func (chart *Chart) Start() {
 }
 
 func (chart *Chart) Close() {
+    if !config.Chart {
+        return
+    }
+
 	select {
 	case chart.ChartStopChannel <- struct{}{}:
 	default:
