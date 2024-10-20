@@ -49,7 +49,7 @@ func NewStream(url string, size int64) *Stream {
 			MaxIdleConnsPerHost: 1,
 			Proxy:               http.ProxyFromEnvironment,
 		},
-		Timeout: time.Hour * 6,
+		Timeout: 6 * time.Hour,
 	}
 
 	return &Stream{
@@ -109,19 +109,15 @@ func (stream *Stream) startStream(seekPosition int64) {
 		select {
 		case <-stream.context.Done():
 			stream.chart.LogStream(fmt.Sprintf("Stream context done\n"))
-			retryDelay = 5 * time.Second // Retry after 5 seconds
 			return
 		case <-ctx.Done():
-			retryDelay = 5 * time.Second // Retry after 5 seconds
-			stream.chart.LogStream(fmt.Sprintf("Stream context done\n"))
+			stream.chart.LogStream(fmt.Sprintf("Request context done\n"))
 			return
 		case <-time.After(retryDelay):
 		}
 
 		bytesToOverwrite := max(stream.buffer.GetBytesToOverwriteSync(), 0)
 		chunkSizeToRead := min(int64(len(chunk)), bytesToOverwrite)
-
-		// TODO chunkSizeDeterminedByNetworkSpeed
 
 		if chunkSizeToRead == 0 {
 			retryDelay = 100 * time.Millisecond // Retry after 100 milliseconds

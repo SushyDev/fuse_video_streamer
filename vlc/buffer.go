@@ -22,6 +22,8 @@ type Buffer struct {
 	writePage atomic.Int64
 
 	mu sync.RWMutex
+
+	closed bool
 }
 
 func NewBuffer(size int64, startPosition int64) *Buffer {
@@ -39,6 +41,10 @@ func (buffer *Buffer) Cap() int64 {
 }
 
 func (buffer *Buffer) ReadAt(p []byte, position int64) (int, error) {
+	if buffer.closed {
+		return 0, errors.New("buffer is closed")
+	}
+
 	buffer.mu.RLock()
 	defer buffer.mu.RUnlock()
 
@@ -96,6 +102,10 @@ func (buffer *Buffer) ReadAt(p []byte, position int64) (int, error) {
 
 // Write writes data to the ring buffer from p.
 func (buffer *Buffer) Write(p []byte) (int, error) {
+	if buffer.closed {
+		return 0, errors.New("buffer is closed")
+	}
+
 	buffer.mu.Lock()
 	defer buffer.mu.Unlock()
 
@@ -219,6 +229,10 @@ func (buffer *Buffer) IsPositionInBuffer(position int64) bool {
 
 func (buffer *Buffer) WaitForPositionInBuffer(position int64, context context.Context) {
 	for {
+		if buffer.closed {
+			return
+		}
+
 		if buffer.IsPositionInBufferSync(position) {
 			return
 		}
@@ -240,6 +254,10 @@ func (buffer *Buffer) GetBytesToOverwriteSync() int64 {
 }
 
 func (buffer *Buffer) GetBytesToOverwrite() int64 {
+	if buffer.closed {
+		return 0
+	}
+
 	bufferCap := buffer.Cap()
 	readPage := buffer.readPage.Load()
 	readPosition := buffer.readPosition.Load()
@@ -283,4 +301,11 @@ func (buffer *Buffer) Reset(position int64) {
 	buffer.data = make([]byte, buffer.Cap())
 }
 
-func (buffer *Buffer) Close() {}
+func (buffer *Buffer) Close() {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+
+	buffer.data = nil
+
+	buffer.closed = true
+}
