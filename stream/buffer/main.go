@@ -259,33 +259,9 @@ func (buffer *Buffer) GetBytesToOverwrite() int64 {
 	}
 
 	bufferCap := buffer.Cap()
-	readPage := buffer.readPage.Load()
-	readPosition := buffer.readPosition.Load()
-	writePage := buffer.writePage.Load()
-	writePosition := buffer.writePosition.Load()
+	bufferCount := buffer.count.Load()
 
-	// Case: Buffer is empty
-	if readPosition == writePosition && readPage == writePage {
-		return bufferCap
-	}
-
-	// Calculate the number of stale bytes.
-	var staleBytes int64
-	if readPosition <= writePosition {
-		staleBytes = writePosition - readPosition
-	} else {
-		// Case: Buffer wrap-around has occurred.
-		staleBytes = bufferCap - readPosition + writePosition
-	}
-
-	// Handle the edge case where the write has caught up to the read position
-	// but it is on a different page, indicating a full buffer.
-	if readPage != writePage && staleBytes == 0 {
-		return 0
-	}
-
-	// Calculate the available space for overwriting.
-	return bufferCap - staleBytes
+	return bufferCap - bufferCount
 }
 
 func (buffer *Buffer) Reset(position int64) {

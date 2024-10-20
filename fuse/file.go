@@ -91,11 +91,6 @@ func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 		return fmt.Errorf("failed to get video stream: %w", err)
 	}
 
-	// start, bufferSize, err := file.calculateReadBoundaries(readRequest.Offset, int64(readRequest.Size))
-	// if err != nil {
-	// 	return fmt.Errorf("failed to calculate read boundaries: %w", err)
-	// }
-
 	_, err = videoStream.Seek(readRequest.Offset, io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek in video stream: %w", err)
@@ -146,25 +141,11 @@ func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 		return nil, fmt.Errorf("failed to unrestrict link: %w", err)
 	}
 
-    videoStream := stream.NewStream(unrestrictedFile.Download, file.size)
+	videoStream := stream.NewStream(unrestrictedFile.Download, file.size)
 
 	file.videoStreams.Store(pid, videoStream)
 
 	fmt.Printf("Created new video stream for PID %d\n", pid)
 
 	return videoStream, nil
-}
-
-func (file *File) calculateReadBoundaries(start int64, requestedSize int64) (int64, int64, error) {
-	if start >= file.size {
-		return 0, 0, io.EOF
-	}
-
-	end := start + requestedSize
-
-	if end > file.size {
-		end = file.size
-	}
-
-	return start, end - start, nil
 }

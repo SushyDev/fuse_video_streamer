@@ -7,9 +7,9 @@ import (
 	"os"
 
 	"debrid_drive/database"
+	"debrid_drive/fuse"
 	"debrid_drive/logger"
 	"debrid_drive/real_debrid"
-	"debrid_drive/fuse"
 )
 
 const useVfs = true

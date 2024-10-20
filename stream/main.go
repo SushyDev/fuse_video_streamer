@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-    "debrid_drive/stream/buffer"
+	"debrid_drive/stream/buffer"
 )
 
 type Stream struct {
@@ -171,18 +171,18 @@ func (stream *Stream) stopStream() {
 }
 
 func (stream *Stream) Read(p []byte) (int, error) {
-	stream.mu.RLock()
-	defer stream.mu.RUnlock()
-
 	if stream.closed {
 		return 0, fmt.Errorf("Streamer is closed")
 	}
+
+	stream.mu.RLock()
+	defer stream.mu.RUnlock()
 
 	seekPosition := stream.GetSeekPosition()
 	requestedSize := int64(len(p))
 
 	if seekPosition+requestedSize >= stream.size {
-		requestedSize = max(stream.size-seekPosition-1, 0) // MINUS ONE
+		requestedSize = stream.size-seekPosition-1
 	}
 
 	stream.checkAndStartBufferIfNeeded(seekPosition, requestedSize)
@@ -203,12 +203,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedS
 
 	seekInBuffer := stream.buffer.IsPositionInBufferSync(seekPosition)
 
-	var overflow int64
-	if seekInBuffer {
-		overflow = stream.buffer.OverflowByPosition(seekPosition)
-	}
-
-	if !seekInBuffer || overflow >= overflowMargin {
+	if !seekInBuffer {
 		stream.stopStream()
 
 		context, cancel := context.WithCancel(context.Background())
@@ -230,7 +225,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedS
 
 	dataInBuffer := stream.buffer.IsPositionInBufferSync(seekPosition + requestedSize)
 
-	if !dataInBuffer && overflow >= 0 && overflow < overflowMargin {
+	if !dataInBuffer {
 		waitForSize := min(seekPosition+requestedSize, stream.size)
 
 		// stream.chart.LogStream(fmt.Sprintf("Check: Waiting for position %d\n", seekPosition+requestedSize))
