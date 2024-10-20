@@ -39,10 +39,10 @@ func TestWrite(t *testing.T) {
 		t.Errorf("Expected 0, got %d", buffer.writePosition.Load())
 	}
 
-    _, err := buffer.ReadAt(make([]byte, 5), startPositionOffet + 0)
-    if err != nil {
-        t.Errorf("Expected nil, got %s", err)
-    }
+	_, err := buffer.ReadAt(make([]byte, 5), startPositionOffet+0)
+	if err != nil {
+		t.Errorf("Expected nil, got %s", err)
+	}
 
 	buffer.Write([]byte{10, 11, 12, 13, 14})
 
@@ -50,84 +50,84 @@ func TestWrite(t *testing.T) {
 		t.Errorf("Expected 5, got %d", buffer.writePosition.Load())
 	}
 
-    bytesToOverflow := []byte{15, 16, 17, 18, 19, 20, 21, 22, 23, 24} 
+	bytesToOverflow := []byte{15, 16, 17, 18, 19, 20, 21, 22, 23, 24}
 
-    _, err = buffer.Write(bytesToOverflow) 
-    if err == nil { 
-        t.Errorf("Expected error, got nil") 
-    } 
+	_, err = buffer.Write(bytesToOverflow)
+	if err == nil {
+		t.Errorf("Expected error, got nil")
+	}
 
-    requestedSize := len(bytesToOverflow)
+	requestedSize := len(bytesToOverflow)
 
-    if err.Error() != fmt.Sprintf("not enough space in buffer: %d/%d", requestedSize, 0) {
-        t.Errorf("Expected 'not enough space in buffer: %d/%d, got %s", requestedSize, 0, err)
-    }
+	if err.Error() != fmt.Sprintf("not enough space in buffer: %d/%d", requestedSize, 0) {
+		t.Errorf("Expected 'not enough space in buffer: %d/%d, got %s", requestedSize, 0, err)
+	}
 
-    newBuffer := NewBuffer(10, startPositionOffet)
+	newBuffer := NewBuffer(10, startPositionOffet)
 
-    bytesToOverflow = []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	bytesToOverflow = []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
-    _, err = newBuffer.Write(bytesToOverflow)
-    if err == nil {
-        t.Errorf("Expected error, got nil")
-    }
+	_, err = newBuffer.Write(bytesToOverflow)
+	if err == nil {
+		t.Errorf("Expected error, got nil")
+	}
 
-    requestedSize = len(bytesToOverflow)
+	requestedSize = len(bytesToOverflow)
 
-    if err.Error() != fmt.Sprintf("write data exceeds buffer size: %d", requestedSize) {
-        t.Errorf("Expected 'write data exceeds buffer size: %d', got %s", requestedSize, err)
-    }
+	if err.Error() != fmt.Sprintf("write data exceeds buffer size: %d", requestedSize) {
+		t.Errorf("Expected 'write data exceeds buffer size: %d', got %s", requestedSize, err)
+	}
 }
 
 func TestRead(t *testing.T) {
 	buffer := NewBuffer(10, startPositionOffet)
 
-    bytesToWrite := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9} 
+	bytesToWrite := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 
 	buffer.Write(bytesToWrite)
 
-    testBuffer := make([]byte, 5)
+	testBuffer := make([]byte, 5)
 
-    _, err := buffer.ReadAt(testBuffer, startPositionOffet + 0)
+	_, err := buffer.ReadAt(testBuffer, startPositionOffet+0)
 
-    for i, b := range testBuffer { 
-        if b != bytesToWrite[i] { 
-            t.Errorf("Expected %d, got %d", bytesToWrite[i], b) 
-        } 
-    }
+	for i, b := range testBuffer {
+		if b != bytesToWrite[i] {
+			t.Errorf("Expected %d, got %d", bytesToWrite[i], b)
+		}
+	}
 
-    if buffer.readPosition.Load() != 5 {
-        t.Errorf("Expected 5, got %d", buffer.readPosition.Load())
-    }
+	if buffer.readPosition.Load() != 5 {
+		t.Errorf("Expected 5, got %d", buffer.readPosition.Load())
+	}
 
-    _, err = buffer.ReadAt(testBuffer, startPositionOffet + 5)
-    if err != nil {
-        t.Errorf("Expected nil, got %s", err)
-    }
+	_, err = buffer.ReadAt(testBuffer, startPositionOffet+5)
+	if err != nil {
+		t.Errorf("Expected nil, got %s", err)
+	}
 
-    for i, b := range testBuffer {
-        i += 5
+	for i, b := range testBuffer {
+		i += 5
 
-        if b != bytesToWrite[i] {
-            t.Errorf("Expected %d, got %d", bytesToWrite[i], b)
-        }
-    }
+		if b != bytesToWrite[i] {
+			t.Errorf("Expected %d, got %d", bytesToWrite[i], b)
+		}
+	}
 
-    if buffer.readPosition.Load() != 0 {
-        t.Errorf("Expected 0, got %d", buffer.readPosition.Load())
-    }
+	if buffer.readPosition.Load() != 0 {
+		t.Errorf("Expected 0, got %d", buffer.readPosition.Load())
+	}
 
-    buffer.Write([]byte{11, 12, 13, 14})
+	buffer.Write([]byte{11, 12, 13, 14})
 
-    testBuffer = make([]byte, 5)
-    n, err := buffer.ReadAt(testBuffer, startPositionOffet + 12) // = len(testBuffer) + 2 = 7
-    if err != nil {
-        t.Errorf("Expected nil, got %s", err)
-    }
+	testBuffer = make([]byte, 5)
+	n, err := buffer.ReadAt(testBuffer, startPositionOffet+12) // = len(testBuffer) + 2 = 7
+	if err != nil {
+		t.Errorf("Expected nil, got %s", err)
+	}
 
-    if buffer.readPosition.Load() != int64(n + 2) {
-        t.Errorf("Expected %d, got %d", n+2, buffer.readPosition.Load())
-    }
+	if buffer.readPosition.Load() != int64(n+2) {
+		t.Errorf("Expected %d, got %d", n+2, buffer.readPosition.Load())
+	}
 }
 
 func TestWriteRead(t *testing.T) {
@@ -138,10 +138,10 @@ func TestWriteRead(t *testing.T) {
 	buffer.Write(bytes)
 	// t.Logf("Buffer: %v", buffer.data)
 
-    _, err := buffer.ReadAt(testBuffer, startPositionOffet + 0)
-    if err != nil {
-        t.Errorf("Expected nil, got %s", err)
-    }
+	_, err := buffer.ReadAt(testBuffer, startPositionOffet+0)
+	if err != nil {
+		t.Errorf("Expected nil, got %s", err)
+	}
 
 	// t.Logf("Test buffer: %v", testBuffer)
 
@@ -157,7 +157,7 @@ func TestWriteRead(t *testing.T) {
 	buffer.Write(bytes[5:])
 	// t.Logf("Buffer: %v", buffer.data)
 
-	_, err = buffer.ReadAt(testBuffer, startPositionOffet + 5)
+	_, err = buffer.ReadAt(testBuffer, startPositionOffet+5)
 	// t.Logf("Test buffer: %v", testBuffer)
 
 	for i, b := range testBuffer {
@@ -174,7 +174,7 @@ func TestWriteRead(t *testing.T) {
 	buffer.Write(bytes[10:])
 	// t.Logf("Buffer: %v", buffer.data)
 
-	_, err = buffer.ReadAt(testBuffer, startPositionOffet + 10)
+	_, err = buffer.ReadAt(testBuffer, startPositionOffet+10)
 	// t.Logf("Test buffer: %v", testBuffer)
 
 	for i, b := range testBuffer {
@@ -200,10 +200,10 @@ func TestReadWriteWrap(t *testing.T) {
 	// t.Logf("Buffer: %v", buffer.data)
 
 	testBuffer = make([]byte, 5)
-    _, err := buffer.ReadAt(testBuffer, startPositionOffet + 0)
-    if err != nil {
-        t.Errorf("Expected nil, got %s", err)
-    }
+	_, err := buffer.ReadAt(testBuffer, startPositionOffet+0)
+	if err != nil {
+		t.Errorf("Expected nil, got %s", err)
+	}
 
 	// t.Logf("Test buffer: %v", testBuffer)
 
@@ -230,7 +230,7 @@ func TestReadWriteWrap(t *testing.T) {
 	}
 
 	testBuffer = make([]byte, 10)
-    _, err = buffer.ReadAt(testBuffer, startPositionOffet + 5)
+	_, err = buffer.ReadAt(testBuffer, startPositionOffet+5)
 	// t.Logf("Test buffer: %v", testBuffer)
 
 	expectedReadData = []byte{5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
@@ -313,7 +313,7 @@ func TestIsPositionInBuffer(t *testing.T) {
 	fmt.Println("Testing with start position", startOffset)
 
 	// Check position 0 before writing.
-	checkPosition(t, buffer, startOffset + 0, false)
+	checkPosition(t, buffer, startOffset+0, false)
 
 	// Write one byte and verify positions.
 	writeAndCheck(t, buffer, []byte{1}, map[int64]bool{
@@ -330,7 +330,7 @@ func TestIsPositionInBuffer(t *testing.T) {
 	})
 
 	// Read some data from the buffer and verify positions are updated.
-	_, err = buffer.ReadAt(make([]byte, 9), startOffset + 0)
+	_, err = buffer.ReadAt(make([]byte, 9), startOffset+0)
 	if err != nil {
 		t.Errorf("Expected nil error on read, got %s", err)
 	}
@@ -345,13 +345,13 @@ func TestIsPositionInBuffer(t *testing.T) {
 	})
 
 	// Read more and verify positions again.
-	_, err = buffer.ReadAt(make([]byte, 5), startOffset + 11)
+	_, err = buffer.ReadAt(make([]byte, 5), startOffset+11)
 	if err != nil {
 		t.Errorf("Expected nil error on read, got %s", err)
 	}
 
 	// Position 11 should be invalid after reading.
-	checkPosition(t, buffer, startOffset + 11, false)
+	checkPosition(t, buffer, startOffset+11, false)
 }
 
 // Not good yet
@@ -374,7 +374,7 @@ func TestGetBytesToOverwrite(t *testing.T) {
 
 	// Single Read
 	fmt.Println()
-	buffer.ReadAt(make([]byte, 2), startPositionOffet + 0) // Reading 2 bytes
+	buffer.ReadAt(make([]byte, 2), startPositionOffet+0) // Reading 2 bytes
 	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 7 {
 		t.Errorf("Expected 7 after reading 2 bytes, got %d", bytesToOverwrite)
@@ -398,17 +398,17 @@ func TestGetBytesToOverwrite(t *testing.T) {
 
 	// Read 5 bytes from the buffer w12 - r7
 	fmt.Println()
-	buffer.ReadAt(make([]byte, 5), startPositionOffet + 2)
+	buffer.ReadAt(make([]byte, 5), startPositionOffet+2)
 	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 5 {
 		t.Errorf("Expected 5 after reading 5 bytes, got %d", bytesToOverwrite)
 	}
 
 	fmt.Println()
-    _, err := buffer.ReadAt(make([]byte, 3), startPositionOffet + 8)
-    if err != nil {
-        t.Errorf("Expected nil, got %s", err)
-    }
+	_, err := buffer.ReadAt(make([]byte, 3), startPositionOffet+8)
+	if err != nil {
+		t.Errorf("Expected nil, got %s", err)
+	}
 
 	bytesToOverwrite = buffer.GetBytesToOverwriteSync()
 	if bytesToOverwrite != 9 {

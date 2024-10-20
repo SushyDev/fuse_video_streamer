@@ -229,7 +229,7 @@ func (chart *Chart) Start() {
 	for {
 		select {
 		case <-ctx.Done():
-            cancel()
+			cancel()
 			return
 		case <-chart.ChartStopChannel:
 			cancel()
@@ -239,9 +239,9 @@ func (chart *Chart) Start() {
 }
 
 func (chart *Chart) Close() {
-    if !config.Chart {
-        return
-    }
+	if !config.Chart {
+		return
+	}
 
 	select {
 	case chart.ChartStopChannel <- struct{}{}:
@@ -250,10 +250,10 @@ func (chart *Chart) Close() {
 }
 
 func (chart *Chart) Log(channel chan string, message string) {
-    if !config.Chart {
-        fmt.Printf("%s", message)
-        return
-    }
+	if !config.Chart {
+		fmt.Printf("%s", message)
+		return
+	}
 
 	select {
 	case channel <- message:
@@ -270,9 +270,9 @@ func (chart *Chart) LogBuffer(message string) {
 }
 
 func (chart *Chart) UpdateSeekTotal(seekPosition int64, totalSize int64) {
-    if !config.Chart {
-        return
-    }
+	if !config.Chart {
+		return
+	}
 
 	select {
 	case chart.SeekTotal <- SeekTotal{

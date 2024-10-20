@@ -21,7 +21,7 @@ type Buffer struct {
 	readPage  atomic.Int64
 	writePage atomic.Int64
 
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 func NewBuffer(size int64, startPosition int64) *Buffer {
@@ -39,61 +39,59 @@ func (buffer *Buffer) Cap() int64 {
 }
 
 func (buffer *Buffer) ReadAt(p []byte, position int64) (int, error) {
-	buffer.mu.Lock()
-	defer buffer.mu.Unlock()
+	buffer.mu.RLock()
+	defer buffer.mu.RUnlock()
 
-	bufferCap := buffer.Cap()
-	relativePos := buffer.GetRelativePosition(position)
-	bufferPos := relativePos % bufferCap
+	bufferCount := buffer.count.Load()
+	if bufferCount <= 0 {
+		return 0, errors.New("buffer is empty")
+	}
 
 	if !buffer.IsPositionInBuffer(position) {
 		return 0, errors.New(fmt.Sprintf("position %d is not in buffer", position))
 	}
 
+	bufferCap := buffer.Cap()
+	relativePos := buffer.GetRelativePosition(position)
+	bufferPosition := relativePos % bufferCap
+
 	readPosition := buffer.readPosition.Load()
-	readPage := buffer.readPage.Load()
 
 	writePosition := buffer.writePosition.Load()
 
-	bufferCount := buffer.count.Load()
 	requestedSize := int64(len(p))
-
-	if bufferCount <= 0 {
-		return 0, errors.New("buffer is empty")
-	}
 
 	// fmt.Println("ReadAt: bufferPos", bufferPos, "readPosition", readPosition, "writePosition", writePosition, "bufferCount", bufferCount, "requestedSize", requestedSize, "relativePos", relativePos)
 
-	var n int64
+	var readSize int64
 	if bufferCount == bufferCap && readPosition == writePosition {
-		n = min(requestedSize, bufferCap)
-	} else if writePosition >= bufferPos {
-		n = min(requestedSize, writePosition-bufferPos)
+		readSize = min(requestedSize, bufferCap)
+	} else if writePosition >= bufferPosition {
+		readSize = min(requestedSize, writePosition-bufferPosition)
 	} else {
-		n = min(requestedSize, bufferCap-bufferPos+writePosition)
+		readSize = min(requestedSize, bufferCap-bufferPosition+writePosition)
 	}
 
-	if bufferPos+n <= bufferCap {
-		copy(p, buffer.data[bufferPos:bufferPos+n])
+	if bufferPosition+readSize <= bufferCap {
+		copy(p, buffer.data[bufferPosition:bufferPosition+readSize])
 	} else {
-		firstPart := bufferCap - bufferPos
-		copy(p, buffer.data[bufferPos:bufferCap])
-		copy(p[firstPart:], buffer.data[0:n-firstPart])
+		firstPart := bufferCap - bufferPosition
+		copy(p, buffer.data[bufferPosition:bufferCap])
+		copy(p[firstPart:], buffer.data[0:readSize-firstPart])
 	}
 
-	newReadPosition := (bufferPos + n) % bufferCap
+	newReadPosition := (bufferPosition + readSize) % bufferCap
 	if newReadPosition <= readPosition {
-		readPage++
+		buffer.readPage.Add(1)
 	}
 
 	buffer.readPosition.Store(newReadPosition)
-	buffer.readPage.Store(readPage)
 
-	buffer.count.Store(bufferCount - n)
+	buffer.count.Store(bufferCount - readSize)
 
 	// fmt.Printf("Read position %d, Read page %d, n %d\n", newReadPosition, readPage, n)
 
-	return int(n), nil
+	return int(readSize), nil
 }
 
 // Write writes data to the ring buffer from p.
@@ -105,18 +103,16 @@ func (buffer *Buffer) Write(p []byte) (int, error) {
 	requestedSize := int64(len(p))
 
 	if requestedSize > bufferCap {
-		return 0, errors.New(fmt.Sprintf("write data exceeds buffer size: %d", requestedSize))
+		return 0, fmt.Errorf("write data exceeds buffer size: %d", requestedSize)
 	}
-
-	bufferCount := buffer.count.Load()
 
 	availableSpace := buffer.GetBytesToOverwrite()
 	if requestedSize > availableSpace {
-		return 0, errors.New(fmt.Sprintf("not enough space in buffer: %d/%d", requestedSize, availableSpace))
+		return 0, fmt.Errorf("not enough space in buffer: %d/%d", requestedSize, availableSpace)
 	}
 
+	bufferCount := buffer.count.Load()
 	writePosition := buffer.writePosition.Load()
-	writePage := buffer.writePage.Load()
 
 	// if buffer is not full yet we need to append rather than copy
 	if writePosition+requestedSize <= bufferCap {
@@ -130,11 +126,10 @@ func (buffer *Buffer) Write(p []byte) (int, error) {
 
 	newWritePosition := (writePosition + requestedSize) % bufferCap
 	if newWritePosition <= writePosition {
-		writePage++
+		buffer.writePage.Add(1)
 	}
 
 	buffer.writePosition.Store(newWritePosition)
-	buffer.writePage.Store(writePage)
 
 	buffer.count.Store(bufferCount + requestedSize)
 
@@ -147,8 +142,8 @@ func (buffer *Buffer) Write(p []byte) (int, error) {
 // It returns a positive overflow value if the position exceeds the writePos,
 // or zero if the position is within or behind the writePos.
 func (buffer *Buffer) OverflowByPosition(position int64) int64 {
-	buffer.mu.Lock()
-	defer buffer.mu.Unlock()
+	buffer.mu.RLock()
+	defer buffer.mu.RUnlock()
 
 	bufferCap := buffer.Cap()
 
@@ -182,8 +177,8 @@ func (buffer *Buffer) GetRelativePosition(position int64) int64 {
 
 // Checks if the given logical position is within the readPos and writePos.
 func (buffer *Buffer) IsPositionInBufferSync(position int64) bool {
-	buffer.mu.Lock()
-	defer buffer.mu.Unlock()
+	buffer.mu.RLock()
+	defer buffer.mu.RUnlock()
 
 	return buffer.IsPositionInBuffer(position)
 }
@@ -195,75 +190,31 @@ func (buffer *Buffer) IsPositionInBuffer(position int64) bool {
 	}
 
 	bufferCap := buffer.Cap()
-
 	bufferPosition := relativePosition % bufferCap
-	bufferPositionPage := relativePosition / buffer.Cap()
+	bufferPositionPage := relativePosition / bufferCap
 
 	readPage := buffer.readPage.Load()
 	readPosition := buffer.readPosition.Load()
-
-	writePosition := buffer.writePosition.Load()
 	writePage := buffer.writePage.Load()
-
-	// fmt.Printf("IsPositionInBuffer: position %d, bufferPosition %d, positionPage %d, readPosition %d, readPage %d, writePosition %d, writePage %d\n", position, bufferPosition, bufferPositionPage, readPosition, readPage, writePosition, writePage)
+	writePosition := buffer.writePosition.Load()
 
 	if readPage == writePage {
-		if bufferPosition >= readPosition && bufferPosition < writePosition {
-			return true
-		}
-
-		return false
+		// Case 1: Same page, position must be between readPosition and writePosition.
+		return bufferPosition >= readPosition && bufferPosition < writePosition
 	}
 
-	if readPage < writePage {
-		if bufferPositionPage == readPage {
-			// check is the position is bigger or equal to read position and less than write position of of next page
-			writePositionNextPage := writePosition + bufferCap*(writePage-readPage)
-
-			if bufferPosition >= readPosition && bufferPosition < writePositionNextPage {
-				return true
-			}
-
-			return false
-		}
-
-		if bufferPositionPage == writePage {
-			// check if the position is bigger or equal to read position of last page and less than write position
-			readPositionLastPage := readPosition - bufferCap*(writePage-readPage)
-
-			if bufferPosition >= readPositionLastPage && bufferPosition < writePosition {
-				return true
-			}
-
-			return false
-		}
+	if bufferPositionPage == readPage {
+		// Case 2: Position is on the read page.
+		return bufferPosition >= readPosition
 	}
 
-	if readPage > writePage {
-		if bufferPositionPage == readPage {
-			// check if the position is bigger or equal to read position and less than write position of last page
-			writePositionLastPage := writePosition + bufferCap*(readPage-writePage)
-
-			if bufferPosition >= readPosition && bufferPosition < writePositionLastPage {
-				return true
-			}
-
-			return false
-		}
-
-		if bufferPositionPage == writePage {
-			// check if the position is bigger or equal to read position of next page and less than write position
-			readPositionNextPage := readPosition + bufferCap*(readPage-writePage)
-
-			if bufferPosition >= readPositionNextPage && bufferPosition < writePosition {
-				return true
-			}
-
-			return false
-		}
+	if bufferPositionPage == writePage {
+		// Case 3: Position is on the write page.
+		return bufferPosition < writePosition
 	}
 
-	return false
+	// Case 4: Position is in between readPage and writePage when they are not the same.
+	return readPage < writePage
 }
 
 func (buffer *Buffer) WaitForPositionInBuffer(position int64, context context.Context) {
@@ -275,49 +226,48 @@ func (buffer *Buffer) WaitForPositionInBuffer(position int64, context context.Co
 		select {
 		case <-context.Done():
 			return
-		case <-time.After(250 * time.Microsecond):
+		case <-time.After(100 * time.Microsecond):
 		}
 
 	}
 }
 
 func (buffer *Buffer) GetBytesToOverwriteSync() int64 {
-    buffer.mu.Lock()
-    defer buffer.mu.Unlock()
+	buffer.mu.RLock()
+	defer buffer.mu.RUnlock()
 
-    return buffer.GetBytesToOverwrite()
+	return buffer.GetBytesToOverwrite()
 }
 
 func (buffer *Buffer) GetBytesToOverwrite() int64 {
 	bufferCap := buffer.Cap()
-	bufferCount := buffer.count.Load()
-
+	readPage := buffer.readPage.Load()
 	readPosition := buffer.readPosition.Load()
+	writePage := buffer.writePage.Load()
 	writePosition := buffer.writePosition.Load()
 
-	// fmt.Printf("GetBytesToOverwrite: readPosition %d, writePosition %d, bufferCount %d\n", readPosition, writePosition, bufferCount)
-
-	// Case 1: Buffer is empty
-	if bufferCount == 0 {
+	// Case: Buffer is empty
+	if readPosition == writePosition && readPage == writePage {
 		return bufferCap
 	}
 
-	// Case 2: Write position is ahead of read position
-	if writePosition > readPosition {
-		staleBytes := writePosition - readPosition
-
-		return bufferCap - staleBytes
+	// Calculate the number of stale bytes.
+	var staleBytes int64
+	if readPosition <= writePosition {
+		staleBytes = writePosition - readPosition
+	} else {
+		// Case: Buffer wrap-around has occurred.
+		staleBytes = bufferCap - readPosition + writePosition
 	}
 
-	// Case 3: Write position has wrapped around to the start
-	if writePosition < readPosition {
-		staleBytes := bufferCap - readPosition + writePosition
-
-		return bufferCap - staleBytes
+	// Handle the edge case where the write has caught up to the read position
+	// but it is on a different page, indicating a full buffer.
+	if readPage != writePage && staleBytes == 0 {
+		return 0
 	}
 
-	// Should not reach here
-	return 0
+	// Calculate the available space for overwriting.
+	return bufferCap - staleBytes
 }
 
 func (buffer *Buffer) Reset(position int64) {

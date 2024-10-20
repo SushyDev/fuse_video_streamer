@@ -21,19 +21,20 @@ type Stream struct {
 
 	context context.Context
 	cancel  context.CancelFunc
+	wg      sync.WaitGroup
 
 	buffer       *Buffer
 	seekPosition atomic.Int64
 
 	chart *chart.Chart
 
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	closed bool
 }
 
-var bufferCreateSize = int64(1024 * 1024 * 1024)
-var overflowMargin = int64(1024 * 1024 * 128)
+var bufferCreateSize = int64(1024 * 1024 * 1024 * 1)
+var overflowMargin = int64(1024 * 1024 * 64)
 
 func NewStream(url string, size int64) *Stream {
 	chart := chart.NewChart()
@@ -67,6 +68,7 @@ func (stream *Stream) startStream(seekPosition int64) {
 
 	defer func() {
 		stream.chart.LogStream(fmt.Sprintf("Stream closed for position: %d\n", seekPosition))
+		stream.wg.Done()
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -97,20 +99,20 @@ func (stream *Stream) startStream(seekPosition int64) {
 
 	chunk := make([]byte, 8192)
 
-    var normalDelay time.Duration = 250 * time.Microsecond
-    var retryDelay time.Duration = normalDelay
+	var normalDelay time.Duration = 100 * time.Microsecond
+	var retryDelay time.Duration = normalDelay
 
-    timeStart := time.Now()
-    totalBytesRead := 0
+	timeStart := time.Now()
+	totalBytesRead := 0
 
 	for {
 		select {
 		case <-stream.context.Done():
 			stream.chart.LogStream(fmt.Sprintf("Stream context done\n"))
-            retryDelay = 5 * time.Second // Retry after 5 seconds
+			retryDelay = 5 * time.Second // Retry after 5 seconds
 			return
 		case <-ctx.Done():
-            retryDelay = 5 * time.Second // Retry after 5 seconds
+			retryDelay = 5 * time.Second // Retry after 5 seconds
 			stream.chart.LogStream(fmt.Sprintf("Stream context done\n"))
 			return
 		case <-time.After(retryDelay):
@@ -122,7 +124,7 @@ func (stream *Stream) startStream(seekPosition int64) {
 		// TODO chunkSizeDeterminedByNetworkSpeed
 
 		if chunkSizeToRead == 0 {
-            retryDelay = 100 * time.Millisecond // Retry after 100 milliseconds
+			retryDelay = 100 * time.Millisecond // Retry after 100 milliseconds
 			continue
 		}
 
@@ -135,15 +137,15 @@ func (stream *Stream) startStream(seekPosition int64) {
 				return // Crash ?
 			}
 
-            totalBytesRead += bytesRead
-            retryDelay = normalDelay // Reset
+			totalBytesRead += bytesRead
+			retryDelay = normalDelay // Reset
 		}
 
-        elapsed := time.Since(timeStart)
-        if elapsed > 0 && false {
-            mbps := float64(totalBytesRead * 8) / (1024 * 1024) / elapsed.Seconds() // Convert bytes to bits and to Mbps
-            stream.chart.LogStream(fmt.Sprintf("Speed: %.2f MB/s @ %d\n", mbps, seekPosition))
-        }
+		elapsed := time.Since(timeStart)
+		if elapsed > 0 && false {
+			mbps := float64(totalBytesRead*8) / (1024 * 1024) / elapsed.Seconds() // Convert bytes to bits and to Mbps
+			stream.chart.LogStream(fmt.Sprintf("Speed: %.2f MB/s @ %d\n", mbps, seekPosition))
+		}
 
 		switch {
 		case err == io.ErrUnexpectedEOF:
@@ -151,12 +153,12 @@ func (stream *Stream) startStream(seekPosition int64) {
 			return // Decide if the loop should crash or retry logic can be added.
 		case err == io.EOF:
 			stream.chart.LogStream(fmt.Sprintf("Read EOF, Bytes read: %d, Position %d\n", bytesRead, seekPosition))
-            retryDelay = 5 * time.Second // Retry after 5 seconds
-			continue // Handle end of file appropriately.
+			retryDelay = 5 * time.Second // Retry after 5 seconds
+			continue                     // Handle end of file appropriately.
 		case err != nil:
 			stream.chart.LogStream(fmt.Sprintf("Failed to read: %v\n", err))
-            retryDelay = 5 * time.Second // Retry after 5 seconds
-			continue // Continue to retry on other errors.
+			retryDelay = 5 * time.Second // Retry after 5 seconds
+			continue                     // Continue to retry on other errors.
 		}
 	}
 }
@@ -167,11 +169,12 @@ func (stream *Stream) stopStream() {
 	}
 
 	stream.cancel()
+	stream.wg.Wait()
 }
 
 func (stream *Stream) Read(p []byte) (int, error) {
-	stream.mu.Lock()
-	defer stream.mu.Unlock()
+	stream.mu.RLock()
+	defer stream.mu.RUnlock()
 
 	if stream.closed {
 		return 0, fmt.Errorf("Streamer is closed")
@@ -214,6 +217,8 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedS
 		stream.context = context
 		stream.cancel = cancel
 
+		stream.wg.Add(1)
+
 		stream.buffer.Reset(seekPosition)
 
 		go stream.startStream(seekPosition)
@@ -222,7 +227,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedS
 
 		stream.buffer.WaitForPositionInBuffer(waitForSize, stream.context)
 
-        return
+		return
 	}
 
 	dataInBuffer := stream.buffer.IsPositionInBufferSync(seekPosition + requestedSize)

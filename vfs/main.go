@@ -21,13 +21,12 @@ func Mount(mountpoint string, request chan AddFileRequest) {
 		fuse.Subtype("debrid_drive"),
 		fuse.FSName("debrid_drive"),
 
-        fuse.AllowOther(),
+		fuse.AllowOther(),
 
 		fuse.NoAppleDouble(),
 		fuse.NoBrowse(),
 
 		fuse.LocalVolume(),
-		// fuse.AsyncRead(),
 	)
 	if err != nil {
 		logger.Logger.Fatalf("Failed to mount FUSE filesystem: %v", err)

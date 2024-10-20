@@ -27,8 +27,8 @@ type File struct {
 }
 
 func (file *File) Attr(ctx context.Context, a *fuse.Attr) error {
-	file.mu.Lock()
-	defer file.mu.Unlock()
+	file.mu.RLock()
+	defer file.mu.RUnlock()
 
 	a.Size = uint64(file.size)
 	a.Inode = file.iNode
@@ -54,7 +54,7 @@ func (file *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	logger.Logger.Infof("Opening file %s - %d", file.name, file.size)
 
 	// openResponse.Flags |= fuse.OpenDirectIO
-    openResponse.Flags |= fuse.OpenKeepCache
+	openResponse.Flags |= fuse.OpenKeepCache
 
 	return file, nil
 }
@@ -78,8 +78,8 @@ func (file *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseReque
 }
 
 func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
-	file.mu.Lock()
-	defer file.mu.Unlock()
+	file.mu.RLock()
+	defer file.mu.RUnlock()
 
 	// fmt.Printf("Reading %d bytes at offset %d\n", readRequest.Size, readRequest.Offset)
 
@@ -151,7 +151,7 @@ func (file *File) getVideoStream(pid uint32) (*vlc.Stream, error) {
 
 	file.videoStreams.Store(pid, videoStream)
 
-    fmt.Printf("Created new video stream for PID %d\n", pid)
+	fmt.Printf("Created new video stream for PID %d\n", pid)
 
 	return videoStream, nil
 }
@@ -161,11 +161,11 @@ func (file *File) calculateReadBoundaries(start int64, requestedSize int64) (int
 		return 0, 0, io.EOF
 	}
 
-    end := start + requestedSize
+	end := start + requestedSize
 
-    if end > file.size {
-        end = file.size
-    }
+	if end > file.size {
+		end = file.size
+	}
 
 	return start, end - start, nil
 }
