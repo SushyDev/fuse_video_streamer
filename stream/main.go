@@ -81,6 +81,7 @@ func (stream *Stream) startStream(seekPosition int64) {
 	req, err := http.NewRequestWithContext(ctx, "GET", stream.url, nil)
 	if err != nil {
 		stream.chart.LogStream(fmt.Sprintf("Failed to create request: %v\n", err))
+		stream.cancel()
 		return
 	}
 
@@ -89,6 +90,7 @@ func (stream *Stream) startStream(seekPosition int64) {
 	resp, err := stream.client.Do(req)
 	if err != nil {
 		stream.chart.LogStream(fmt.Sprintf("Failed to do request: %v\n", err))
+		stream.cancel()
 		return
 	}
 
@@ -96,6 +98,7 @@ func (stream *Stream) startStream(seekPosition int64) {
 
 	if resp.StatusCode != http.StatusPartialContent {
 		stream.chart.LogStream(fmt.Sprintf("Status code: %d\n", resp.StatusCode))
+		stream.cancel()
 		return
 	}
 
@@ -182,7 +185,7 @@ func (stream *Stream) Read(p []byte) (int, error) {
 	requestedSize := int64(len(p))
 
 	if seekPosition+requestedSize >= stream.size {
-		requestedSize = stream.size-seekPosition-1
+		requestedSize = stream.size - seekPosition - 1
 	}
 
 	stream.checkAndStartBufferIfNeeded(seekPosition, requestedSize)

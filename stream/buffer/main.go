@@ -183,10 +183,10 @@ func (buffer *Buffer) IsPositionInBuffer(position int64) bool {
 	writePage := buffer.writePage.Load()
 	writePosition := buffer.writePosition.Load()
 
-    // Case 0: The buffer is empty.
-    if readPage == 0 && writePage == 0 && readPosition == 0 && writePosition == 0 {
-        return false
-    }
+	// Case 0: The buffer is empty.
+	if readPage == 0 && writePage == 0 && readPosition == 0 && writePosition == 0 {
+		return false
+	}
 
 	if readPage == writePage {
 		// Case 1: Same page, position must be between readPosition and writePosition.
@@ -249,11 +249,11 @@ func (buffer *Buffer) Reset(position int64) {
 	defer buffer.mu.Unlock()
 
 	buffer.SetStartPosition(position)
+	buffer.writePage.Store(0)
 	buffer.writePosition.Store(0)
+	buffer.readPage.Store(0)
 	buffer.readPosition.Store(0)
 	buffer.count.Store(0)
-	buffer.writePage.Store(0)
-	buffer.readPage.Store(0)
 	buffer.data = make([]byte, buffer.Cap())
 }
 
