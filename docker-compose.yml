@@ -1,6 +1,9 @@
 version: '3.7'
 services:
   debrid_drive:
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: test
     image: drive-test-fuse-app
     network_mode: container:wgcf
@@ -16,7 +19,7 @@ services:
       - UMASK=002
     volumes:
       - ./debrid_drive:/app/data:rshared
-      - ./database.db:/app/database.db
+      - ./database.db:/database.db
     devices:
       - /dev/fuse:/dev/fuse:rwm
     pid: host

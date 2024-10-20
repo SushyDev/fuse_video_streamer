@@ -148,31 +148,6 @@ func (buffer *Buffer) Write(p []byte) (int, error) {
 	return int(requestedSize), nil
 }
 
-// OverflowByPosition checks how much the given logical position exceeds the writePos.
-// It returns a positive overflow value if the position exceeds the writePos,
-// or zero if the position is within or behind the writePos.
-func (buffer *Buffer) OverflowByPosition(position int64) int64 {
-	buffer.mu.RLock()
-	defer buffer.mu.RUnlock()
-
-	bufferCap := buffer.Cap()
-
-	relativePosition := buffer.GetRelativePosition(position)
-	if relativePosition < 0 {
-		panic("position is behind the buffer start position")
-	}
-
-	// Calculate the buffer position using the modulo operation.
-	bufferPos := relativePosition % bufferCap
-	writePosition := buffer.writePosition.Load()
-
-	if bufferPos >= writePosition {
-		return int64(bufferPos - writePosition)
-	}
-
-	return 0
-}
-
 func (buffer *Buffer) SetStartPosition(position int64) {
 	buffer.startPosition.Store(position)
 }
@@ -207,6 +182,11 @@ func (buffer *Buffer) IsPositionInBuffer(position int64) bool {
 	readPosition := buffer.readPosition.Load()
 	writePage := buffer.writePage.Load()
 	writePosition := buffer.writePosition.Load()
+
+    // Case 0: The buffer is empty.
+    if readPage == 0 && writePage == 0 && readPosition == 0 && writePosition == 0 {
+        return false
+    }
 
 	if readPage == writePage {
 		// Case 1: Same page, position must be between readPosition and writePosition.
