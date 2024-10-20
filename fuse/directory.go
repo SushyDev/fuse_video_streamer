@@ -1,4 +1,4 @@
-package vfs
+package fuse
 
 import (
 	"context"

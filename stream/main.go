@@ -1,108 +1,250 @@
 package stream
 
 import (
+	"context"
+	"debrid_drive/chart"
 	"fmt"
 	"io"
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
-	"debrid_drive/config"
-	"debrid_drive/logger"
+    "debrid_drive/stream/buffer"
 )
 
-type PartialReader struct {
-	url          string
-	offset       int64
-	Size         int64
-	mu           sync.RWMutex
-	cacheManager *cacheManager
-	client       *http.Client
-	closed       bool
+type Stream struct {
+	url    string
+	size   int64
+	client *http.Client
 
-	prefetchingChunks sync.Map // map[int64]struct{}
+	stopChannel chan struct{}
+	waitChannel chan struct{}
 
+	context context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+
+	buffer       *buffer.Buffer
+	seekPosition atomic.Int64
+
+	chart *chart.Chart
+
+	mu sync.RWMutex
+
+	closed bool
 }
 
-func NewPartialReader(url string, size int64) (*PartialReader, error) {
-	cacheManager, err := newCacheManager(size)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache manager: %w", err)
+var bufferCreateSize = int64(1024 * 1024 * 1024 * 1)
+var overflowMargin = int64(1024 * 1024 * 64)
+
+func NewStream(url string, size int64) *Stream {
+	chart := chart.NewChart()
+
+	// buffer := NewBuffer(0, min(size, bufferCreateSize), chart)
+	buffer := buffer.NewBuffer(min(size, bufferCreateSize), 0)
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        1,
+			MaxConnsPerHost:     1,
+			MaxIdleConnsPerHost: 1,
+			Proxy:               http.ProxyFromEnvironment,
+		},
+		Timeout: 6 * time.Hour,
 	}
 
-	pr := &PartialReader{
-		url:          url,
-		cacheManager: cacheManager,
-		client:       &http.Client{},
-		closed:       false,
-	}
+	return &Stream{
+		url:    url,
+		size:   size,
+		client: client,
 
-	if config.FetchFileSize {
-		if err := pr.preFetchFileSize(); err != nil {
-			logger.Logger.Errorf("Failed to fetch file size: %v", err)
-		}
-	} else {
-		pr.Size = size
-	}
+		buffer: buffer,
 
-	if config.FetchHeaders {
-		if err := pr.preFetchHeaders(); err != nil {
-			logger.Logger.Errorf("Failed to prefetch headers: %v", err)
-		}
+		chart: chart,
 	}
-
-	if config.FetchTail {
-		if err := pr.preFetchTail(); err != nil {
-			logger.Logger.Errorf("Failed to prefetch tail: %v", err)
-		}
-	}
-
-	return pr, nil
 }
 
-func (pr *PartialReader) Read(buffer []byte) (readBytes int, err error) {
-	if pr.closed {
-		return 0, fmt.Errorf("reader is closed")
-	}
+func (stream *Stream) startStream(seekPosition int64) {
+	stream.chart.LogStream(fmt.Sprintf("Stream started for position: %d\n", seekPosition))
 
-	offset := atomic.LoadInt64(&pr.offset)
+	defer func() {
+		stream.chart.LogStream(fmt.Sprintf("Stream closed for position: %d\n", seekPosition))
+		stream.wg.Done()
+	}()
 
-	bufferSize, err := getBufferSize(offset, int64(len(buffer)), pr.Size)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer cancel()
+
+	rangeHeader := fmt.Sprintf("bytes=%d-", max(seekPosition, 0))
+	req, err := http.NewRequestWithContext(ctx, "GET", stream.url, nil)
 	if err != nil {
-		return 0, err
+		stream.chart.LogStream(fmt.Sprintf("Failed to create request: %v\n", err))
+		return
 	}
 
-	chunk := GetChunkByOffset(offset)
+	req.Header.Set("Range", rangeHeader)
 
-	data, err := chunk.getData(pr)
+	resp, err := stream.client.Do(req)
 	if err != nil {
-		return 0, err
+		stream.chart.LogStream(fmt.Sprintf("Failed to do request: %v\n", err))
+		return
 	}
 
-	readBytes, err = readData(chunk, data, buffer, bufferSize, offset)
-	if err != nil {
-		return 0, err
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPartialContent {
+		stream.chart.LogStream(fmt.Sprintf("Status code: %d\n", resp.StatusCode))
+		return
 	}
 
-	atomic.StoreInt64(&pr.offset, offset+int64(readBytes))
+	chunk := make([]byte, 8192)
 
-	chunkSize := chunk.getSize()
-	chunkConsumed := float64(offset%chunkSize) / float64(chunkSize)
-	if chunkConsumed > 0.75 {
-		nextChunk := GetChunkByNumber(chunk.number + 1)
-		nextChunkStart, _ := nextChunk.getRange()
+	var normalDelay time.Duration = 100 * time.Microsecond
+	var retryDelay time.Duration = normalDelay
 
-		if nextChunkStart < pr.Size {
-			go pr.preFetchChunkData(nextChunk)
+	timeStart := time.Now()
+	totalBytesRead := 0
+
+	for {
+		select {
+		case <-stream.context.Done():
+			stream.chart.LogStream(fmt.Sprintf("Stream context done\n"))
+			return
+		case <-ctx.Done():
+			stream.chart.LogStream(fmt.Sprintf("Request context done\n"))
+			return
+		case <-time.After(retryDelay):
+		}
+
+		bytesToOverwrite := max(stream.buffer.GetBytesToOverwriteSync(), 0)
+		chunkSizeToRead := min(int64(len(chunk)), bytesToOverwrite)
+
+		if chunkSizeToRead == 0 {
+			retryDelay = 100 * time.Millisecond // Retry after 100 milliseconds
+			continue
+		}
+
+		bytesRead, err := resp.Body.Read(chunk[:chunkSizeToRead])
+
+		if bytesRead > 0 {
+			bytesRead, err := stream.buffer.Write(chunk[:bytesRead])
+			if err != nil {
+				stream.chart.LogStream(fmt.Sprintf("Write error %v\n", err))
+				return // Crash ?
+			}
+
+			totalBytesRead += bytesRead
+			retryDelay = normalDelay // Reset
+		}
+
+		elapsed := time.Since(timeStart)
+		if elapsed > 0 && false {
+			mbps := float64(totalBytesRead*8) / (1024 * 1024) / elapsed.Seconds() // Convert bytes to bits and to Mbps
+			stream.chart.LogStream(fmt.Sprintf("Speed: %.2f MB/s @ %d\n", mbps, seekPosition))
+		}
+
+		switch {
+		case err == io.ErrUnexpectedEOF:
+			stream.chart.LogStream(fmt.Sprintf("Unexpected EOF, Bytes read: %d\n", bytesRead))
+			return // Decide if the loop should crash or retry logic can be added.
+		case err == io.EOF:
+			stream.chart.LogStream(fmt.Sprintf("Read EOF, Bytes read: %d, Position %d\n", bytesRead, seekPosition))
+			retryDelay = 5 * time.Second // Retry after 5 seconds
+			continue                     // Handle end of file appropriately.
+		case err != nil:
+			stream.chart.LogStream(fmt.Sprintf("Failed to read: %v\n", err))
+			retryDelay = 5 * time.Second // Retry after 5 seconds
+			continue                     // Continue to retry on other errors.
 		}
 	}
-
-	return readBytes, nil
 }
 
-func (pr *PartialReader) Seek(offset int64, whence int) (int64, error) {
-	if pr.closed {
-		return 0, fmt.Errorf("reader is closed")
+func (stream *Stream) stopStream() {
+	if stream.cancel == nil {
+		return
+	}
+
+	stream.cancel()
+	stream.wg.Wait()
+}
+
+func (stream *Stream) Read(p []byte) (int, error) {
+	stream.mu.RLock()
+	defer stream.mu.RUnlock()
+
+	if stream.closed {
+		return 0, fmt.Errorf("Streamer is closed")
+	}
+
+	seekPosition := stream.GetSeekPosition()
+	requestedSize := int64(len(p))
+
+	if seekPosition+requestedSize >= stream.size {
+		requestedSize = max(stream.size-seekPosition-1, 0) // MINUS ONE
+	}
+
+	stream.checkAndStartBufferIfNeeded(seekPosition, requestedSize)
+
+	n, err := stream.buffer.ReadAt(p, seekPosition)
+	if err != nil {
+		fmt.Printf("ReadAt error %v\n", err)
+	}
+
+	return n, err
+}
+
+func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedSize int64) {
+	if seekPosition >= stream.size {
+		stream.chart.LogStream(fmt.Sprintf("Check: Seek position is at the end\n"))
+		return
+	}
+
+	seekInBuffer := stream.buffer.IsPositionInBufferSync(seekPosition)
+
+	var overflow int64
+	if seekInBuffer {
+		overflow = stream.buffer.OverflowByPosition(seekPosition)
+	}
+
+	if !seekInBuffer || overflow >= overflowMargin {
+		stream.stopStream()
+
+		context, cancel := context.WithCancel(context.Background())
+		stream.context = context
+		stream.cancel = cancel
+
+		stream.wg.Add(1)
+
+		stream.buffer.Reset(seekPosition)
+
+		go stream.startStream(seekPosition)
+
+		waitForSize := min(seekPosition+requestedSize, stream.size)
+
+		stream.buffer.WaitForPositionInBuffer(waitForSize, stream.context)
+
+		return
+	}
+
+	dataInBuffer := stream.buffer.IsPositionInBufferSync(seekPosition + requestedSize)
+
+	if !dataInBuffer && overflow >= 0 && overflow < overflowMargin {
+		waitForSize := min(seekPosition+requestedSize, stream.size)
+
+		// stream.chart.LogStream(fmt.Sprintf("Check: Waiting for position %d\n", seekPosition+requestedSize))
+		stream.buffer.WaitForPositionInBuffer(waitForSize, stream.context)
+		// stream.chart.LogStream(fmt.Sprintf("Check: Position ready %d\n", seekPosition+requestedSize))
+	}
+}
+
+func (stream *Stream) Seek(offset int64, whence int) (int64, error) {
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+
+	if stream.closed {
+		return 0, fmt.Errorf("Streamer is closed")
 	}
 
 	var newOffset int64
@@ -111,86 +253,43 @@ func (pr *PartialReader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekStart:
 		newOffset = offset
 	case io.SeekCurrent:
-		newOffset = pr.offset + offset
+		return 0, fmt.Errorf("TODO: SeekCurrent is not supported")
 	case io.SeekEnd:
-		newOffset = pr.Size + offset
+		return 0, fmt.Errorf("SeekEnd is not supported")
 	default:
-		return 0, fmt.Errorf("invalid whence: %d", whence)
+		return 0, fmt.Errorf("Invalid whence: %d", whence)
 	}
 
 	if newOffset < 0 {
-		return 0, fmt.Errorf("negative position is invalid")
+		return 0, fmt.Errorf("Negative position is invalid")
 	}
 
-	if newOffset >= pr.Size {
-		atomic.StoreInt64(&pr.offset, pr.Size)
-
-		return pr.offset, io.EOF
+	var err error
+	if newOffset >= stream.size {
+		newOffset = stream.size
+		err = io.EOF
 	}
 
-	atomic.StoreInt64(&pr.offset, newOffset)
+	stream.seekPosition.Store(newOffset)
 
-	return pr.offset, nil
+	stream.chart.UpdateSeekTotal(newOffset, stream.size)
+
+	return newOffset, err
 }
 
-func (pr *PartialReader) Close() error {
-	pr.mu.Lock()
-	defer pr.mu.Unlock()
+func (stream *Stream) GetSeekPosition() int64 {
+	return stream.seekPosition.Load()
+}
 
-	if pr.closed {
-		return fmt.Errorf("reader is already closed")
-	}
+func (stream *Stream) Close() error {
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
 
-	if pr.cacheManager != nil {
-		pr.cacheManager.Close()
-	}
+	stream.chart.LogStream(fmt.Sprintf("Closing stream\n"))
 
-	if pr.client != nil {
-		pr.client.CloseIdleConnections()
-	}
-
-	pr.closed = true
+	stream.stopStream()
+	stream.chart.Close()
+	stream.buffer.Close()
 
 	return nil
-}
-
-func readData(chunk *cacheChunk, data []byte, buffer []byte, bufferSize int64, offset int64) (int, error) {
-	chunkStart, chunkEnd := chunk.getRange()
-
-	relativeOffset := offset - chunkStart
-	if relativeOffset < 0 {
-		relativeOffset = 0
-	}
-
-	start := relativeOffset
-	end := relativeOffset + bufferSize
-
-	if end > chunkEnd {
-		end = chunkEnd
-	}
-
-	if start >= int64(len(data)) {
-		return 0, io.EOF
-	}
-
-	if end > int64(len(data)) {
-		end = int64(len(data))
-	}
-
-	requestedBytes := data[start:end]
-	copySize := copy(buffer, requestedBytes)
-
-	return copySize, nil
-}
-
-func getBufferSize(start int64, requestedSize int64, fileSize int64) (int64, error) {
-	if start >= fileSize {
-		return 0, io.EOF
-	}
-
-	if start+requestedSize > fileSize {
-		requestedSize = fileSize - start
-	}
-
-	return requestedSize, nil
 }

@@ -1,40 +1,37 @@
-# Dockerfile
-FROM golang:1.23.2-alpine
+FROM golang:1.23.2-alpine AS builder
 
-# Install necessary packages
 RUN apk update && apk add --no-cache \
     build-base \
     fuse \
-#    libfuse-dev \
     bash \
-    git
+    git \
+ && apk add --no-cache --virtual .build-deps \
+    gcc \
+    musl-dev \
+ && apk add --no-cache fuse-dev \
+ && rm -rf /var/cache/apk/*
 
-# Set environment variables
 ENV GO111MODULE=on
 ENV GOPROXY=direct
 ENV GOFLAGS="-mod=readonly"
 
-# Create app directory
 WORKDIR /app
 
-# Copy go.mod and go.sum
 COPY go.mod go.sum ./
 
-RUN go env -w GO111MODULE=on
-
-# Download dependencies
 RUN go mod download
 
-# Copy the source code
 COPY . .
 
-# Build the Go application
 RUN go build -o fuse-app main.go
 
-RUN ln -s /bin/fusermount /bin/fusermount3
+FROM alpine:latest
 
-COPY cert.pem /usr/local/share/ca-certificates/proxyman-ca.crt
-RUN update-ca-certificates
+RUN apk add --no-cache fuse
 
-# Set entrypoint
+COPY --from=builder /app/fuse-app /app/fuse-app
+
+RUN chmod +x /app/fuse-app
+RUN chmod -R 755 /app
+
 ENTRYPOINT ["/app/fuse-app"]

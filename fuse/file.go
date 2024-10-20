@@ -1,4 +1,4 @@
-package vfs
+package fuse
 
 import (
 	"context"
@@ -13,14 +13,14 @@ import (
 
 	"debrid_drive/logger"
 	"debrid_drive/real_debrid"
-	"debrid_drive/vlc"
+	"debrid_drive/stream"
 )
 
 type File struct {
 	name         string
 	iNode        uint64
 	videoUrl     string
-	videoStreams sync.Map // map[uint64]*vlc.Stream // map of video streams per PID
+	videoStreams sync.Map // map[uint64]*stream.Stream // map of video streams per PID
 	mu           sync.RWMutex
 	chunks       int64
 	size         int64
@@ -53,7 +53,6 @@ func (file *File) Remove(ctx context.Context) error {
 func (file *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
 	logger.Logger.Infof("Opening file %s - %d", file.name, file.size)
 
-	// openResponse.Flags |= fuse.OpenDirectIO
 	openResponse.Flags |= fuse.OpenKeepCache
 
 	return file, nil
@@ -66,7 +65,7 @@ func (file *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseReque
 	logger.Logger.Infof("Releasing file %s", file.name)
 
 	file.videoStreams.Range(func(key, value interface{}) bool {
-		stream := value.(*vlc.Stream)
+		stream := value.(*stream.Stream)
 		stream.Close()
 
 		return true
@@ -87,7 +86,7 @@ func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 		return fmt.Errorf("read request is for a directory")
 	}
 
-	stream, err := file.getVideoStream(readRequest.Pid)
+	videoStream, err := file.getVideoStream(readRequest.Pid)
 	if err != nil {
 		return fmt.Errorf("failed to get video stream: %w", err)
 	}
@@ -97,13 +96,13 @@ func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 	// 	return fmt.Errorf("failed to calculate read boundaries: %w", err)
 	// }
 
-	_, err = stream.Seek(readRequest.Offset, io.SeekStart)
+	_, err = videoStream.Seek(readRequest.Offset, io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek in video stream: %w", err)
 	}
 
 	buffer := make([]byte, readRequest.Size)
-	bytesRead, err := stream.Read(buffer)
+	bytesRead, err := videoStream.Read(buffer)
 	if err != nil {
 		return fmt.Errorf("failed to read from video stream: %w", err)
 	}
@@ -136,10 +135,10 @@ func (file *File) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) er
 
 // --- Helpers ---
 
-func (file *File) getVideoStream(pid uint32) (*vlc.Stream, error) {
-	stream, ok := file.videoStreams.Load(pid)
+func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
+	existingVideoStream, ok := file.videoStreams.Load(pid)
 	if ok {
-		return stream.(*vlc.Stream), nil
+		return existingVideoStream.(*stream.Stream), nil
 	}
 
 	unrestrictedFile, err := real_debrid.UnrestrictLink(file.videoUrl)
@@ -147,7 +146,7 @@ func (file *File) getVideoStream(pid uint32) (*vlc.Stream, error) {
 		return nil, fmt.Errorf("failed to unrestrict link: %w", err)
 	}
 
-	videoStream := vlc.NewStream(unrestrictedFile.Download, file.size)
+    videoStream := stream.NewStream(unrestrictedFile.Download, file.size)
 
 	file.videoStreams.Store(pid, videoStream)
 

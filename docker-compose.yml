@@ -1,17 +1,23 @@
+version: '3.7'
 services:
-  fuse-app:
-    build: .
-    container_name: fuse-go-app
-    privileged: true
+  debrid_drive:
+    container_name: test
+    image: drive-test-fuse-app
+    network_mode: container:wgcf
+      # privileged: true
     cap_add:
       - SYS_ADMIN
-    devices:
-      - /dev/fuse:/dev/fuse
+    security_opt:
+      - apparmor:unconfined
     environment:
-      - GO_ENV=development
-      - HTTP_PROXY=host.docker.internal:9090
-      - HTTPS_PROXY=host.docker.internal:9090
+      - TZ=Europe/Amsterdam
+      - PUID=1000
+      - PGID=1000
+      - UMASK=002
     volumes:
+      - ./debrid_drive:/app/data:rshared
       - ./database.db:/app/database.db
-    stdin_open: true
-    tty: true
+    devices:
+      - /dev/fuse:/dev/fuse:rwm
+    pid: host
+    command: "/app/data RD_TOKEN_HERE"

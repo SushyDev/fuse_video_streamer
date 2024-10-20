@@ -1,4 +1,4 @@
-package vlc
+package buffer
 
 import (
 	"context"

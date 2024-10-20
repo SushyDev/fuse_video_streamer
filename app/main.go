@@ -9,7 +9,7 @@ import (
 	"debrid_drive/database"
 	"debrid_drive/logger"
 	"debrid_drive/real_debrid"
-	"debrid_drive/vfs"
+	"debrid_drive/fuse"
 )
 
 const useVfs = true
@@ -30,10 +30,10 @@ func Start() {
 	}
 
 	mountpoint := flag.Arg(0)
-	addFileRequest := make(chan vfs.AddFileRequest)
+	addFileRequest := make(chan fuse.AddFileRequest)
 
 	if useVfs {
-		go vfs.Mount(mountpoint, addFileRequest)
+		go fuse.Mount(mountpoint, addFileRequest)
 	}
 
 	InitDatabase()
@@ -50,7 +50,7 @@ func Start() {
 	for _, file := range files {
 		path := file.TorrentId + file.Path
 
-		addFileRequest <- vfs.AddFileRequest{
+		addFileRequest <- fuse.AddFileRequest{
 			Path:     path,
 			VideoUrl: file.Link,
 			Size:     file.Bytes,
