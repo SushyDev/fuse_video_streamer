@@ -1,126 +1,108 @@
 package fuse
 
 import (
-	"fmt"
-	"strings"
-	"sync"
+	"debrid_drive/vfs"
 
-	"debrid_drive/logger"
+	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 )
 
-type FileSystem struct {
-	mu           sync.RWMutex
-	iNodeCounter uint64
-	directory    *Directory
+var _ fs.FS = &FuseFileSystem{}
+
+type FuseFileSystem struct {
+	vfs        *vfs.FileSystem
+	connection *fuse.Conn
 }
 
-func NewFileSystem() *FileSystem {
-	fileSystem := &FileSystem{
-		iNodeCounter: 1,
+func NewFileSystem(connection *fuse.Conn, vfs *vfs.FileSystem) *FuseFileSystem {
+	fuseFileSystem := &FuseFileSystem{
+		connection: connection,
+		vfs:        vfs,
 	}
 
-	fileSystem.mu.Lock()
-	fileSystem.directory = fileSystem.NewDirectory("root")
-	fileSystem.mu.Unlock()
-
-	return fileSystem
+	return fuseFileSystem
 }
 
-func (fileSystem *FileSystem) NewDirectory(name string) *Directory {
-	fileSystem.iNodeCounter += 1
+func (fileSystem *FuseFileSystem) Root() (fs.Node, error) {
+	root := NewDirectoryNode(fileSystem.connection, fileSystem.vfs.Root)
 
-	return &Directory{
-		name:        name,
-		iNode:       fileSystem.iNodeCounter,
-		directories: make(map[string]*Directory),
-		files:       make(map[string]*File),
-		fileSystem:  fileSystem,
-	}
+	return root, nil
 }
 
-func (fileSystem *FileSystem) NewFile(name string, videoUrl string, videoSize int64) *File {
-	fileSystem.iNodeCounter += 1
+// func (fileSystem *FuseFileSystem) AddDirectory(parent *Directory, name string) (*Directory, error) {
+// 	if parent == nil {
+// 		return nil, fmt.Errorf("parent directory is nil")
+// 	}
+//
+// 	directoryFound, _ := parent.GetDirectory(name)
+// 	if directoryFound != nil {
+// 		return nil, fmt.Errorf("directory %s already exists", name)
+// 	}
+//
+// 	newDirectory := fileSystem.NewDirectory(parent, name)
+//
+// 	fileSystem.mu.Lock()
+// 	parent.directories[newDirectory.GetINode()] = newDirectory
+// 	fileSystem.directoryMap[newDirectory.iNode] = newDirectory
+// 	fileSystem.mu.Unlock()
+//
+// 	defer parent.Invalidate()
+//
+// 	return newDirectory, nil
+// }
 
-	return &File{
-		name:     name,
-		iNode:    fileSystem.iNodeCounter,
-		videoUrl: videoUrl,
-		chunks:   0,
-		size:     videoSize,
-	}
-}
+// func (fileSystem *FuseFileSystem) RemoveDirectory(parent *Directory, nodeId uint64) {
+// 	fileSystem.mu.Lock()
+// 	defer fileSystem.mu.Unlock()
+//
+// 	delete(parent.directories, nodeId)
+// 	delete(fileSystem.directoryMap, parent.iNode)
+//
+// 	defer parent.Invalidate()
+// }
 
-func (fileSystem *FileSystem) Root() (fs.Node, error) {
-	return fileSystem.directory, nil
-}
+// func (fileSystem *FuseFileSystem) GetDirectory(iNode uint64) (*Directory, error) {
+// 	fileSystem.mu.RLock()
+// 	defer fileSystem.mu.RUnlock()
+//
+// 	if iNode == 0 {
+// 		return fileSystem.directory, nil
+// 	}
+//
+// 	directory, exists := fileSystem.directoryMap[iNode]
+// 	if !exists {
+// 		return nil, fmt.Errorf("directory with inode %d does not exist", iNode)
+// 	}
+//
+// 	return directory, nil
+// }
 
-func (fileSystem *FileSystem) AddDirectory(parent *Directory, name string) (*Directory, error) {
-	if parent == nil {
-		return nil, fmt.Errorf("parent directory is nil")
-	}
+// func (fileSystem *FuseFileSystem) AddFile(parent *Directory, name string, videoUrl string, videoSize uint64) (*File, error) {
+// 	if parent == nil {
+// 		return nil, fmt.Errorf("parent directory is nil")
+// 	}
+//
+// 	file := fileSystem.NewFile(name, videoUrl, videoSize)
+//
+// 	fileSystem.mu.Lock()
+// 	parent.files[file.iNode] = file
+// 	defer fileSystem.mu.Unlock()
+//
+// 	defer parent.Invalidate()
+//
+// 	return file, nil
+// }
 
-	directory := fileSystem.NewDirectory(name)
+// func (fileSystem *FuseFileSystem) RemoveFile(parent *Directory, nodeId uint64) {
+// 	fileSystem.mu.Lock()
+// 	defer fileSystem.mu.Unlock()
+//
+// 	delete(parent.files, nodeId)
+// }
 
-	fileSystem.mu.Lock()
-	parent.directories[name] = directory
-	fileSystem.mu.Unlock()
-
-	logger.Logger.Infof("Created directory %s with inode %d", directory.name, directory.iNode)
-
-	return directory, nil
-}
-
-func (fileSystem *FileSystem) RemoveDirectory(parent *Directory, name string) {
-	fileSystem.mu.Lock()
-	defer fileSystem.mu.Unlock()
-
-	delete(parent.directories, name)
-}
-
-func (fileSystem *FileSystem) FindDirectory(path string) (*Directory, error) {
-	fileSystem.mu.RLock()
-	defer fileSystem.mu.RUnlock()
-
-	if path == "" || path == "/" {
-		return fileSystem.directory, nil
-	}
-
-	components := strings.Split(path, "/")
-	currentDirectory := fileSystem.directory
-
-	for _, name := range components {
-		newDirectory, exists := currentDirectory.directories[name]
-
-		if !exists {
-			return nil, fmt.Errorf("directory %s does not exist", name)
-		}
-
-		currentDirectory = newDirectory
-	}
-
-	return currentDirectory, nil
-}
-
-func (fileSystem *FileSystem) AddFile(parent *Directory, name string, videoUrl string, videoSize int64) (*File, error) {
-	if parent == nil {
-		return nil, fmt.Errorf("parent directory is nil")
-	}
-
-	file := fileSystem.NewFile(name, videoUrl, videoSize)
-
-	fileSystem.mu.Lock()
-	parent.files[name] = file
-	defer fileSystem.mu.Unlock()
-
-	logger.Logger.Infof("Created file %s with inode %d to directory %s", name, file.iNode, parent.name)
-
-	return file, nil
-}
-
-func (fileSystem *FileSystem) RemoveFile(parent *Directory, name string) {
-	fileSystem.mu.Lock()
-	defer fileSystem.mu.Unlock()
-
-	delete(parent.files, name)
-}
+// func (fileSystem *FuseFileSystem) RenameDirectory(directory *Directory, newName string) error {
+// 	fileSystem.mu.Lock()
+// 	defer fileSystem.mu.Unlock()
+//
+// 	return nil
+// }

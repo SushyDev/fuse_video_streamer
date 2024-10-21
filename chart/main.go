@@ -19,13 +19,13 @@ import (
 var ChartsOpen = 0
 
 type LinechartData struct {
-	BufferStartPosition int64
-	SeekPosition        int64
-	BufferLen           int64
-	BufferCap           int64
+	BufferStartPosition uint64
+	SeekPosition        uint64
+	BufferLen           uint64
+	BufferCap           uint64
 }
 
-func BytesToMegabytesRound(bytes int64) float64 {
+func BytesToMegabytesRound(bytes uint64) float64 {
 	gb := float64(bytes) / 1024 / 1024
 
 	return gb
@@ -40,8 +40,8 @@ func appendWithLimit(slice []float64, value float64, limit int) []float64 {
 }
 
 type SeekTotal struct {
-	SeekPosition int64
-	TotalSize    int64
+	SeekPosition uint64
+	TotalSize    uint64
 }
 
 type Chart struct {
@@ -52,7 +52,7 @@ type Chart struct {
 
 	SeekTotal chan SeekTotal
 
-	SeekPosition chan int64
+	SeekPosition chan uint64
 }
 
 func NewChart() *Chart {
@@ -269,7 +269,7 @@ func (chart *Chart) LogBuffer(message string) {
 	chart.Log(chart.BufferLogChannel, message)
 }
 
-func (chart *Chart) UpdateSeekTotal(seekPosition int64, totalSize int64) {
+func (chart *Chart) UpdateSeekTotal(seekPosition uint64, totalSize uint64) {
 	if !config.Chart {
 		return
 	}

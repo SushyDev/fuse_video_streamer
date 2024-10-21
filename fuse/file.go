@@ -12,73 +12,88 @@ import (
 	"github.com/anacrolix/fuse/fs"
 
 	"debrid_drive/logger"
-	"debrid_drive/real_debrid"
 	"debrid_drive/stream"
+	"debrid_drive/vfs"
 )
 
-type File struct {
-	name         string
-	iNode        uint64
-	videoUrl     string
-	videoStreams sync.Map // map[uint64]*stream.Stream // map of video streams per PID
-	mu           sync.RWMutex
-	chunks       int64
-	size         int64
+var _ fs.Node = &FileNode{}
+var _ fs.Handle = &FileNode{}
+var _ fs.HandleFlusher = &FileNode{}
+var _ fs.HandleReader = &FileNode{}
+var _ fs.HandleReleaser = &FileNode{}
+var _ fs.NodeRemover = &FileNode{}
+var _ fs.NodeRenamer = &FileNode{}
+
+type FileNode struct {
+	file *vfs.File
+
+	mu sync.RWMutex
 }
 
-func (file *File) Attr(ctx context.Context, a *fuse.Attr) error {
-	file.mu.RLock()
-	defer file.mu.RUnlock()
+func NewFileNode(file *vfs.File) *FileNode {
+	return &FileNode{
+		file: file,
+	}
+}
 
-	a.Size = uint64(file.size)
-	a.Inode = file.iNode
-	a.Mode = os.ModePerm
+func (node *FileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
-	a.Atime = time.Unix(0, 0)
-	a.Mtime = time.Unix(0, 0)
-	a.Ctime = time.Unix(0, 0)
+	attr.Size = node.file.Size
+	attr.Inode = node.file.ID
+	attr.Mode = os.ModePerm
+
+	attr.Atime = time.Unix(0, 0)
+	attr.Mtime = time.Unix(0, 0)
+	attr.Ctime = time.Unix(0, 0)
+
+	attr.Gid = uint32(os.Getgid())
+	attr.Uid = uint32(os.Getuid())
 
 	return nil
 }
 
-func (file *File) Remove(ctx context.Context) error {
-	file.mu.Lock()
-	defer file.mu.Unlock()
+func (node *FileNode) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
-	logger.Logger.Infof("Removing file %s", file.name)
+	logger.Logger.Infof("Removing file %s", node.file.Name)
 
 	return nil
 }
 
-func (file *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	logger.Logger.Infof("Opening file %s - %d", file.name, file.size)
+func (node *FileNode) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+	logger.Logger.Infof("Opening file %s - %d", node.file.Name, node.file.Size)
 
 	openResponse.Flags |= fuse.OpenKeepCache
 
-	return file, nil
+	return node, nil
 }
 
-func (file *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
-	file.mu.Lock()
-	defer file.mu.Unlock()
+func (node *FileNode) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
-	logger.Logger.Infof("Releasing file %s", file.name)
+	logger.Logger.Infof("Releasing file %s", node.file.Name)
 
-	file.videoStreams.Range(func(key, value interface{}) bool {
+	// TODO move logic to vfs
+
+	node.file.VideoStreams.Range(func(key, value interface{}) bool {
 		stream := value.(*stream.Stream)
 		stream.Close()
 
 		return true
 	})
 
-	file.videoStreams.Clear()
+	node.file.VideoStreams.Clear()
 
 	return nil
 }
 
-func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
-	file.mu.RLock()
-	defer file.mu.RUnlock()
+func (node *FileNode) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	// fmt.Printf("Reading %d bytes at offset %d\n", readRequest.Size, readRequest.Offset)
 
@@ -86,12 +101,12 @@ func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 		return fmt.Errorf("read request is for a directory")
 	}
 
-	videoStream, err := file.getVideoStream(readRequest.Pid)
+	videoStream, err := node.file.GetVideoStream(readRequest.Pid)
 	if err != nil {
 		return fmt.Errorf("failed to get video stream: %w", err)
 	}
 
-	_, err = videoStream.Seek(readRequest.Offset, io.SeekStart)
+	_, err = videoStream.Seek(uint64(readRequest.Offset), io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek in video stream: %w", err)
 	}
@@ -107,11 +122,11 @@ func (file *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 	return nil
 }
 
-func (file *File) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) error {
-	file.mu.Lock()
-	defer file.mu.Unlock()
+func (node *FileNode) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) error {
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
-	logger.Logger.Infof("Flushing file %s", file.name)
+	logger.Logger.Infof("Flushing file %s", node.file.Name)
 
 	// stream, err := file.getVideoStream(flushRequest.Pid)
 	// if err != nil {
@@ -128,24 +143,11 @@ func (file *File) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) er
 	return nil
 }
 
-// --- Helpers ---
+func (node *FileNode) Rename(ctx context.Context, request *fuse.RenameRequest, newFile fs.Node) error {
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
-func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
-	existingVideoStream, ok := file.videoStreams.Load(pid)
-	if ok {
-		return existingVideoStream.(*stream.Stream), nil
-	}
+	logger.Logger.Infof("Rename request: %v", request)
 
-	unrestrictedFile, err := real_debrid.UnrestrictLink(file.videoUrl)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unrestrict link: %w", err)
-	}
-
-	videoStream := stream.NewStream(unrestrictedFile.Download, file.size)
-
-	file.videoStreams.Store(pid, videoStream)
-
-	fmt.Printf("Created new video stream for PID %d\n", pid)
-
-	return videoStream, nil
+	return nil
 }

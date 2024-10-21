@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package fuse;
+
+option go_package = "/communication";
+
+service FileSystem {
+  rpc AddDirectory(AddDirectoryRequest) returns (DirectoryResponse) {}
+  rpc RenameDirectory(RenameDirectoryRequest) returns (DirectoryResponse) {}
+  rpc RemoveDirectory(RemoveDirectoryRequest) returns (DirectoryResponse) {}
+  rpc AddFile(AddFileRequest) returns (FileResponse) {}
+  rpc RenameFile(RenameFileRequest) returns (FileResponse) {}
+  rpc RemoveFile(RemoveFileRequest) returns (FileResponse) {}
+}
+
+message AddDirectoryRequest {
+  uint64 parentNodeId = 1;
+  string name = 2;
+}
+
+message RenameDirectoryRequest {
+  uint64 nodeId = 1;
+  string name = 2;
+}
+
+message RemoveDirectoryRequest {
+  uint64 nodeId = 1;
+  bool recursive = 2;
+  bool force = 3;
+}
+
+message AddFileRequest {
+  uint64 parentNodeId = 1;
+  string name = 2;
+  uint64 fileSize = 3;
+  string fetchUrl = 4;
+  string videoUrl = 5;
+}
+
+message RenameFileRequest {
+  uint64 nodeId = 1;
+  string name = 2;
+}
+
+message RemoveFileRequest {
+  uint64 nodeId = 1;
+}
+
+message DirectoryResponse {
+  uint64 nodeId = 1;
+  bool success = 2;
+  Error error = 3;
+}
+
+message FileResponse {
+  uint64 nodeId = 1;
+  bool success = 2;
+  Error error = 3;
+}
+
+message Error {
+  int32 code = 1;
+  string message = 2;
+}

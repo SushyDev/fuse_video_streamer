@@ -6,10 +6,12 @@ import (
 	"log"
 	"os"
 
+	"debrid_drive/communication"
 	"debrid_drive/database"
 	"debrid_drive/fuse"
 	"debrid_drive/logger"
 	"debrid_drive/real_debrid"
+	"debrid_drive/vfs"
 )
 
 const useVfs = true
@@ -30,32 +32,33 @@ func Start() {
 	}
 
 	mountpoint := flag.Arg(0)
-	addFileRequest := make(chan fuse.AddFileRequest)
 
-	if useVfs {
-		go fuse.Mount(mountpoint, addFileRequest)
-	}
+	virtualFileSystem := vfs.NewFileSystem()
 
-	InitDatabase()
-	logger.Logger.Info("Database initialized")
+	fuse.Mount(mountpoint, virtualFileSystem)
 
-	IndexDebrid()
-	logger.Logger.Info("Debrid indexed")
+	go communication.Listen(virtualFileSystem)
 
-	files, err := database.GetAllDebridFiles()
-	if err != nil {
-		logger.Logger.Errorf("Error getting all debrid files", err)
-	}
-
-	for _, file := range files {
-		path := file.TorrentId + file.Path
-
-		addFileRequest <- fuse.AddFileRequest{
-			Path:     path,
-			VideoUrl: file.Link,
-			Size:     file.Bytes,
-		}
-	}
+	// InitDatabase()
+	// logger.Logger.Info("Database initialized")
+	//
+	// IndexDebrid()
+	// logger.Logger.Info("Debrid indexed")
+	//
+	// files, err := database.GetAllDebridFiles()
+	// if err != nil {
+	// 	logger.Logger.Errorf("Error getting all debrid files", err)
+	// }
+	//
+	// for _, file := range files {
+	// 	path := file.TorrentId + file.Path
+	//
+	// 	addFileRequest <- fuse.AddFileRequest{
+	// 		Path:     path,
+	// 		VideoUrl: file.Link,
+	// 		Size:     file.Bytes,
+	// 	}
+	// }
 
 	logger.Logger.Info("Files added to VFS")
 

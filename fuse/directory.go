@@ -3,6 +3,7 @@ package fuse
 import (
 	"context"
 	"debrid_drive/logger"
+	"debrid_drive/vfs"
 	"os"
 	"sync"
 	"syscall"
@@ -11,98 +12,143 @@ import (
 	"github.com/anacrolix/fuse/fs"
 )
 
-type Directory struct {
-	name        string
-	iNode       uint64
-	fileSystem  *FileSystem
-	directories map[string]*Directory
-	files       map[string]*File
-	mu          sync.RWMutex
+var _ fs.Node = &DirectoryNode{}
+var _ fs.Handle = &DirectoryNode{}
+var _ fs.NodeOpener = &DirectoryNode{}
+var _ fs.NodeRequestLookuper = &DirectoryNode{}
+var _ fs.HandleReadDirAller = &DirectoryNode{}
+var _ fs.NodeRemover = &DirectoryNode{}
+var _ fs.NodeRenamer = &DirectoryNode{}
+
+type DirectoryNode struct {
+	directory *vfs.Directory
+
+	mu sync.RWMutex
+
+	connection *fuse.Conn
 }
 
-func (directory *Directory) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Inode = directory.iNode
-	a.Mode = os.ModeDir
-	a.Valid = 1
+func NewDirectoryNode(connection *fuse.Conn, directory *vfs.Directory) *DirectoryNode {
+	return &DirectoryNode{
+		directory: directory,
+
+		connection: connection,
+	}
+}
+
+func (node *DirectoryNode) Attr(ctx context.Context, attr *fuse.Attr) error {
+	attr.Inode = node.directory.ID
+	attr.Mode = os.ModeDir | 0775
+	attr.Valid = 1
+
+	attr.Gid = uint32(os.Getgid())
+	attr.Uid = uint32(os.Getuid())
+
+	attr.Atime = attr.Ctime
+	attr.Mtime = attr.Ctime
+	attr.Crtime = attr.Ctime
 
 	return nil
 }
 
-func (directory *Directory) Lookup(ctx context.Context, name string) (fs.Node, error) {
-	directory.mu.RLock()
-	defer directory.mu.RUnlock()
+func (node *DirectoryNode) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+	return node, nil
+}
 
-	file, fileExists := directory.files[name]
-	if fileExists && file != nil {
-		return file, nil
+// Todo Inode matching
+func (node *DirectoryNode) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
+
+	for _, file := range node.directory.Files {
+		if file.Name == lookupRequest.Name {
+			node := NewFileNode(file)
+
+			return node, nil
+		}
 	}
 
-	directory, directoryExists := directory.directories[name]
-	if directoryExists && directory != nil {
-		return directory, nil
+	for _, directory := range node.directory.Directories {
+		if directory.Name == lookupRequest.Name {
+			node := NewDirectoryNode(node.connection, directory)
+
+			return node, nil
+		}
 	}
 
 	return nil, syscall.ENOENT
 }
 
-func (directory *Directory) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	// openResponse.Flags |= fuse.OpenDirectIO
-
-	return directory, nil
-}
-
-func (directory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
-	directory.mu.RLock()
-	defer directory.mu.RUnlock()
+func (node *DirectoryNode) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	var entries []fuse.Dirent
 
-	for _, file := range directory.files {
+	for _, file := range node.directory.Files {
 		entries = append(entries, fuse.Dirent{
-			Name:  file.name,
+			Name:  file.Name,
 			Type:  fuse.DT_File,
-			Inode: file.iNode,
+			Inode: file.ID,
 		})
 	}
 
-	for _, directory := range directory.directories {
+	for _, directory := range node.directory.Directories {
 		entries = append(entries, fuse.Dirent{
-			Name:  directory.name,
+			Name:  directory.Name,
 			Type:  fuse.DT_Dir,
-			Inode: directory.iNode,
+			Inode: directory.ID,
 		})
 	}
 
 	return entries, nil
 }
 
-func (directory *Directory) ReadDir(ctx context.Context) ([]fuse.Dirent, error) {
-	return directory.ReadDirAll(ctx)
-}
+// func (node *DirectoryNode) ReadDir(ctx context.Context) ([]fuse.Dirent, error) {
+// 	return node.ReadDirAll(ctx)
+// }
 
-func (directory *Directory) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
-	directory.mu.Lock()
-	defer directory.mu.Unlock()
+func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
 	logger.Logger.Infof("Remove request: %v", removeRequest)
 
-	if removeRequest.Dir {
-		return syscall.ENOSYS
-	}
+	// if removeRequest.Dir {
+	// 	return syscall.ENOSYS
+	// }
+	//
+	// file, exists := directory.files[removeRequest.Name]
+	// if !exists {
+	// 	logger.Logger.Warnf("File %s does not exist", removeRequest.Name)
+	// 	return syscall.ENOENT
+	// }
+	//
+	// if err := file.Remove(ctx, removeRequest); err != nil {
+	// 	return err
+	// }
+	//
+	// delete(directory.files, removeRequest.Name)
+	//
+	// logger.Logger.Infof("Removed file %s", removeRequest.Name)
 
-	file, exists := directory.files[removeRequest.Name]
-	if !exists {
-		logger.Logger.Warnf("File %s does not exist", removeRequest.Name)
-		return syscall.ENOENT
-	}
+	return nil
+}
 
-	if err := file.Remove(ctx); err != nil {
+// func (node *DirectoryNode) Invalidate() error {
+// 	node.mu.Lock()
+// 	defer node.mu.Unlock()
+//
+// 	return node.fileSystem.connection.InvalidateEntry(node.directory.ID, node.directory.Name)
+// }
+
+func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameRequest, newNode fs.Node) error {
+	node.directory.Rename(request.NewName)
+
+	_, err := node.ReadDirAll(ctx)
+	if err != nil {
 		return err
 	}
-
-	delete(directory.files, removeRequest.Name)
-
-	logger.Logger.Infof("Removed file %s", removeRequest.Name)
 
 	return nil
 }

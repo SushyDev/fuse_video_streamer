@@ -15,7 +15,7 @@ import (
 
 type Stream struct {
 	url    string
-	size   int64
+	size   uint64
 	client *http.Client
 
 	stopChannel chan struct{}
@@ -26,7 +26,7 @@ type Stream struct {
 	wg      sync.WaitGroup
 
 	buffer       *buffer.Buffer
-	seekPosition atomic.Int64
+	seekPosition atomic.Uint64
 
 	chart *chart.Chart
 
@@ -35,10 +35,9 @@ type Stream struct {
 	closed bool
 }
 
-var bufferCreateSize = int64(1024 * 1024 * 1024 * 1)
-var overflowMargin = int64(1024 * 1024 * 64)
+var bufferCreateSize = uint64(1024 * 1024 * 1024 * 1)
 
-func NewStream(url string, size int64) *Stream {
+func NewStream(url string, size uint64) *Stream {
 	chart := chart.NewChart()
 
 	// buffer := NewBuffer(0, min(size, bufferCreateSize), chart)
@@ -65,7 +64,7 @@ func NewStream(url string, size int64) *Stream {
 	}
 }
 
-func (stream *Stream) startStream(seekPosition int64) {
+func (stream *Stream) startStream(seekPosition uint64) {
 	stream.chart.LogStream(fmt.Sprintf("Stream started for position: %d\n", seekPosition))
 
 	defer func() {
@@ -122,7 +121,7 @@ func (stream *Stream) startStream(seekPosition int64) {
 		}
 
 		bytesToOverwrite := max(stream.buffer.GetBytesToOverwriteSync(), 0)
-		chunkSizeToRead := min(int64(len(chunk)), bytesToOverwrite)
+		chunkSizeToRead := min(uint64(len(chunk)), bytesToOverwrite)
 
 		if chunkSizeToRead == 0 {
 			retryDelay = 100 * time.Millisecond // Retry after 100 milliseconds
@@ -182,7 +181,7 @@ func (stream *Stream) Read(p []byte) (int, error) {
 	defer stream.mu.RUnlock()
 
 	seekPosition := stream.GetSeekPosition()
-	requestedSize := int64(len(p))
+	requestedSize := uint64(len(p))
 
 	if seekPosition+requestedSize >= stream.size {
 		requestedSize = stream.size - seekPosition - 1
@@ -198,7 +197,7 @@ func (stream *Stream) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedSize int64) {
+func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition uint64, requestedSize uint64) {
 	if seekPosition >= stream.size {
 		stream.chart.LogStream(fmt.Sprintf("Check: Seek position is at the end\n"))
 		return
@@ -237,7 +236,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition int64, requestedS
 	}
 }
 
-func (stream *Stream) Seek(offset int64, whence int) (int64, error) {
+func (stream *Stream) Seek(offset uint64, whence int) (uint64, error) {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
 
@@ -245,7 +244,7 @@ func (stream *Stream) Seek(offset int64, whence int) (int64, error) {
 		return 0, fmt.Errorf("Streamer is closed")
 	}
 
-	var newOffset int64
+	var newOffset uint64
 
 	switch whence {
 	case io.SeekStart:
@@ -275,7 +274,7 @@ func (stream *Stream) Seek(offset int64, whence int) (int64, error) {
 	return newOffset, err
 }
 
-func (stream *Stream) GetSeekPosition() int64 {
+func (stream *Stream) GetSeekPosition() uint64 {
 	return stream.seekPosition.Load()
 }
 
