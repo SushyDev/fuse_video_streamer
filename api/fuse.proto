@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package fuse;
 
-option go_package = "/communication";
+option go_package = "/api";
 
 service FileSystem {
   rpc AddDirectory(AddDirectoryRequest) returns (DirectoryResponse) {}

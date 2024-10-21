@@ -71,16 +71,16 @@ func (directory *Directory) AddDirectory(name string) (*Directory, error) {
 }
 
 func (directory *Directory) RemoveDirectory(name string) error {
-    foundDirectory := directory.GetDirectory(name)
-    if foundDirectory == nil {
-        return fmt.Errorf("directory not found")
-    }
+	foundDirectory := directory.GetDirectory(name)
+	if foundDirectory == nil {
+		return fmt.Errorf("directory not found")
+	}
 
-    directory.deregisterDirectory(foundDirectory.ID)
+	directory.deregisterDirectory(foundDirectory.ID)
 
-    directory.fileSystem.DeleteDirectory(foundDirectory.ID)
+	directory.fileSystem.DeleteDirectory(foundDirectory.ID)
 
-    return nil
+	return nil
 }
 
 func (directory *Directory) GetFile(name string) *File {
@@ -112,16 +112,16 @@ func (directory *Directory) AddFile(name string, videoUrl string, fetchUrl strin
 }
 
 func (directory *Directory) RemoveFile(name string) error {
-    foundFile := directory.GetFile(name)
-    if foundFile == nil {
-        return fmt.Errorf("file not found")
-    }
+	foundFile := directory.GetFile(name)
+	if foundFile == nil {
+		return fmt.Errorf("file not found")
+	}
 
-    directory.deregisterFile(foundFile.ID)
+	directory.deregisterFile(foundFile.ID)
 
-    directory.fileSystem.DeregisterFile(foundFile.ID)
+	directory.fileSystem.DeregisterFile(foundFile.ID)
 
-    return nil
+	return nil
 }
 
 // --- Helpers
@@ -131,7 +131,7 @@ func (directory *Directory) registerDirectory(newDirectory *Directory) {
 }
 
 func (directory *Directory) deregisterDirectory(ID uint64) {
-    delete(directory.Directories, ID)
+	delete(directory.Directories, ID)
 }
 
 func (directory *Directory) registerFile(newFile *File) {
@@ -139,5 +139,5 @@ func (directory *Directory) registerFile(newFile *File) {
 }
 
 func (directory *Directory) deregisterFile(ID uint64) {
-    delete(directory.Files, ID)
+	delete(directory.Files, ID)
 }

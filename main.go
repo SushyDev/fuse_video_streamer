@@ -5,8 +5,7 @@ import (
 	"log"
 	"os"
 
-	"debrid_drive/communication"
-	"debrid_drive/database"
+	"debrid_drive/api"
 	"debrid_drive/fuse"
 	"debrid_drive/vfs"
 )
@@ -33,13 +32,9 @@ func main() {
 	virtualFileSystem := vfs.NewVirtualFileSystem()
 	fuseFileSystem := fuse.NewFuseFileSystem(mountpoint, virtualFileSystem)
 
-    go fuseFileSystem.Serve()
-	go communication.Listen(fuseFileSystem)
+	go fuseFileSystem.Serve()
+	go api.Listen(fuseFileSystem)
 
 	done := make(chan bool)
 	<-done
-}
-
-func InitDatabase() {
-	database.Start()
 }

@@ -1,4 +1,4 @@
-package communication
+package api
 
 import (
 	"context"
@@ -74,37 +74,37 @@ func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDi
 }
 
 func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDirectoryRequest) (*DirectoryResponse, error) {
-    directory, err := server.fileSystem.VFS.GetDirectory(request.NodeId)
-    if err != nil {
-        return &DirectoryResponse{
-            NodeId:  0,
-            Success: false,
-            Error: &Error{
-                Code:    1,
-                Message: err.Error(),
-            },
-        }, err
-    }
+	directory, err := server.fileSystem.VFS.GetDirectory(request.NodeId)
+	if err != nil {
+		return &DirectoryResponse{
+			NodeId:  0,
+			Success: false,
+			Error: &Error{
+				Code:    1,
+				Message: err.Error(),
+			},
+		}, err
+	}
 
-    err = directory.Parent.RemoveDirectory(directory.Name)
-    if err != nil {
-        return &DirectoryResponse{
-            NodeId:  0,
-            Success: false,
-            Error: &Error{
-                Code:    1,
-                Message: err.Error(),
-            },
-        }, err
-    }
+	err = directory.Parent.RemoveDirectory(directory.Name)
+	if err != nil {
+		return &DirectoryResponse{
+			NodeId:  0,
+			Success: false,
+			Error: &Error{
+				Code:    1,
+				Message: err.Error(),
+			},
+		}, err
+	}
 
-    server.fileSystem.InvalidateEntry(directory.Parent.ID, directory.Name)
+	server.fileSystem.InvalidateEntry(directory.Parent.ID, directory.Name)
 
-    return &DirectoryResponse{
-        NodeId:  directory.ID,
-        Success: true,
-        Error:   nil,
-    }, nil
+	return &DirectoryResponse{
+		NodeId:  directory.ID,
+		Success: true,
+		Error:   nil,
+	}, nil
 }
 
 func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) (*FileResponse, error) {
@@ -142,61 +142,61 @@ func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) 
 }
 
 func (server *GrpcServer) RenameFile(ctx context.Context, request *RenameFileRequest) (*FileResponse, error) {
-    file, err := server.fileSystem.VFS.GetFile(request.NodeId)
-    if err != nil {
-        return &FileResponse{
-            NodeId:  0,
-            Success: false,
-            Error: &Error{
-                Code:    1,
-                Message: err.Error(),
-            },
-        }, err
-    }
+	file, err := server.fileSystem.VFS.GetFile(request.NodeId)
+	if err != nil {
+		return &FileResponse{
+			NodeId:  0,
+			Success: false,
+			Error: &Error{
+				Code:    1,
+				Message: err.Error(),
+			},
+		}, err
+	}
 
-    file.Rename(request.Name)
+	file.Rename(request.Name)
 
-    server.fileSystem.InvalidateNode(file.ID)
+	server.fileSystem.InvalidateNode(file.ID)
 
-    return &FileResponse{
-        NodeId:  file.ID,
-        Success: true,
-        Error:   nil,
-    }, nil
+	return &FileResponse{
+		NodeId:  file.ID,
+		Success: true,
+		Error:   nil,
+	}, nil
 }
 
 func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileRequest) (*FileResponse, error) {
-    file, err := server.fileSystem.VFS.GetFile(request.NodeId)
-    if err != nil {
-        return &FileResponse{
-            NodeId:  0,
-            Success: false,
-            Error: &Error{
-                Code:    1,
-                Message: err.Error(),
-            },
-        }, err
-    }
+	file, err := server.fileSystem.VFS.GetFile(request.NodeId)
+	if err != nil {
+		return &FileResponse{
+			NodeId:  0,
+			Success: false,
+			Error: &Error{
+				Code:    1,
+				Message: err.Error(),
+			},
+		}, err
+	}
 
-    err = file.Parent.RemoveFile(file.Name)
-    if err != nil {
-        return &FileResponse{
-            NodeId:  0,
-            Success: false,
-            Error: &Error{
-                Code:    1,
-                Message: err.Error(),
-            },
-        }, err
-    }
+	err = file.Parent.RemoveFile(file.Name)
+	if err != nil {
+		return &FileResponse{
+			NodeId:  0,
+			Success: false,
+			Error: &Error{
+				Code:    1,
+				Message: err.Error(),
+			},
+		}, err
+	}
 
-    server.fileSystem.InvalidateNode(file.ID)
+	server.fileSystem.InvalidateNode(file.ID)
 
-    return &FileResponse{
-        NodeId:  file.ID,
-        Success: true,
-        Error:   nil,
-    }, nil
+	return &FileResponse{
+		NodeId:  file.ID,
+		Success: true,
+		Error:   nil,
+	}, nil
 }
 
 func Listen(fileSystem *fuse.FuseFileSystem) {

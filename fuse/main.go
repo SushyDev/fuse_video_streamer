@@ -12,8 +12,8 @@ import (
 var _ fs.FS = &FuseFileSystem{}
 
 type FuseFileSystem struct {
-	VFS        *vfs.VirtualFileSystem
-    NodeMap   map[uint64]*fs.Node
+	VFS     *vfs.VirtualFileSystem
+	NodeMap map[uint64]*fs.Node
 
 	connection *fuse.Conn
 }
@@ -64,21 +64,19 @@ func (fileSystem *FuseFileSystem) InvalidateEntry(parentID uint64, name string) 
 }
 
 func (fileSystem *FuseFileSystem) InvalidateNode(ID uint64) {
-    fileSystem.connection.InvalidateNode(getNodeID(ID), 0, 0)
+	fileSystem.connection.InvalidateNode(getNodeID(ID), 0, 0)
 }
 
 func (fileSystem *FuseFileSystem) GetNode(ID uint64) (*fs.Node, error) {
-    for nodeID, node := range fileSystem.NodeMap {
-        if nodeID == ID {
-            return node, nil
-        }
-    }
+	for nodeID, node := range fileSystem.NodeMap {
+		if nodeID == ID {
+			return node, nil
+		}
+	}
 
-    return nil, fmt.Errorf("Node with ID %d not found", ID)
+	return nil, fmt.Errorf("Node with ID %d not found", ID)
 }
-
 
 func getNodeID(ID uint64) fuse.NodeID {
 	return fuse.NodeID(ID)
 }
-

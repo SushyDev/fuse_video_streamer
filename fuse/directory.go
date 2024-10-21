@@ -130,19 +130,19 @@ func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.Remov
 func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameRequest, newNode fs.Node) error {
 	logger.Logger.Infof("Rename request: %v", request)
 
-    directory := node.directory.GetDirectory(request.OldName)
-    file := node.directory.GetFile(request.OldName)
+	directory := node.directory.GetDirectory(request.OldName)
+	file := node.directory.GetFile(request.OldName)
 
-    switch {
-    case directory != nil:
-        directory.Rename(request.NewName)
-        break
-    case file != nil:
-        file.Rename(request.NewName)
-        break
-    default:
-        return syscall.ENOENT
-    }
+	switch {
+	case directory != nil:
+		directory.Rename(request.NewName)
+		break
+	case file != nil:
+		file.Rename(request.NewName)
+		break
+	default:
+		return syscall.ENOENT
+	}
 
 	_, err := node.ReadDirAll(ctx)
 	if err != nil {

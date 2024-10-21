@@ -18,7 +18,7 @@ type VirtualFileSystem struct {
 func NewVirtualFileSystem() *VirtualFileSystem {
 	fileSystem := &VirtualFileSystem{
 		DirectoryMap: make(map[uint64]*Directory),
-        FileMap:      make(map[uint64]*File),
+		FileMap:      make(map[uint64]*File),
 	}
 
 	fileSystem.CreateRootDirectory()
@@ -45,13 +45,13 @@ func (fileSystem *VirtualFileSystem) GetDirectory(ID uint64) (*Directory, error)
 }
 
 func (fileSystem *VirtualFileSystem) GetFile(ID uint64) (*File, error) {
-    for fileID, file := range fileSystem.FileMap {
-        if fileID == ID {
-            return file, nil
-        }
-    }
+	for fileID, file := range fileSystem.FileMap {
+		if fileID == ID {
+			return file, nil
+		}
+	}
 
-    return nil, fmt.Errorf("File with ID %d not found", ID)
+	return nil, fmt.Errorf("File with ID %d not found", ID)
 }
 
 func (fileSystem *VirtualFileSystem) RegisterDirectory(directory *Directory) {
@@ -59,13 +59,13 @@ func (fileSystem *VirtualFileSystem) RegisterDirectory(directory *Directory) {
 }
 
 func (fileSystem *VirtualFileSystem) DeleteDirectory(ID uint64) {
-    delete(fileSystem.DirectoryMap, ID)
+	delete(fileSystem.DirectoryMap, ID)
 }
 
 func (fileSystem *VirtualFileSystem) RegisterFile(file *File) {
-    fileSystem.FileMap[file.ID] = file
+	fileSystem.FileMap[file.ID] = file
 }
 
 func (fileSystem *VirtualFileSystem) DeregisterFile(ID uint64) {
-    delete(fileSystem.FileMap, ID)
+	delete(fileSystem.FileMap, ID)
 }

@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.28.2
-// source: communication/fuse.proto
+// source: api/fuse.proto
 
-package communication
+package api
 
 import (
 	context "context"
@@ -307,5 +307,5 @@ var FileSystem_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "communication/fuse.proto",
+	Metadata: "api/fuse.proto",
 }

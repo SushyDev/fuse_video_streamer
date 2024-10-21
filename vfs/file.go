@@ -4,6 +4,7 @@ import (
 	"debrid_drive/stream"
 	"fmt"
 	"io"
+	"net/http"
 	"sync"
 )
 
@@ -88,10 +89,13 @@ func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 	}
 
 	if file.VideoUrl == "" && file.FetchUrl != "" {
-		// todo fetch http
-	}
+		videoUrl, err := fetchVideoUrl(file.FetchUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch video URL: %w", err)
+		}
 
-    file.VideoUrl = ""
+		file.VideoUrl = videoUrl
+	}
 
 	videoStream := stream.NewStream(file.VideoUrl, file.Size)
 
@@ -100,4 +104,21 @@ func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 	fmt.Printf("Created new video stream for PID %d\n", pid)
 
 	return videoStream, nil
+}
+
+// Fetch video URL from the fetch URL
+func fetchVideoUrl(fetchUrl string) (string, error) {
+	response, err := http.Get(fetchUrl)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch video URL: %w", err)
+	}
+
+	defer response.Body.Close()
+
+	data, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return string(data), nil
 }

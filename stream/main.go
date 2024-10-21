@@ -35,6 +35,8 @@ type Stream struct {
 var bufferCreateSize = uint64(1024 * 1024 * 1024 * 1)
 
 func NewStream(url string, size uint64) *Stream {
+	fmt.Printf("NewStream: url=%s, size=%d\n", url, size)
+
 	buffer := buffer.NewBuffer(min(size, bufferCreateSize), 0)
 
 	client := &http.Client{
@@ -71,6 +73,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 	rangeHeader := fmt.Sprintf("bytes=%d-", max(seekPosition, 0))
 	req, err := http.NewRequestWithContext(ctx, "GET", stream.url, nil)
 	if err != nil {
+		fmt.Printf("Failed to create request: %v\n", err)
 		// stream.chart.LogStream(fmt.Sprintf("Failed to create request: %v\n", err))
 		stream.cancel()
 		return
@@ -80,6 +83,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 
 	resp, err := stream.client.Do(req)
 	if err != nil {
+		fmt.Printf("Failed to do request: %v\n", err)
 		// stream.chart.LogStream(fmt.Sprintf("Failed to do request: %v\n", err))
 		stream.cancel()
 		return
@@ -88,6 +92,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusPartialContent {
+		fmt.Printf("Status code: %d\n", resp.StatusCode)
 		// stream.chart.LogStream(fmt.Sprintf("Status code: %d\n", resp.StatusCode))
 		stream.cancel()
 		return
