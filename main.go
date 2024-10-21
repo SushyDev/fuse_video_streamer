@@ -14,7 +14,7 @@ const useVfs = true
 
 func usage() {
 	log.Printf("Usage of %s:\n", os.Args[0])
-	log.Printf("  %s MOUNTPOINT RD_TOKEN\n", os.Args[0])
+	log.Printf("  %s MOUNTPOINT\n", os.Args[0])
 	flag.PrintDefaults()
 }
 
@@ -22,9 +22,9 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 
-	if flag.NArg() < 2 {
+	if flag.NArg() < 1 {
 		usage()
-		os.Exit(2)
+		os.Exit(1)
 	}
 
 	mountpoint := flag.Arg(0)

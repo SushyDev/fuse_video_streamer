@@ -2,7 +2,6 @@ package fuse
 
 import (
 	"context"
-	"debrid_drive/logger"
 	"debrid_drive/vfs"
 	"os"
 	"sync"
@@ -102,33 +101,36 @@ func (node *DirectoryNode) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error
 
 func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
 	node.mu.Lock()
-	defer node.mu.Unlock()
 
-	logger.Logger.Infof("Remove request: %v", removeRequest)
+    if removeRequest.Dir {
+        err := node.directory.RemoveDirectory(removeRequest.Name)
+        if err != nil {
+            fuseLogger.Errorf("Failed to remove directory %s: %v", removeRequest.Name, err)
+            return err
+        }
+    } else {
+        err := node.directory.RemoveFile(removeRequest.Name)
+        if err != nil {
+            fuseLogger.Errorf("Failed to remove file %s: %v", removeRequest.Name, err)
+            return err
+        }
+    }
 
-	// if removeRequest.Dir {
-	// 	return syscall.ENOSYS
-	// }
-	//
-	// file, exists := directory.files[removeRequest.Name]
-	// if !exists {
-	// 	logger.Logger.Warnf("File %s does not exist", removeRequest.Name)
-	// 	return syscall.ENOENT
-	// }
-	//
-	// if err := file.Remove(ctx, removeRequest); err != nil {
-	// 	return err
-	// }
-	//
-	// delete(directory.files, removeRequest.Name)
-	//
-	// logger.Logger.Infof("Removed file %s", removeRequest.Name)
+    node.mu.Unlock()
+
+    _, err := node.ReadDirAll(ctx)
+    if err != nil {
+        fuseLogger.Errorf("Failed to read directory %s: %v", node.directory.Name, err)
+        return err
+    }
 
 	return nil
 }
 
 func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameRequest, newNode fs.Node) error {
-	logger.Logger.Infof("Rename request: %v", request)
+	node.mu.Lock()
+
+	fuseLogger.Infof("Rename request on directory %s: %v", node.directory.Name, request)
 
 	directory := node.directory.GetDirectory(request.OldName)
 	file := node.directory.GetFile(request.OldName)
@@ -144,8 +146,11 @@ func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameReque
 		return syscall.ENOENT
 	}
 
+    node.mu.Unlock()
+
 	_, err := node.ReadDirAll(ctx)
 	if err != nil {
+        fuseLogger.Errorf("Failed to read directory %s: %v", node.directory.Name, err)
 		return err
 	}
 

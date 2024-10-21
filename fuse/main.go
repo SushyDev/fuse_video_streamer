@@ -9,6 +9,8 @@ import (
 	"github.com/anacrolix/fuse/fs"
 )
 
+var fuseLogger, _ = logger.GetLogger(logger.FuseLogPath)
+
 var _ fs.FS = &FuseFileSystem{}
 
 type FuseFileSystem struct {
@@ -33,7 +35,7 @@ func NewFuseFileSystem(mountpoint string, vfs *vfs.VirtualFileSystem) *FuseFileS
 	)
 
 	if err != nil {
-		logger.Logger.Fatalf("Failed to create FUSE mount: %v", err)
+		fuseLogger.Fatalf("Failed to create FUSE mount: %v", err)
 	}
 
 	fuseFileSystem := &FuseFileSystem{
@@ -51,11 +53,11 @@ func (fileSystem *FuseFileSystem) Root() (fs.Node, error) {
 }
 
 func (fileSystem *FuseFileSystem) Serve() {
-	logger.Logger.Info("Serving FUSE filesystem")
+	fuseLogger.Info("Serving FUSE filesystem")
 
 	err := fs.Serve(fileSystem.connection, fileSystem)
 	if err != nil {
-		logger.Logger.Fatalf("Failed to serve FUSE filesystem: %v", err)
+		fuseLogger.Fatalf("Failed to serve FUSE filesystem: %v", err)
 	}
 }
 

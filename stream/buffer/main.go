@@ -67,8 +67,6 @@ func (buffer *Buffer) ReadAt(p []byte, position uint64) (int, error) {
 
 	requestedSize := uint64(len(p))
 
-	// fmt.Println("ReadAt: bufferPos", bufferPos, "readPosition", readPosition, "writePosition", writePosition, "bufferCount", bufferCount, "requestedSize", requestedSize, "relativePos", relativePos)
-
 	var readSize uint64
 	if bufferCount == bufferCap && readPosition == writePosition {
 		readSize = min(requestedSize, bufferCap)
@@ -95,12 +93,9 @@ func (buffer *Buffer) ReadAt(p []byte, position uint64) (int, error) {
 
 	buffer.count.Store(bufferCount - readSize)
 
-	// fmt.Printf("Read position %d, Read page %d, n %d\n", newReadPosition, readPage, n)
-
 	return int(readSize), nil
 }
 
-// Write writes data to the ring buffer from p.
 func (buffer *Buffer) Write(p []byte) (int, error) {
 	if buffer.closed {
 		return 0, errors.New("buffer is closed")
@@ -124,9 +119,7 @@ func (buffer *Buffer) Write(p []byte) (int, error) {
 	bufferCount := buffer.count.Load()
 	writePosition := buffer.writePosition.Load()
 
-	// if buffer is not full yet we need to append rather than copy
 	if writePosition+requestedSize <= bufferCap {
-		// No wraparound needed.
 		copy(buffer.data[writePosition:], p)
 	} else {
 		firstPart := bufferCap - writePosition
@@ -143,8 +136,6 @@ func (buffer *Buffer) Write(p []byte) (int, error) {
 
 	buffer.count.Store(bufferCount + requestedSize)
 
-	// fmt.Printf("Write position %d, Write page %d\n", newWritePosition, writePage)
-
 	return int(requestedSize), nil
 }
 
@@ -160,7 +151,6 @@ func (buffer *Buffer) GetRelativePosition(position uint64) uint64 {
 	return position - buffer.startPosition.Load()
 }
 
-// Checks if the given logical position is within the readPos and writePos.
 func (buffer *Buffer) IsPositionInBufferSync(position uint64) bool {
 	buffer.mu.RLock()
 	defer buffer.mu.RUnlock()
@@ -168,6 +158,7 @@ func (buffer *Buffer) IsPositionInBufferSync(position uint64) bool {
 	return buffer.IsPositionInBuffer(position)
 }
 
+// Checks if the given logical position is within the readPos and writePos.
 func (buffer *Buffer) IsPositionInBuffer(position uint64) bool {
 	relativePosition := buffer.GetRelativePosition(position)
 	if relativePosition < 0 {
@@ -222,7 +213,6 @@ func (buffer *Buffer) WaitForPositionInBuffer(position uint64, context context.C
 			return
 		case <-time.After(100 * time.Microsecond):
 		}
-
 	}
 }
 

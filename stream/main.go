@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"debrid_drive/logger"
 	"debrid_drive/stream/buffer"
 )
 
@@ -32,11 +33,11 @@ type Stream struct {
 	closed bool
 }
 
+var streamLogger, _ = logger.GetLogger(logger.StreamLogPath)
+
 var bufferCreateSize = uint64(1024 * 1024 * 1024 * 1)
 
 func NewStream(url string, size uint64) *Stream {
-	fmt.Printf("NewStream: url=%s, size=%d\n", url, size)
-
 	buffer := buffer.NewBuffer(min(size, bufferCreateSize), 0)
 
 	client := &http.Client{
@@ -60,9 +61,10 @@ func NewStream(url string, size uint64) *Stream {
 
 func (stream *Stream) startStream(seekPosition uint64) {
 	// stream.chart.LogStream(fmt.Sprintf("Stream started for position: %d\n", seekPosition))
+	streamLogger.Infof("Stream \"%s\" started for position: %d", stream.url, seekPosition)
 
 	defer func() {
-		// stream.chart.LogStream(fmt.Sprintf("Stream closed for position: %d\n", seekPosition))
+		streamLogger.Infof("Stream \"%s\" closed for position: %d", stream.url, seekPosition)
 		stream.wg.Done()
 	}()
 
@@ -73,8 +75,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 	rangeHeader := fmt.Sprintf("bytes=%d-", max(seekPosition, 0))
 	req, err := http.NewRequestWithContext(ctx, "GET", stream.url, nil)
 	if err != nil {
-		fmt.Printf("Failed to create request: %v\n", err)
-		// stream.chart.LogStream(fmt.Sprintf("Failed to create request: %v\n", err))
+		streamLogger.Errorf("Stream \"%s\" failed to create request: %v", stream.url, err)
 		stream.cancel()
 		return
 	}
@@ -83,8 +84,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 
 	resp, err := stream.client.Do(req)
 	if err != nil {
-		fmt.Printf("Failed to do request: %v\n", err)
-		// stream.chart.LogStream(fmt.Sprintf("Failed to do request: %v\n", err))
+		streamLogger.Errorf("Stream \"%s\" failed to do request: %v", stream.url, err)
 		stream.cancel()
 		return
 	}
@@ -92,8 +92,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusPartialContent {
-		fmt.Printf("Status code: %d\n", resp.StatusCode)
-		// stream.chart.LogStream(fmt.Sprintf("Status code: %d\n", resp.StatusCode))
+		streamLogger.Errorf("Stream \"%s\" failed to get partial content: %d", stream.url, resp.StatusCode)
 		stream.cancel()
 		return
 	}
@@ -103,16 +102,11 @@ func (stream *Stream) startStream(seekPosition uint64) {
 	var normalDelay time.Duration = 100 * time.Microsecond
 	var retryDelay time.Duration = normalDelay
 
-	timeStart := time.Now()
-	totalBytesRead := 0
-
 	for {
 		select {
 		case <-stream.context.Done():
-			// stream.chart.LogStream(fmt.Sprintf("Stream context done\n"))
 			return
 		case <-ctx.Done():
-			// stream.chart.LogStream(fmt.Sprintf("Request context done\n"))
 			return
 		case <-time.After(retryDelay):
 		}
@@ -128,34 +122,27 @@ func (stream *Stream) startStream(seekPosition uint64) {
 		bytesRead, err := resp.Body.Read(chunk[:chunkSizeToRead])
 
 		if bytesRead > 0 {
-			bytesRead, err := stream.buffer.Write(chunk[:bytesRead])
+			_, err := stream.buffer.Write(chunk[:bytesRead])
 			if err != nil {
-				// stream.chart.LogStream(fmt.Sprintf("Write error %v\n", err))
+				streamLogger.Errorf("Stream \"%s\" failed to write: %v", stream.url, err)
 				return // Crash ?
 			}
 
-			totalBytesRead += bytesRead
 			retryDelay = normalDelay // Reset
-		}
-
-		elapsed := time.Since(timeStart)
-		if elapsed > 0 && false {
-			// mbps := float64(totalBytesRead*8) / (1024 * 1024) / elapsed.Seconds() // Convert bytes to bits and to Mbps
-			// stream.chart.LogStream(fmt.Sprintf("Speed: %.2f MB/s @ %d\n", mbps, seekPosition))
 		}
 
 		switch {
 		case err == io.ErrUnexpectedEOF:
-			// stream.chart.LogStream(fmt.Sprintf("Unexpected EOF, Bytes read: %d\n", bytesRead))
+			streamLogger.Errorf("Stream \"%s\" unexpected EOF, Bytes read: %d", stream.url, bytesRead)
 			return // Decide if the loop should crash or retry logic can be added.
 		case err == io.EOF:
-			// stream.chart.LogStream(fmt.Sprintf("Read EOF, Bytes read: %d, Position %d\n", bytesRead, seekPosition))
-			retryDelay = 5 * time.Second // Retry after 5 seconds
-			continue                     // Handle end of file appropriately.
+			// TODO FINISHED
+			retryDelay = 5 * time.Second
+			continue
 		case err != nil:
-			// stream.chart.LogStream(fmt.Sprintf("Failed to read: %v\n", err))
-			retryDelay = 5 * time.Second // Retry after 5 seconds
-			continue                     // Continue to retry on other errors.
+			streamLogger.Errorf("Stream \"%s\" failed to read: %v", stream.url, err)
+			retryDelay = 5 * time.Second
+			continue
 		}
 	}
 }
@@ -196,7 +183,6 @@ func (stream *Stream) Read(p []byte) (int, error) {
 
 func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition uint64, requestedSize uint64) {
 	if seekPosition >= stream.size {
-		// stream.chart.LogStream(fmt.Sprintf("Check: Seek position is at the end\n"))
 		return
 	}
 
@@ -227,9 +213,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition uint64, requested
 	if !dataInBuffer {
 		waitForSize := min(seekPosition+requestedSize, stream.size)
 
-		// stream.chart.LogStream(fmt.Sprintf("Check: Waiting for position %d\n", seekPosition+requestedSize))
 		stream.buffer.WaitForPositionInBuffer(waitForSize, stream.context)
-		// stream.chart.LogStream(fmt.Sprintf("Check: Position ready %d\n", seekPosition+requestedSize))
 	}
 }
 
@@ -247,7 +231,7 @@ func (stream *Stream) Seek(offset uint64, whence int) (uint64, error) {
 	case io.SeekStart:
 		newOffset = offset
 	case io.SeekCurrent:
-		return 0, fmt.Errorf("TODO: SeekCurrent is not supported")
+		return 0, fmt.Errorf("SeekCurrent is not supported")
 	case io.SeekEnd:
 		return 0, fmt.Errorf("SeekEnd is not supported")
 	default:
@@ -266,8 +250,6 @@ func (stream *Stream) Seek(offset uint64, whence int) (uint64, error) {
 
 	stream.seekPosition.Store(newOffset)
 
-	// stream.chart.UpdateSeekTotal(newOffset, stream.size)
-
 	return newOffset, err
 }
 
@@ -278,8 +260,6 @@ func (stream *Stream) GetSeekPosition() uint64 {
 func (stream *Stream) Close() error {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
-
-	// stream.chart.LogStream(fmt.Sprintf("Closing stream\n"))
 
 	stream.stopStream()
 	stream.buffer.Close()

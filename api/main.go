@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
-	"log"
 	"net"
 
 	"debrid_drive/fuse"
+	"debrid_drive/logger"
+
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -15,9 +17,13 @@ type GrpcServer struct {
 	UnimplementedFileSystemServer
 }
 
+var apiLogger, _ = logger.GetLogger(logger.ApiLogPath)
+
 func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirectoryRequest) (*DirectoryResponse, error) {
 	parentDirectory, err := server.fileSystem.VFS.GetDirectory(request.ParentNodeId)
 	if err != nil {
+        apiLogger.Error("Failed to get directory", zap.Error(err))
+
 		return &DirectoryResponse{
 			NodeId:  0,
 			Success: false,
@@ -30,6 +36,8 @@ func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirector
 
 	newDirectory, err := parentDirectory.AddDirectory(request.Name)
 	if err != nil {
+        apiLogger.Error("Failed to add directory", zap.Error(err))
+
 		return &DirectoryResponse{
 			NodeId:  0,
 			Success: false,
@@ -52,6 +60,8 @@ func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirector
 func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDirectoryRequest) (*DirectoryResponse, error) {
 	directory, err := server.fileSystem.VFS.GetDirectory(request.NodeId)
 	if err != nil {
+        apiLogger.Error("Failed to get directory", zap.Error(err))
+
 		return &DirectoryResponse{
 			NodeId:  0,
 			Success: false,
@@ -76,6 +86,8 @@ func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDi
 func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDirectoryRequest) (*DirectoryResponse, error) {
 	directory, err := server.fileSystem.VFS.GetDirectory(request.NodeId)
 	if err != nil {
+        apiLogger.Error("Failed to get directory", zap.Error(err))
+
 		return &DirectoryResponse{
 			NodeId:  0,
 			Success: false,
@@ -88,6 +100,8 @@ func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDi
 
 	err = directory.Parent.RemoveDirectory(directory.Name)
 	if err != nil {
+        apiLogger.Error("Failed to remove directory", zap.Error(err))
+
 		return &DirectoryResponse{
 			NodeId:  0,
 			Success: false,
@@ -110,6 +124,8 @@ func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDi
 func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) (*FileResponse, error) {
 	parentDirectory, err := server.fileSystem.VFS.GetDirectory(request.ParentNodeId)
 	if err != nil {
+        apiLogger.Error("Failed to get directory", zap.Error(err))
+
 		return &FileResponse{
 			NodeId:  0,
 			Success: false,
@@ -122,6 +138,8 @@ func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) 
 
 	newFile, err := parentDirectory.AddFile(request.Name, request.VideoUrl, request.FetchUrl, request.FileSize)
 	if err != nil {
+        apiLogger.Error("Failed to add file", zap.Error(err))
+
 		return &FileResponse{
 			NodeId:  0,
 			Success: false,
@@ -144,6 +162,8 @@ func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) 
 func (server *GrpcServer) RenameFile(ctx context.Context, request *RenameFileRequest) (*FileResponse, error) {
 	file, err := server.fileSystem.VFS.GetFile(request.NodeId)
 	if err != nil {
+        apiLogger.Error("Failed to get file", zap.Error(err))
+
 		return &FileResponse{
 			NodeId:  0,
 			Success: false,
@@ -168,6 +188,8 @@ func (server *GrpcServer) RenameFile(ctx context.Context, request *RenameFileReq
 func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileRequest) (*FileResponse, error) {
 	file, err := server.fileSystem.VFS.GetFile(request.NodeId)
 	if err != nil {
+        apiLogger.Error("Failed to get file", zap.Error(err))
+
 		return &FileResponse{
 			NodeId:  0,
 			Success: false,
@@ -180,6 +202,8 @@ func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileReq
 
 	err = file.Parent.RemoveFile(file.Name)
 	if err != nil {
+        apiLogger.Error("Failed to remove file", zap.Error(err))
+
 		return &FileResponse{
 			NodeId:  0,
 			Success: false,
@@ -202,7 +226,7 @@ func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileReq
 func Listen(fileSystem *fuse.FuseFileSystem) {
 	listener, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		apiLogger.Fatalf("failed to listen: %v", err)
 	}
 
 	grpcServer := grpc.NewServer()
@@ -211,9 +235,9 @@ func Listen(fileSystem *fuse.FuseFileSystem) {
 		fileSystem: fileSystem,
 	})
 
-	log.Println("Starting server on port :50051")
+	apiLogger.Infof("Starting server on port :50051")
 
 	if err := grpcServer.Serve(listener); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		apiLogger.Fatalf("failed to serve: %v", err)
 	}
 }

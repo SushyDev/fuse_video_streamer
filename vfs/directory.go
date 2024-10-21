@@ -80,6 +80,8 @@ func (directory *Directory) RemoveDirectory(name string) error {
 
 	directory.fileSystem.DeleteDirectory(foundDirectory.ID)
 
+    // Todo recurise remove all containing files and directories
+
 	return nil
 }
 

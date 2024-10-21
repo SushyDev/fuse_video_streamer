@@ -10,7 +10,6 @@ import (
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 
-	"debrid_drive/logger"
 	"debrid_drive/vfs"
 )
 
@@ -18,7 +17,6 @@ var _ fs.Node = &FileNode{}
 var _ fs.Handle = &FileNode{}
 var _ fs.HandleReader = &FileNode{}
 var _ fs.HandleReleaser = &FileNode{}
-var _ fs.NodeRemover = &FileNode{}
 
 type FileNode struct {
 	file *vfs.File
@@ -50,17 +48,8 @@ func (node *FileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
-func (node *FileNode) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-
-	logger.Logger.Infof("Removing file %s", node.file.Name)
-
-	return nil
-}
-
 func (node *FileNode) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	logger.Logger.Infof("Opening file %s - %d", node.file.Name, node.file.Size)
+	fuseLogger.Infof("Opening file %s - %d", node.file.Name, node.file.Size)
 
 	openResponse.Flags |= fuse.OpenKeepCache
 
@@ -71,7 +60,7 @@ func (node *FileNode) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	logger.Logger.Infof("Releasing file %s", node.file.Name)
+	fuseLogger.Infof("Releasing file %s", node.file.Name)
 
 	node.file.Close()
 
@@ -81,8 +70,6 @@ func (node *FileNode) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 func (node *FileNode) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
-
-	// fmt.Printf("Reading %d bytes at offset %d\n", readRequest.Size, readRequest.Offset)
 
 	if readRequest.Dir {
 		return fmt.Errorf("read request is for a directory")

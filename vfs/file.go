@@ -107,6 +107,7 @@ func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 }
 
 // Fetch video URL from the fetch URL
+// TODO Fetch video URL AND video size
 func fetchVideoUrl(fetchUrl string) (string, error) {
 	response, err := http.Get(fetchUrl)
 	if err != nil {
