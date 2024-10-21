@@ -1,4 +1,3 @@
-database.db
-cert.pem
-bar.sh
+api/fuse.pb.go
+api/fuse_grpc.pb.go
 mnt
