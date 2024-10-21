@@ -24,15 +24,11 @@ type DirectoryNode struct {
 	directory *vfs.Directory
 
 	mu sync.RWMutex
-
-	connection *fuse.Conn
 }
 
-func NewDirectoryNode(connection *fuse.Conn, directory *vfs.Directory) *DirectoryNode {
+func NewDirectoryNode(directory *vfs.Directory) *DirectoryNode {
 	return &DirectoryNode{
 		directory: directory,
-
-		connection: connection,
 	}
 }
 
@@ -70,7 +66,7 @@ func (node *DirectoryNode) Lookup(ctx context.Context, lookupRequest *fuse.Looku
 
 	for _, directory := range node.directory.Directories {
 		if directory.Name == lookupRequest.Name {
-			node := NewDirectoryNode(node.connection, directory)
+			node := NewDirectoryNode(directory)
 
 			return node, nil
 		}
@@ -104,10 +100,6 @@ func (node *DirectoryNode) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error
 	return entries, nil
 }
 
-// func (node *DirectoryNode) ReadDir(ctx context.Context) ([]fuse.Dirent, error) {
-// 	return node.ReadDirAll(ctx)
-// }
-
 func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
 	node.mu.Lock()
 	defer node.mu.Unlock()
@@ -135,15 +127,22 @@ func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.Remov
 	return nil
 }
 
-// func (node *DirectoryNode) Invalidate() error {
-// 	node.mu.Lock()
-// 	defer node.mu.Unlock()
-//
-// 	return node.fileSystem.connection.InvalidateEntry(node.directory.ID, node.directory.Name)
-// }
-
 func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameRequest, newNode fs.Node) error {
-	node.directory.Rename(request.NewName)
+	logger.Logger.Infof("Rename request: %v", request)
+
+    directory := node.directory.GetDirectory(request.OldName)
+    file := node.directory.GetFile(request.OldName)
+
+    switch {
+    case directory != nil:
+        directory.Rename(request.NewName)
+        break
+    case file != nil:
+        file.Rename(request.NewName)
+        break
+    default:
+        return syscall.ENOENT
+    }
 
 	_, err := node.ReadDirAll(ctx)
 	if err != nil {

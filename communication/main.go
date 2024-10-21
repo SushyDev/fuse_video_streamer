@@ -5,18 +5,18 @@ import (
 	"log"
 	"net"
 
-	"debrid_drive/vfs"
+	"debrid_drive/fuse"
 	"google.golang.org/grpc"
 )
 
 type GrpcServer struct {
-	fileSystem *vfs.FileSystem
+	fileSystem *fuse.FuseFileSystem
 
 	UnimplementedFileSystemServer
 }
 
 func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirectoryRequest) (*DirectoryResponse, error) {
-	parentDirectory, err := server.fileSystem.GetDirectory(request.ParentNodeId)
+	parentDirectory, err := server.fileSystem.VFS.GetDirectory(request.ParentNodeId)
 	if err != nil {
 		return &DirectoryResponse{
 			NodeId:  0,
@@ -28,7 +28,7 @@ func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirector
 		}, err
 	}
 
-	newDirectory, err := parentDirectory.AddSubDirectory(request.Name)
+	newDirectory, err := parentDirectory.AddDirectory(request.Name)
 	if err != nil {
 		return &DirectoryResponse{
 			NodeId:  0,
@@ -39,6 +39,8 @@ func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirector
 			},
 		}, err
 	}
+
+	server.fileSystem.InvalidateEntry(parentDirectory.ID, newDirectory.Name)
 
 	return &DirectoryResponse{
 		NodeId:  newDirectory.ID,
@@ -48,7 +50,7 @@ func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirector
 }
 
 func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDirectoryRequest) (*DirectoryResponse, error) {
-	directory, err := server.fileSystem.GetDirectory(request.NodeId)
+	directory, err := server.fileSystem.VFS.GetDirectory(request.NodeId)
 	if err != nil {
 		return &DirectoryResponse{
 			NodeId:  0,
@@ -62,6 +64,8 @@ func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDi
 
 	directory.Rename(request.Name)
 
+	server.fileSystem.InvalidateEntry(directory.Parent.ID, directory.Name)
+
 	return &DirectoryResponse{
 		NodeId:  directory.ID,
 		Success: true,
@@ -69,8 +73,42 @@ func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDi
 	}, nil
 }
 
+func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDirectoryRequest) (*DirectoryResponse, error) {
+    directory, err := server.fileSystem.VFS.GetDirectory(request.NodeId)
+    if err != nil {
+        return &DirectoryResponse{
+            NodeId:  0,
+            Success: false,
+            Error: &Error{
+                Code:    1,
+                Message: err.Error(),
+            },
+        }, err
+    }
+
+    err = directory.Parent.RemoveDirectory(directory.Name)
+    if err != nil {
+        return &DirectoryResponse{
+            NodeId:  0,
+            Success: false,
+            Error: &Error{
+                Code:    1,
+                Message: err.Error(),
+            },
+        }, err
+    }
+
+    server.fileSystem.InvalidateEntry(directory.Parent.ID, directory.Name)
+
+    return &DirectoryResponse{
+        NodeId:  directory.ID,
+        Success: true,
+        Error:   nil,
+    }, nil
+}
+
 func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) (*FileResponse, error) {
-	parentDirectory, err := server.fileSystem.GetDirectory(request.ParentNodeId)
+	parentDirectory, err := server.fileSystem.VFS.GetDirectory(request.ParentNodeId)
 	if err != nil {
 		return &FileResponse{
 			NodeId:  0,
@@ -94,6 +132,8 @@ func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) 
 		}, err
 	}
 
+	server.fileSystem.InvalidateEntry(parentDirectory.ID, newFile.Name)
+
 	return &FileResponse{
 		NodeId:  newFile.ID,
 		Success: true,
@@ -101,7 +141,65 @@ func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) 
 	}, nil
 }
 
-func Listen(fileSystem *vfs.FileSystem) {
+func (server *GrpcServer) RenameFile(ctx context.Context, request *RenameFileRequest) (*FileResponse, error) {
+    file, err := server.fileSystem.VFS.GetFile(request.NodeId)
+    if err != nil {
+        return &FileResponse{
+            NodeId:  0,
+            Success: false,
+            Error: &Error{
+                Code:    1,
+                Message: err.Error(),
+            },
+        }, err
+    }
+
+    file.Rename(request.Name)
+
+    server.fileSystem.InvalidateNode(file.ID)
+
+    return &FileResponse{
+        NodeId:  file.ID,
+        Success: true,
+        Error:   nil,
+    }, nil
+}
+
+func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileRequest) (*FileResponse, error) {
+    file, err := server.fileSystem.VFS.GetFile(request.NodeId)
+    if err != nil {
+        return &FileResponse{
+            NodeId:  0,
+            Success: false,
+            Error: &Error{
+                Code:    1,
+                Message: err.Error(),
+            },
+        }, err
+    }
+
+    err = file.Parent.RemoveFile(file.Name)
+    if err != nil {
+        return &FileResponse{
+            NodeId:  0,
+            Success: false,
+            Error: &Error{
+                Code:    1,
+                Message: err.Error(),
+            },
+        }, err
+    }
+
+    server.fileSystem.InvalidateNode(file.ID)
+
+    return &FileResponse{
+        NodeId:  file.ID,
+        Success: true,
+        Error:   nil,
+    }, nil
+}
+
+func Listen(fileSystem *fuse.FuseFileSystem) {
 	listener, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)

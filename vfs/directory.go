@@ -2,7 +2,6 @@ package vfs
 
 import (
 	"fmt"
-	"sync"
 )
 
 type Directory struct {
@@ -12,12 +11,12 @@ type Directory struct {
 	Files       map[uint64]*File
 	Parent      *Directory
 
-	mu sync.RWMutex
+	// mu sync.RWMutex TODO
 
-	fileSystem *FileSystem
+	fileSystem *VirtualFileSystem
 }
 
-func NewDirectory(fileSystem *FileSystem, parent *Directory, name string) (*Directory, error) {
+func NewDirectory(fileSystem *VirtualFileSystem, parent *Directory, name string) (*Directory, error) {
 	if fileSystem == nil {
 		return nil, fmt.Errorf("file system is nil")
 	}
@@ -38,13 +37,11 @@ func NewDirectory(fileSystem *FileSystem, parent *Directory, name string) (*Dire
 }
 
 func (directory *Directory) Rename(name string) {
-	directory.mu.Lock()
-	defer directory.mu.Unlock()
-
 	directory.Name = name
 }
 
-func (directory *Directory) GetSubDirectory(name string) *Directory {
+// Get direct child
+func (directory *Directory) GetDirectory(name string) *Directory {
 	for _, directory := range directory.Directories {
 		if directory.Name == name {
 			return directory
@@ -54,8 +51,9 @@ func (directory *Directory) GetSubDirectory(name string) *Directory {
 	return nil
 }
 
-func (directory *Directory) AddSubDirectory(name string) (*Directory, error) {
-	foundDirectory := directory.GetSubDirectory(name)
+// Add direct child
+func (directory *Directory) AddDirectory(name string) (*Directory, error) {
+	foundDirectory := directory.GetDirectory(name)
 	if foundDirectory != nil {
 		return nil, fmt.Errorf("directory already exists")
 	}
@@ -65,18 +63,24 @@ func (directory *Directory) AddSubDirectory(name string) (*Directory, error) {
 		return nil, err
 	}
 
-	directory.registerSubDirectory(newDirectory)
+	directory.registerDirectory(newDirectory)
 
 	directory.fileSystem.RegisterDirectory(newDirectory)
 
 	return newDirectory, nil
 }
 
-func (directory *Directory) registerSubDirectory(newDirectory *Directory) {
-	directory.mu.Lock()
-	defer directory.mu.Unlock()
+func (directory *Directory) RemoveDirectory(name string) error {
+    foundDirectory := directory.GetDirectory(name)
+    if foundDirectory == nil {
+        return fmt.Errorf("directory not found")
+    }
 
-	directory.Directories[newDirectory.ID] = newDirectory
+    directory.deregisterDirectory(foundDirectory.ID)
+
+    directory.fileSystem.DeleteDirectory(foundDirectory.ID)
+
+    return nil
 }
 
 func (directory *Directory) GetFile(name string) *File {
@@ -100,9 +104,40 @@ func (directory *Directory) AddFile(name string, videoUrl string, fetchUrl strin
 		return nil, err
 	}
 
-	directory.mu.Lock()
-	directory.Files[newFile.ID] = newFile
-	directory.mu.Unlock()
+	directory.registerFile(newFile)
+
+	directory.fileSystem.RegisterFile(newFile)
 
 	return newFile, nil
+}
+
+func (directory *Directory) RemoveFile(name string) error {
+    foundFile := directory.GetFile(name)
+    if foundFile == nil {
+        return fmt.Errorf("file not found")
+    }
+
+    directory.deregisterFile(foundFile.ID)
+
+    directory.fileSystem.DeregisterFile(foundFile.ID)
+
+    return nil
+}
+
+// --- Helpers
+
+func (directory *Directory) registerDirectory(newDirectory *Directory) {
+	directory.Directories[newDirectory.ID] = newDirectory
+}
+
+func (directory *Directory) deregisterDirectory(ID uint64) {
+    delete(directory.Directories, ID)
+}
+
+func (directory *Directory) registerFile(newFile *File) {
+	directory.Files[newFile.ID] = newFile
+}
+
+func (directory *Directory) deregisterFile(ID uint64) {
+    delete(directory.Files, ID)
 }

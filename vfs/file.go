@@ -1,9 +1,9 @@
 package vfs
 
 import (
-	"debrid_drive/real_debrid"
 	"debrid_drive/stream"
 	"fmt"
+	"io"
 	"sync"
 )
 
@@ -13,13 +13,16 @@ type File struct {
 	VideoUrl string
 	FetchUrl string
 	Size     uint64
+	Parent   *Directory
 
 	VideoStreams sync.Map // map[uint64]*stream.Stream // map of video streams per PID
 
-	fileSystem *FileSystem
+	// mu sync.RWMutex TODO
+
+	fileSystem *VirtualFileSystem
 }
 
-func NewFile(fileSystem *FileSystem, parent *Directory, name string, videoUrl string, fetchUrl string, size uint64) (*File, error) {
+func NewFile(fileSystem *VirtualFileSystem, parent *Directory, name string, videoUrl string, fetchUrl string, size uint64) (*File, error) {
 	if fileSystem == nil {
 		return nil, fmt.Errorf("file system is nil")
 	}
@@ -36,6 +39,7 @@ func NewFile(fileSystem *FileSystem, parent *Directory, name string, videoUrl st
 		VideoUrl: videoUrl,
 		FetchUrl: fetchUrl,
 		Size:     size,
+		Parent:   parent,
 
 		fileSystem: fileSystem,
 	}
@@ -43,18 +47,53 @@ func NewFile(fileSystem *FileSystem, parent *Directory, name string, videoUrl st
 	return file, nil
 }
 
-func (file *File) GetVideoStream(pid uint32) (*stream.Stream, error) {
+func (file *File) Read(p []byte, offset int64, pid uint32) (int, error) {
+	videoStream, err := file.getVideoStream(pid)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get video stream: %w", err)
+	}
+
+	_, err = videoStream.Seek(uint64(offset), io.SeekStart)
+	if err != nil {
+		return 0, fmt.Errorf("failed to seek in video stream: %w", err)
+	}
+
+	bytesRead, err := videoStream.Read(p)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read from video stream: %w", err)
+	}
+
+	return bytesRead, nil
+}
+
+func (file *File) Rename(name string) {
+	file.Name = name
+}
+
+func (file *File) Close() {
+	file.VideoStreams.Range(func(key, value interface{}) bool {
+		stream := value.(*stream.Stream)
+		stream.Close()
+
+		return true
+	})
+
+	file.VideoStreams.Clear()
+}
+
+func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 	existingVideoStream, ok := file.VideoStreams.Load(pid)
 	if ok {
 		return existingVideoStream.(*stream.Stream), nil
 	}
 
-	unrestrictedFile, err := real_debrid.UnrestrictLink(file.VideoUrl)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unrestrict link: %w", err)
+	if file.VideoUrl == "" && file.FetchUrl != "" {
+		// todo fetch http
 	}
 
-	videoStream := stream.NewStream(unrestrictedFile.Download, file.Size)
+    file.VideoUrl = ""
+
+	videoStream := stream.NewStream(file.VideoUrl, file.Size)
 
 	file.VideoStreams.Store(pid, videoStream)
 

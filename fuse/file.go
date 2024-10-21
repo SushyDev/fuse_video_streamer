@@ -3,7 +3,6 @@ package fuse
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"sync"
 	"time"
@@ -12,17 +11,14 @@ import (
 	"github.com/anacrolix/fuse/fs"
 
 	"debrid_drive/logger"
-	"debrid_drive/stream"
 	"debrid_drive/vfs"
 )
 
 var _ fs.Node = &FileNode{}
 var _ fs.Handle = &FileNode{}
-var _ fs.HandleFlusher = &FileNode{}
 var _ fs.HandleReader = &FileNode{}
 var _ fs.HandleReleaser = &FileNode{}
 var _ fs.NodeRemover = &FileNode{}
-var _ fs.NodeRenamer = &FileNode{}
 
 type FileNode struct {
 	file *vfs.File
@@ -77,16 +73,7 @@ func (node *FileNode) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 
 	logger.Logger.Infof("Releasing file %s", node.file.Name)
 
-	// TODO move logic to vfs
-
-	node.file.VideoStreams.Range(func(key, value interface{}) bool {
-		stream := value.(*stream.Stream)
-		stream.Close()
-
-		return true
-	})
-
-	node.file.VideoStreams.Clear()
+	node.file.Close()
 
 	return nil
 }
@@ -101,53 +88,13 @@ func (node *FileNode) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		return fmt.Errorf("read request is for a directory")
 	}
 
-	videoStream, err := node.file.GetVideoStream(readRequest.Pid)
-	if err != nil {
-		return fmt.Errorf("failed to get video stream: %w", err)
-	}
-
-	_, err = videoStream.Seek(uint64(readRequest.Offset), io.SeekStart)
-	if err != nil {
-		return fmt.Errorf("failed to seek in video stream: %w", err)
-	}
-
 	buffer := make([]byte, readRequest.Size)
-	bytesRead, err := videoStream.Read(buffer)
+	bytesRead, err := node.file.Read(buffer, readRequest.Offset, readRequest.Pid)
 	if err != nil {
-		return fmt.Errorf("failed to read from video stream: %w", err)
+		return fmt.Errorf("failed to read from file: %w", err)
 	}
 
 	readResponse.Data = buffer[:bytesRead]
-
-	return nil
-}
-
-func (node *FileNode) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) error {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-
-	logger.Logger.Infof("Flushing file %s", node.file.Name)
-
-	// stream, err := file.getVideoStream(flushRequest.Pid)
-	// if err != nil {
-	//     return fmt.Errorf("failed to get video stream: %w", err)
-	// }
-	//
-	// if stream != nil {
-	//     err := stream.Close()
-	//     if err != nil {
-	//         return fmt.Errorf("failed to close video stream: %w", err)
-	//     }
-	// }
-
-	return nil
-}
-
-func (node *FileNode) Rename(ctx context.Context, request *fuse.RenameRequest, newFile fs.Node) error {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-
-	logger.Logger.Infof("Rename request: %v", request)
 
 	return nil
 }
