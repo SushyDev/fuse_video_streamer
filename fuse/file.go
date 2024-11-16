@@ -16,6 +16,7 @@ import (
 var _ fs.Node = &FileNode{}
 var _ fs.Handle = &FileNode{}
 var _ fs.HandleReader = &FileNode{}
+var _ fs.HandleWriter = &FileNode{}
 var _ fs.HandleReleaser = &FileNode{}
 
 type FileNode struct {
@@ -34,9 +35,11 @@ func (node *FileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	attr.Size = node.file.Size
-	attr.Inode = node.file.ID
-	attr.Mode = os.ModePerm
+	if node.file != nil {
+		attr.Size = node.file.GetSize()
+		attr.Inode = node.file.GetIdentifier()
+		attr.Mode = os.ModePerm
+	}
 
 	attr.Atime = time.Unix(0, 0)
 	attr.Mtime = time.Unix(0, 0)
@@ -49,7 +52,7 @@ func (node *FileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (node *FileNode) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	fuseLogger.Infof("Opening file %s - %d", node.file.Name, node.file.Size)
+	fuseLogger.Infof("Opening file %s - %d", node.file.GetName(), node.file.GetIdentifier())
 
 	openResponse.Flags |= fuse.OpenKeepCache
 
@@ -60,9 +63,11 @@ func (node *FileNode) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	fuseLogger.Infof("Releasing file %s", node.file.Name)
+	if node.file != nil {
+		fuseLogger.Infof("Releasing file %s", node.file.GetName())
 
-	node.file.Close()
+		node.file.Close()
+	}
 
 	return nil
 }
@@ -70,6 +75,12 @@ func (node *FileNode) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 func (node *FileNode) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
+
+	if node.file == nil {
+		fmt.Println("File is nil")
+		readResponse.Data = []byte("This file was created to verify if '/Users/sushy/Documents/Projects/debrid_drive/mnt' is writable. It should've been automatically deleted. Feel free to delete it.")
+		return nil
+	}
 
 	if readRequest.Dir {
 		return fmt.Errorf("read request is for a directory")
@@ -82,6 +93,16 @@ func (node *FileNode) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	}
 
 	readResponse.Data = buffer[:bytesRead]
+
+	return nil
+}
+
+func (node *FileNode) Write(ctx context.Context, writeRequest *fuse.WriteRequest, writeResponse *fuse.WriteResponse) error {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
+
+	// TODO SONARR SUPPORT
+	writeResponse.Size = len(writeRequest.Data)
 
 	return nil
 }

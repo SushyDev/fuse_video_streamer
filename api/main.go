@@ -7,7 +7,6 @@ import (
 	"debrid_drive/fuse"
 	"debrid_drive/logger"
 
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -20,204 +19,170 @@ type GrpcServer struct {
 var apiLogger, _ = logger.GetLogger(logger.ApiLogPath)
 
 func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirectoryRequest) (*DirectoryResponse, error) {
-	parentDirectory, err := server.fileSystem.VFS.GetDirectory(request.ParentNodeId)
-	if err != nil {
-        apiLogger.Error("Failed to get directory", zap.Error(err))
+	parent := server.fileSystem.VirtualFileSystem.GetDirectory(request.ParentNodeId)
+	if parent == nil {
+		message := "Could not find parent directory"
+
+		apiLogger.Error(message)
 
 		return &DirectoryResponse{
 			NodeId:  0,
 			Success: false,
 			Error: &Error{
 				Code:    1,
-				Message: err.Error(),
+				Message: message,
 			},
-		}, err
+		}, nil
 	}
 
-	newDirectory, err := parentDirectory.AddDirectory(request.Name)
-	if err != nil {
-        apiLogger.Error("Failed to add directory", zap.Error(err))
+	newDirectory := server.fileSystem.VirtualFileSystem.NewDirectory(parent, request.Name)
 
-		return &DirectoryResponse{
-			NodeId:  0,
-			Success: false,
-			Error: &Error{
-				Code:    1,
-				Message: err.Error(),
-			},
-		}, err
-	}
-
-	server.fileSystem.InvalidateEntry(parentDirectory.ID, newDirectory.Name)
+	server.fileSystem.InvalidateEntry(parent.GetIdentifier(), newDirectory.GetName())
 
 	return &DirectoryResponse{
-		NodeId:  newDirectory.ID,
+		NodeId:  newDirectory.GetIdentifier(),
 		Success: true,
 		Error:   nil,
 	}, nil
 }
 
 func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDirectoryRequest) (*DirectoryResponse, error) {
-	directory, err := server.fileSystem.VFS.GetDirectory(request.NodeId)
-	if err != nil {
-        apiLogger.Error("Failed to get directory", zap.Error(err))
+	directory := server.fileSystem.VirtualFileSystem.GetDirectory(request.NodeId)
+	if directory == nil {
+		message := "Could not find directory"
+
+		apiLogger.Error(message)
 
 		return &DirectoryResponse{
 			NodeId:  0,
 			Success: false,
 			Error: &Error{
 				Code:    1,
-				Message: err.Error(),
+				Message: message,
 			},
-		}, err
+		}, nil
 	}
 
-	directory.Rename(request.Name)
+	parent := directory.GetParent()
 
-	server.fileSystem.InvalidateEntry(directory.Parent.ID, directory.Name)
+	server.fileSystem.VirtualFileSystem.RenameDirectory(directory, request.Name, parent)
+
+	server.fileSystem.InvalidateEntry(directory.GetParent().GetIdentifier(), directory.GetName())
 
 	return &DirectoryResponse{
-		NodeId:  directory.ID,
+		NodeId:  directory.GetIdentifier(),
 		Success: true,
 		Error:   nil,
 	}, nil
 }
 
 func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDirectoryRequest) (*DirectoryResponse, error) {
-	directory, err := server.fileSystem.VFS.GetDirectory(request.NodeId)
-	if err != nil {
-        apiLogger.Error("Failed to get directory", zap.Error(err))
+	directory := server.fileSystem.VirtualFileSystem.GetDirectory(request.NodeId)
+	if directory == nil {
+		message := "Could not find directory"
+
+		apiLogger.Error(message)
 
 		return &DirectoryResponse{
 			NodeId:  0,
 			Success: false,
 			Error: &Error{
 				Code:    1,
-				Message: err.Error(),
+				Message: message,
 			},
-		}, err
+		}, nil
 	}
 
-	err = directory.Parent.RemoveDirectory(directory.Name)
-	if err != nil {
-        apiLogger.Error("Failed to remove directory", zap.Error(err))
+	server.fileSystem.VirtualFileSystem.RemoveDirectory(directory)
 
-		return &DirectoryResponse{
-			NodeId:  0,
-			Success: false,
-			Error: &Error{
-				Code:    1,
-				Message: err.Error(),
-			},
-		}, err
-	}
-
-	server.fileSystem.InvalidateEntry(directory.Parent.ID, directory.Name)
+	server.fileSystem.InvalidateEntry(directory.GetParent().GetIdentifier(), directory.GetName())
 
 	return &DirectoryResponse{
-		NodeId:  directory.ID,
+		NodeId:  directory.GetIdentifier(),
 		Success: true,
 		Error:   nil,
 	}, nil
 }
 
 func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) (*FileResponse, error) {
-	parentDirectory, err := server.fileSystem.VFS.GetDirectory(request.ParentNodeId)
-	if err != nil {
-        apiLogger.Error("Failed to get directory", zap.Error(err))
+	parent := server.fileSystem.VirtualFileSystem.GetDirectory(request.ParentNodeId)
+	if parent == nil {
+		message := "Could not find parent directory"
+
+		apiLogger.Error(message)
 
 		return &FileResponse{
 			NodeId:  0,
 			Success: false,
 			Error: &Error{
 				Code:    1,
-				Message: err.Error(),
+				Message: message,
 			},
-		}, err
+		}, nil
 	}
 
-	newFile, err := parentDirectory.AddFile(request.Name, request.VideoUrl, request.FetchUrl, request.FileSize)
-	if err != nil {
-        apiLogger.Error("Failed to add file", zap.Error(err))
+	newFile := server.fileSystem.VirtualFileSystem.NewFile(parent, request.Name, request.VideoUrl, request.FetchUrl, request.FileSize)
 
-		return &FileResponse{
-			NodeId:  0,
-			Success: false,
-			Error: &Error{
-				Code:    1,
-				Message: err.Error(),
-			},
-		}, err
-	}
-
-	server.fileSystem.InvalidateEntry(parentDirectory.ID, newFile.Name)
+	server.fileSystem.InvalidateEntry(parent.GetIdentifier(), newFile.GetName())
 
 	return &FileResponse{
-		NodeId:  newFile.ID,
+		NodeId:  newFile.GetIdentifier(),
 		Success: true,
 		Error:   nil,
 	}, nil
 }
 
 func (server *GrpcServer) RenameFile(ctx context.Context, request *RenameFileRequest) (*FileResponse, error) {
-	file, err := server.fileSystem.VFS.GetFile(request.NodeId)
-	if err != nil {
-        apiLogger.Error("Failed to get file", zap.Error(err))
+	file := server.fileSystem.VirtualFileSystem.GetFile(request.NodeId)
+	if file == nil {
+		message := "Could not find file"
+
+		apiLogger.Error(message)
 
 		return &FileResponse{
 			NodeId:  0,
 			Success: false,
 			Error: &Error{
 				Code:    1,
-				Message: err.Error(),
+				Message: message,
 			},
-		}, err
+		}, nil
 	}
 
 	file.Rename(request.Name)
 
-	server.fileSystem.InvalidateNode(file.ID)
+	server.fileSystem.InvalidateNode(file.GetIdentifier())
 
 	return &FileResponse{
-		NodeId:  file.ID,
+		NodeId:  file.GetIdentifier(),
 		Success: true,
 		Error:   nil,
 	}, nil
 }
 
 func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileRequest) (*FileResponse, error) {
-	file, err := server.fileSystem.VFS.GetFile(request.NodeId)
-	if err != nil {
-        apiLogger.Error("Failed to get file", zap.Error(err))
+	file := server.fileSystem.VirtualFileSystem.GetFile(request.NodeId)
+	if file == nil {
+		message := "Could not find file"
+
+		apiLogger.Error(message)
 
 		return &FileResponse{
 			NodeId:  0,
 			Success: false,
 			Error: &Error{
 				Code:    1,
-				Message: err.Error(),
+				Message: message,
 			},
-		}, err
+		}, nil
 	}
 
-	err = file.Parent.RemoveFile(file.Name)
-	if err != nil {
-        apiLogger.Error("Failed to remove file", zap.Error(err))
+	server.fileSystem.VirtualFileSystem.RemoveFile(file)
 
-		return &FileResponse{
-			NodeId:  0,
-			Success: false,
-			Error: &Error{
-				Code:    1,
-				Message: err.Error(),
-			},
-		}, err
-	}
-
-	server.fileSystem.InvalidateNode(file.ID)
+	server.fileSystem.InvalidateNode(file.GetIdentifier())
 
 	return &FileResponse{
-		NodeId:  file.ID,
+		NodeId:  file.GetIdentifier(),
 		Success: true,
 		Error:   nil,
 	}, nil

@@ -35,22 +35,22 @@ func createLogger(filePath string) (*zap.SugaredLogger, error) {
 	)
 
 	// Return the new logger
-    logger := zap.New(core, zap.AddCaller())
+	logger := zap.New(core, zap.AddCaller())
 
-    return logger.Sugar(), nil
+	return logger.Sugar(), nil
 }
 
 func GetLogger(filePath string) (*zap.SugaredLogger, error) {
-    if logger, ok := loggers[filePath]; ok {
-        return logger, nil
-    }
+	if logger, ok := loggers[filePath]; ok {
+		return logger, nil
+	}
 
-    logger, err := createLogger(filePath)
-    if err != nil {
-        return nil, err
-    }
+	logger, err := createLogger(filePath)
+	if err != nil {
+		return nil, err
+	}
 
-    loggers[filePath] = logger
+	loggers[filePath] = logger
 
-    return logger, nil
+	return logger, nil
 }

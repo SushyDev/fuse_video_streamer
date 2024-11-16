@@ -14,8 +14,8 @@ var fuseLogger, _ = logger.GetLogger(logger.FuseLogPath)
 var _ fs.FS = &FuseFileSystem{}
 
 type FuseFileSystem struct {
-	VFS     *vfs.VirtualFileSystem
-	NodeMap map[uint64]*fs.Node
+	VirtualFileSystem *vfs.VirtualFileSystem
+	NodeMap           map[uint64]*fs.Node
 
 	connection *fuse.Conn
 }
@@ -29,6 +29,7 @@ func NewFuseFileSystem(mountpoint string, vfs *vfs.VirtualFileSystem) *FuseFileS
 
 		fuse.LocalVolume(),
 		fuse.AllowOther(),
+		fuse.AllowSUID(),
 
 		fuse.NoAppleDouble(),
 		fuse.NoBrowse(),
@@ -39,15 +40,17 @@ func NewFuseFileSystem(mountpoint string, vfs *vfs.VirtualFileSystem) *FuseFileS
 	}
 
 	fuseFileSystem := &FuseFileSystem{
-		connection: connection,
-		VFS:        vfs,
+		connection:        connection,
+		VirtualFileSystem: vfs,
 	}
 
 	return fuseFileSystem
 }
 
 func (fileSystem *FuseFileSystem) Root() (fs.Node, error) {
-	root := NewDirectoryNode(fileSystem.VFS.Root)
+	rootDirectory := fileSystem.VirtualFileSystem.GetRoot()
+
+	root := fileSystem.NewDirectoryNode(rootDirectory)
 
 	return root, nil
 }
@@ -58,6 +61,13 @@ func (fileSystem *FuseFileSystem) Serve() {
 	err := fs.Serve(fileSystem.connection, fileSystem)
 	if err != nil {
 		fuseLogger.Fatalf("Failed to serve FUSE filesystem: %v", err)
+	}
+}
+
+func (fileSystem *FuseFileSystem) NewDirectoryNode(directory *vfs.Directory) *DirectoryNode {
+	return &DirectoryNode{
+		directory:  directory,
+		fileSystem: fileSystem,
 	}
 }
 

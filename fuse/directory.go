@@ -3,6 +3,7 @@ package fuse
 import (
 	"context"
 	"debrid_drive/vfs"
+	"fmt"
 	"os"
 	"sync"
 	"syscall"
@@ -18,22 +19,18 @@ var _ fs.NodeRequestLookuper = &DirectoryNode{}
 var _ fs.HandleReadDirAller = &DirectoryNode{}
 var _ fs.NodeRemover = &DirectoryNode{}
 var _ fs.NodeRenamer = &DirectoryNode{}
+var _ fs.NodeCreater = &DirectoryNode{}
 
 type DirectoryNode struct {
-	directory *vfs.Directory
+	directory  *vfs.Directory
+	fileSystem *FuseFileSystem
 
 	mu sync.RWMutex
 }
 
-func NewDirectoryNode(directory *vfs.Directory) *DirectoryNode {
-	return &DirectoryNode{
-		directory: directory,
-	}
-}
-
 func (node *DirectoryNode) Attr(ctx context.Context, attr *fuse.Attr) error {
-	attr.Inode = node.directory.ID
-	attr.Mode = os.ModeDir | 0775
+	attr.Inode = node.directory.GetIdentifier()
+	attr.Mode = os.ModeDir | 0o755
 	attr.Valid = 1
 
 	attr.Gid = uint32(os.Getgid())
@@ -55,20 +52,14 @@ func (node *DirectoryNode) Lookup(ctx context.Context, lookupRequest *fuse.Looku
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	for _, file := range node.directory.Files {
-		if file.Name == lookupRequest.Name {
-			node := NewFileNode(file)
-
-			return node, nil
-		}
+	file := node.directory.FindFile(lookupRequest.Name)
+	if file != nil {
+		return NewFileNode(file), nil
 	}
 
-	for _, directory := range node.directory.Directories {
-		if directory.Name == lookupRequest.Name {
-			node := NewDirectoryNode(directory)
-
-			return node, nil
-		}
+	directory := node.directory.FindDirectory(lookupRequest.Name)
+	if directory != nil {
+		return node.fileSystem.NewDirectoryNode(directory), nil
 	}
 
 	return nil, syscall.ENOENT
@@ -80,19 +71,19 @@ func (node *DirectoryNode) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error
 
 	var entries []fuse.Dirent
 
-	for _, file := range node.directory.Files {
+	for _, file := range node.directory.ListFiles() {
 		entries = append(entries, fuse.Dirent{
-			Name:  file.Name,
+			Name:  file.GetName(),
 			Type:  fuse.DT_File,
-			Inode: file.ID,
+			Inode: file.GetIdentifier(),
 		})
 	}
 
-	for _, directory := range node.directory.Directories {
+	for _, directory := range node.directory.ListDirectories() {
 		entries = append(entries, fuse.Dirent{
-			Name:  directory.Name,
+			Name:  directory.GetName(),
 			Type:  fuse.DT_Dir,
-			Inode: directory.ID,
+			Inode: directory.GetIdentifier(),
 		})
 	}
 
@@ -100,29 +91,27 @@ func (node *DirectoryNode) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error
 }
 
 func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
+	return nil // TODO SONARR SUPPORT
+
 	node.mu.Lock()
 
-    if removeRequest.Dir {
-        err := node.directory.RemoveDirectory(removeRequest.Name)
-        if err != nil {
-            fuseLogger.Errorf("Failed to remove directory %s: %v", removeRequest.Name, err)
-            return err
-        }
-    } else {
-        err := node.directory.RemoveFile(removeRequest.Name)
-        if err != nil {
-            fuseLogger.Errorf("Failed to remove file %s: %v", removeRequest.Name, err)
-            return err
-        }
-    }
+	if removeRequest.Dir {
+		entry := node.directory.FindDirectory(removeRequest.Name)
 
-    node.mu.Unlock()
+		node.fileSystem.VirtualFileSystem.RemoveDirectory(entry)
+	} else {
+		entry := node.directory.FindFile(removeRequest.Name)
 
-    _, err := node.ReadDirAll(ctx)
-    if err != nil {
-        fuseLogger.Errorf("Failed to read directory %s: %v", node.directory.Name, err)
-        return err
-    }
+		node.fileSystem.VirtualFileSystem.RemoveFile(entry)
+	}
+
+	node.mu.Unlock()
+
+	_, err := node.ReadDirAll(ctx)
+	if err != nil {
+		fuseLogger.Errorf("Failed to read directory %s: %v", node.directory.GetName(), err)
+		return err
+	}
 
 	return nil
 }
@@ -130,29 +119,47 @@ func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.Remov
 func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameRequest, newNode fs.Node) error {
 	node.mu.Lock()
 
-	fuseLogger.Infof("Rename request on directory %s: %v", node.directory.Name, request)
+	fuseLogger.Infof("Rename request on directory %s: %v", node.directory.GetName(), request)
 
-	directory := node.directory.GetDirectory(request.OldName)
-	file := node.directory.GetFile(request.OldName)
+	oldDirectory := node.directory.FindDirectory(request.OldName)
+	oldFile := node.directory.FindFile(request.OldName)
 
-	switch {
-	case directory != nil:
-		directory.Rename(request.NewName)
-		break
-	case file != nil:
-		file.Rename(request.NewName)
-		break
-	default:
+	if oldDirectory == nil && oldFile == nil {
 		return syscall.ENOENT
 	}
 
-    node.mu.Unlock()
+	newParentDirectory := newNode.(*DirectoryNode).directory
+
+	if oldDirectory != nil {
+		fmt.Println("Rename directory", request.NewName)
+
+		node.fileSystem.VirtualFileSystem.RenameDirectory(oldDirectory, request.NewName, newParentDirectory)
+	}
+
+	if oldFile != nil {
+		fmt.Println("Rename file", request.NewName)
+
+		node.fileSystem.VirtualFileSystem.RenameFile(oldFile, request.NewName, newParentDirectory)
+	}
+
+	node.mu.Unlock()
 
 	_, err := node.ReadDirAll(ctx)
 	if err != nil {
-        fuseLogger.Errorf("Failed to read directory %s: %v", node.directory.Name, err)
+		fuseLogger.Errorf("Failed to read directory %s: %v", node.directory.GetName(), err)
 		return err
 	}
 
 	return nil
+}
+
+func (node *DirectoryNode) Create(ctx context.Context, request *fuse.CreateRequest, response *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+
+	fileNode := NewFileNode(nil)
+
+	fmt.Printf("Create request on directory %s: %v", node.directory.GetName(), request)
+
+	return fileNode, fileNode, nil
 }

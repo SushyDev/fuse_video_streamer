@@ -9,43 +9,52 @@ import (
 )
 
 type File struct {
-	ID       uint64
-	Name     string
-	VideoUrl string
-	FetchUrl string
-	Size     uint64
-	Parent   *Directory
+	identifier uint64
+	name       string
+	videoUrl   string
+	fetchUrl   string
+	size       uint64
+	parent     *Directory
 
-	VideoStreams sync.Map // map[uint64]*stream.Stream // map of video streams per PID
+	videoStreams sync.Map // map[uint64]*stream.Stream // map of video streams per PID
 
 	// mu sync.RWMutex TODO
-
-	fileSystem *VirtualFileSystem
 }
 
-func NewFile(fileSystem *VirtualFileSystem, parent *Directory, name string, videoUrl string, fetchUrl string, size uint64) (*File, error) {
-	if fileSystem == nil {
-		return nil, fmt.Errorf("file system is nil")
-	}
+func (file *File) GetIdentifier() uint64 {
+	return file.identifier
+}
 
-	if parent == nil {
-		return nil, fmt.Errorf("parent directory is nil")
-	}
+func (file *File) GetName() string {
+	return file.name
+}
 
-	ID := fileSystem.IDCounter.Add(1)
+func (file *File) GetParent() *Directory {
+	return file.parent
+}
 
-	file := &File{
-		ID:       ID,
-		Name:     name,
-		VideoUrl: videoUrl,
-		FetchUrl: fetchUrl,
-		Size:     size,
-		Parent:   parent,
+func (file *File) GetSize() uint64 {
+	return file.size
+}
 
-		fileSystem: fileSystem,
-	}
+func (file *File) SetSize(size uint64) {
+	file.size = size
+}
 
-	return file, nil
+func (file *File) GetFetchUrl() string {
+	return file.fetchUrl
+}
+
+func (file *File) SetFetchUrl(fetchUrl string) {
+	file.fetchUrl = fetchUrl
+}
+
+func (file *File) GetVideoUrl() string {
+	return file.videoUrl
+}
+
+func (file *File) SetVideoUrl(videoUrl string) {
+	file.videoUrl = videoUrl
 }
 
 func (file *File) Read(p []byte, offset int64, pid uint32) (int, error) {
@@ -68,38 +77,38 @@ func (file *File) Read(p []byte, offset int64, pid uint32) (int, error) {
 }
 
 func (file *File) Rename(name string) {
-	file.Name = name
+	file.name = name
 }
 
 func (file *File) Close() {
-	file.VideoStreams.Range(func(key, value interface{}) bool {
+	file.videoStreams.Range(func(key, value interface{}) bool {
 		stream := value.(*stream.Stream)
 		stream.Close()
 
 		return true
 	})
 
-	file.VideoStreams.Clear()
+	file.videoStreams.Clear()
 }
 
 func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
-	existingVideoStream, ok := file.VideoStreams.Load(pid)
+	existingVideoStream, ok := file.videoStreams.Load(pid)
 	if ok {
 		return existingVideoStream.(*stream.Stream), nil
 	}
 
-	if file.VideoUrl == "" && file.FetchUrl != "" {
-		videoUrl, err := fetchVideoUrl(file.FetchUrl)
+	if file.videoUrl == "" && file.fetchUrl != "" {
+		videoUrl, err := fetchVideoUrl(file.fetchUrl)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch video URL: %w", err)
 		}
 
-		file.VideoUrl = videoUrl
+		file.videoUrl = videoUrl
 	}
 
-	videoStream := stream.NewStream(file.VideoUrl, file.Size)
+	videoStream := stream.NewStream(file.videoUrl, file.size)
 
-	file.VideoStreams.Store(pid, videoStream)
+	file.videoStreams.Store(pid, videoStream)
 
 	fmt.Printf("Created new video stream for PID %d\n", pid)
 
