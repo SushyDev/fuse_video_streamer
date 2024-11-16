@@ -37,4 +37,6 @@ func main() {
 
 	done := make(chan bool)
 	<-done
+
+	log.Println("Exiting...")
 }

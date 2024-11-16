@@ -38,7 +38,7 @@ func (node *FileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	if node.file != nil {
 		attr.Size = node.file.GetSize()
 		attr.Inode = node.file.GetIdentifier()
-		attr.Mode = os.ModePerm
+		attr.Mode = os.ModePerm | 0o777
 	}
 
 	attr.Atime = time.Unix(0, 0)

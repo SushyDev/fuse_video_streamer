@@ -20,6 +20,8 @@ var _ fs.HandleReadDirAller = &DirectoryNode{}
 var _ fs.NodeRemover = &DirectoryNode{}
 var _ fs.NodeRenamer = &DirectoryNode{}
 var _ fs.NodeCreater = &DirectoryNode{}
+var _ fs.NodeMkdirer = &DirectoryNode{}
+var _ fs.NodeLinker = &DirectoryNode{}
 
 type DirectoryNode struct {
 	directory  *vfs.Directory
@@ -30,7 +32,7 @@ type DirectoryNode struct {
 
 func (node *DirectoryNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	attr.Inode = node.directory.GetIdentifier()
-	attr.Mode = os.ModeDir | 0o755
+	attr.Mode = os.ModeDir | 0o777
 	attr.Valid = 1
 
 	attr.Gid = uint32(os.Getgid())
@@ -91,6 +93,8 @@ func (node *DirectoryNode) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error
 }
 
 func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
+	fmt.Println("Remove request on directory", removeRequest.Name)
+
 	return nil // TODO SONARR SUPPORT
 
 	node.mu.Lock()
@@ -117,9 +121,9 @@ func (node *DirectoryNode) Remove(ctx context.Context, removeRequest *fuse.Remov
 }
 
 func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameRequest, newNode fs.Node) error {
-	node.mu.Lock()
+	fuseLogger.Infof("Rename request on directory %s: %v", node.directory.GetName())
 
-	fuseLogger.Infof("Rename request on directory %s: %v", node.directory.GetName(), request)
+	node.mu.Lock()
 
 	oldDirectory := node.directory.FindDirectory(request.OldName)
 	oldFile := node.directory.FindFile(request.OldName)
@@ -137,7 +141,7 @@ func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameReque
 	}
 
 	if oldFile != nil {
-		fmt.Println("Rename file", request.NewName)
+		fmt.Println("Rename file", request.NewName, "parent:", newParentDirectory.GetName())
 
 		node.fileSystem.VirtualFileSystem.RenameFile(oldFile, request.NewName, newParentDirectory)
 	}
@@ -154,12 +158,33 @@ func (node *DirectoryNode) Rename(ctx context.Context, request *fuse.RenameReque
 }
 
 func (node *DirectoryNode) Create(ctx context.Context, request *fuse.CreateRequest, response *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
-	node.mu.Lock()
-	defer node.mu.Unlock()
+	fmt.Println("Create request on directory", node.directory.GetName(), "new:", request.Name)
 
-	fileNode := NewFileNode(nil)
+	file := node.fileSystem.VirtualFileSystem.NewFile(node.directory, request.Name, "", "", 0)
 
-	fmt.Printf("Create request on directory %s: %v", node.directory.GetName(), request)
+	// node.fileSystem.InvalidateEntry(node.directory.GetIdentifier(), request.Name)
+
+	fileNode := NewFileNode(file)
 
 	return fileNode, fileNode, nil
+}
+
+func (node *DirectoryNode) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Node, error) {
+	fmt.Println("Mkdir request on directory", node.directory.GetName(), "new:", request.Name)
+
+	directory := node.fileSystem.VirtualFileSystem.NewDirectory(node.directory, request.Name)
+
+	// node.fileSystem.InvalidateEntry(node.directory.GetIdentifier(), request.Name)
+
+	return node.fileSystem.NewDirectoryNode(directory), nil
+}
+
+func (node *DirectoryNode) Link(ctx context.Context, request *fuse.LinkRequest, old fs.Node) (fs.Node, error) {
+	oldFile := old.(*FileNode).file
+
+	newFile := node.fileSystem.VirtualFileSystem.NewFile(node.directory, request.NewName, oldFile.GetVideoUrl(), oldFile.GetFetchUrl(), oldFile.GetSize())
+
+	// node.fileSystem.InvalidateEntry(node.directory.GetIdentifier(), request.NewName)
+
+	return NewFileNode(newFile), nil
 }

@@ -175,7 +175,7 @@ func (stream *Stream) Read(p []byte) (int, error) {
 
 	n, err := stream.buffer.ReadAt(p, seekPosition)
 	if err != nil {
-		fmt.Printf("ReadAt error %v\n", err)
+		return 0, fmt.Errorf("ReadAt error %v\n", err)
 	}
 
 	return n, err
