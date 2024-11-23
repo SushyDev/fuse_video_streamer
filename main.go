@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 
-	"debrid_drive/api"
-	"debrid_drive/fuse"
-	"debrid_drive/vfs"
+	"fuse_video_steamer/api"
+	"fuse_video_steamer/fuse"
+	"fuse_video_steamer/vfs"
 )
 
 const useVfs = true
@@ -29,11 +29,11 @@ func main() {
 
 	mountpoint := flag.Arg(0)
 
-	virtualFileSystem := vfs.NewVirtualFileSystem()
-	fuseFileSystem := fuse.NewFuseFileSystem(mountpoint, virtualFileSystem)
+	fileSystem := vfs.NewFileSystem()
+	fuseInstance := fuse.New(mountpoint, fileSystem)
 
-	go fuseFileSystem.Serve()
-	go api.Listen(fuseFileSystem)
+	go fuseInstance.Serve()
+	go api.Listen(fuseInstance)
 
 	done := make(chan bool)
 	<-done

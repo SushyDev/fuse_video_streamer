@@ -7,6 +7,8 @@ type Directory struct {
 	parent *Directory
 	index  *Index
 
+	fileSystem *FileSystem
+
 	// mu sync.RWMutex TODO
 }
 
@@ -22,6 +24,10 @@ func (directory *Directory) GetParent() *Directory {
 	return directory.parent
 }
 
+func (directory *Directory) GetFileSystem() *FileSystem {
+	return directory.fileSystem
+}
+
 // --- Directory
 
 func (directory *Directory) FindDirectory(name string) *Directory {
@@ -32,19 +38,11 @@ func (directory *Directory) ListDirectories() []*Directory {
 	return directory.index.listDirectories()
 }
 
+func (directory *Directory) RemoveDirectory(entry *Directory) {
+	directory.index.deregisterDirectory(entry)
+}
+
 // --- File
-
-func (directory *Directory) NewFile(entry *File) *File {
-	entry.parent = directory
-
-	directory.index.registerFile(entry)
-
-	return entry
-}
-
-func (directory *Directory) RemoveFile(entry *File) {
-	directory.index.deregisterFile(entry)
-}
 
 func (directory *Directory) FindFile(name string) *File {
 	return directory.index.findFile(name)
@@ -53,5 +51,3 @@ func (directory *Directory) FindFile(name string) *File {
 func (directory *Directory) ListFiles() []*File {
 	return directory.index.listFiles()
 }
-
-// --- Helpers

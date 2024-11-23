@@ -1,6 +1,6 @@
 version: '3.7'
 services:
-  debrid_drive:
+  fuse_video_steamer:
     build:
       context: .
       dockerfile: Dockerfile
@@ -18,7 +18,7 @@ services:
       - PGID=1000
       - UMASK=002
     volumes:
-      - ./debrid_drive:/app/data:rshared
+      - ./fuse_video_steamer:/app/data:rshared
       - ./database.db:/database.db
     devices:
       - /dev/fuse:/dev/fuse:rwm

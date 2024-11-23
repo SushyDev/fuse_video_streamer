@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"debrid_drive/logger"
-	"debrid_drive/stream/buffer"
+	"fuse_video_steamer/logger"
+	"fuse_video_steamer/stream/buffer"
 )
 
 type Stream struct {

@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 )
 
-type VirtualFileSystem struct {
+type FileSystem struct {
 	root      *Directory
 	IDCounter atomic.Uint64
 
@@ -13,10 +13,10 @@ type VirtualFileSystem struct {
 	// mu sync.RWMutex TODO
 }
 
-func NewVirtualFileSystem() *VirtualFileSystem {
+func NewFileSystem() *FileSystem {
 	index := newIndex()
 
-	fileSystem := &VirtualFileSystem{
+	fileSystem := &FileSystem{
 		index: index,
 	}
 
@@ -25,13 +25,13 @@ func NewVirtualFileSystem() *VirtualFileSystem {
 	return fileSystem
 }
 
-func (fileSystem *VirtualFileSystem) GetRoot() *Directory {
+func (fileSystem *FileSystem) GetRoot() *Directory {
 	return fileSystem.root
 }
 
 // --- Directory
 
-func (fileSystem *VirtualFileSystem) NewDirectory(parent *Directory, name string) *Directory {
+func (fileSystem *FileSystem) NewDirectory(parent *Directory, name string) *Directory {
 	id := fileSystem.IDCounter.Add(1)
 
 	index := newIndex()
@@ -41,6 +41,8 @@ func (fileSystem *VirtualFileSystem) NewDirectory(parent *Directory, name string
 		name:       name,
 		parent:     parent,
 		index:      index,
+
+		fileSystem: fileSystem,
 	}
 
 	fileSystem.index.registerDirectory(directory)
@@ -52,7 +54,7 @@ func (fileSystem *VirtualFileSystem) NewDirectory(parent *Directory, name string
 	return directory
 }
 
-func (fileSystem *VirtualFileSystem) RemoveDirectory(directory *Directory) {
+func (fileSystem *FileSystem) RemoveDirectory(directory *Directory) {
 	directory.index.close()
 
 	if directory.parent != nil {
@@ -62,7 +64,7 @@ func (fileSystem *VirtualFileSystem) RemoveDirectory(directory *Directory) {
 	fileSystem.index.deregisterDirectory(directory)
 }
 
-func (fileSystem *VirtualFileSystem) RenameDirectory(directory *Directory, name string, parent *Directory) *Directory {
+func (fileSystem *FileSystem) RenameDirectory(directory *Directory, name string, parent *Directory) *Directory {
 	if directory.parent != nil {
 		directory.parent.index.deregisterDirectory(directory)
 	}
@@ -77,30 +79,32 @@ func (fileSystem *VirtualFileSystem) RenameDirectory(directory *Directory, name 
 	return directory
 }
 
-func (fileSystem *VirtualFileSystem) GetDirectory(ID uint64) *Directory {
+func (fileSystem *FileSystem) GetDirectory(ID uint64) *Directory {
 	return fileSystem.index.getDirectory(ID)
 }
 
-func (fileSystem *VirtualFileSystem) FindDirectory(name string) *Directory {
+func (fileSystem *FileSystem) FindDirectory(name string) *Directory {
 	return fileSystem.index.findDirectory(name)
 }
 
-func (fileSystem *VirtualFileSystem) ListDirectories() []*Directory {
+func (fileSystem *FileSystem) ListDirectories() []*Directory {
 	return fileSystem.index.listDirectories()
 }
 
 // --- File
 
-func (fileSystem *VirtualFileSystem) NewFile(parent *Directory, name string, videoUrl string, fetchUrl string, size uint64) *File {
+func (fileSystem *FileSystem) NewFile(parent *Directory, name string, host string, fetchUrl string, size uint64) *File {
 	ID := fileSystem.IDCounter.Add(1)
 
 	file := &File{
 		identifier: ID,
 		name:       name,
-		videoUrl:   videoUrl,
-		fetchUrl:   fetchUrl,
+		videoUrl:   host,
+		host:       fetchUrl,
 		size:       size,
 		parent:     parent,
+
+		fileSystem: fileSystem,
 	}
 
 	fileSystem.index.registerFile(file)
@@ -109,10 +113,17 @@ func (fileSystem *VirtualFileSystem) NewFile(parent *Directory, name string, vid
 		parent.index.registerFile(file)
 	}
 
+	// event := &Event{
+	//     EventType: EventFileCreated,
+	//     File: file,
+	// }
+	//
+	// http.NewRequest("GET", fetchUrl, event)
+
 	return file
 }
 
-func (fileSystem *VirtualFileSystem) RemoveFile(file *File) {
+func (fileSystem *FileSystem) RemoveFile(file *File) {
 	if file.parent != nil {
 		file.parent.index.deregisterFile(file)
 	}
@@ -120,7 +131,7 @@ func (fileSystem *VirtualFileSystem) RemoveFile(file *File) {
 	fileSystem.index.deregisterFile(file)
 }
 
-func (fileSystem *VirtualFileSystem) RenameFile(file *File, name string, parent *Directory) *File {
+func (fileSystem *FileSystem) RenameFile(file *File, name string, parent *Directory) *File {
 	if file.parent != nil {
 		file.parent.index.deregisterFile(file)
 	}
@@ -135,10 +146,10 @@ func (fileSystem *VirtualFileSystem) RenameFile(file *File, name string, parent 
 	return file
 }
 
-func (fileSystem *VirtualFileSystem) GetFile(ID uint64) *File {
+func (fileSystem *FileSystem) GetFile(ID uint64) *File {
 	return fileSystem.index.getFile(ID)
 }
 
-func (fileSystem *VirtualFileSystem) FindFile(name string) *File {
+func (fileSystem *FileSystem) FindFile(name string) *File {
 	return fileSystem.index.findFile(name)
 }

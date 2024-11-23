@@ -1,8 +1,8 @@
 package vfs
 
 import (
-	"debrid_drive/stream"
 	"fmt"
+	"fuse_video_steamer/stream"
 	"io"
 	"net/http"
 	"sync"
@@ -12,11 +12,13 @@ type File struct {
 	identifier uint64
 	name       string
 	videoUrl   string
-	fetchUrl   string
+	host       string
 	size       uint64
 	parent     *Directory
 
 	videoStreams sync.Map // map[uint64]*stream.Stream // map of video streams per PID
+
+	fileSystem *FileSystem
 
 	// mu sync.RWMutex TODO
 }
@@ -41,20 +43,12 @@ func (file *File) SetSize(size uint64) {
 	file.size = size
 }
 
-func (file *File) GetFetchUrl() string {
-	return file.fetchUrl
-}
-
-func (file *File) SetFetchUrl(fetchUrl string) {
-	file.fetchUrl = fetchUrl
+func (file *File) GetHost() string {
+	return file.host
 }
 
 func (file *File) GetVideoUrl() string {
 	return file.videoUrl
-}
-
-func (file *File) SetVideoUrl(videoUrl string) {
-	file.videoUrl = videoUrl
 }
 
 func (file *File) Read(p []byte, offset int64, pid uint32) (int, error) {
@@ -97,8 +91,8 @@ func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 		return existingVideoStream.(*stream.Stream), nil
 	}
 
-	if file.videoUrl == "" && file.fetchUrl != "" {
-		videoUrl, err := fetchVideoUrl(file.fetchUrl)
+	if file.videoUrl == "" && file.host != "" {
+		videoUrl, err := fetchVideoUrl(file.host)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch video URL: %w", err)
 		}
@@ -117,8 +111,8 @@ func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 
 // Fetch video URL from the fetch URL
 // TODO Fetch video URL AND video size
-func fetchVideoUrl(fetchUrl string) (string, error) {
-	response, err := http.Get(fetchUrl)
+func fetchVideoUrl(host string) (string, error) {
+	response, err := http.Get(host)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch video URL: %w", err)
 	}

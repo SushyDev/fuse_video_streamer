@@ -4,22 +4,24 @@ import (
 	"context"
 	"net"
 
-	"debrid_drive/fuse"
-	"debrid_drive/logger"
+	"fuse_video_steamer/fuse"
+	"fuse_video_steamer/logger"
 
 	"google.golang.org/grpc"
 )
 
 type GrpcServer struct {
-	fileSystem *fuse.FuseFileSystem
+	fuse *fuse.Fuse
 
 	UnimplementedFileSystemServer
 }
 
 var apiLogger, _ = logger.GetLogger(logger.ApiLogPath)
 
-func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirectoryRequest) (*DirectoryResponse, error) {
-	parent := server.fileSystem.VirtualFileSystem.GetDirectory(request.ParentNodeId)
+func (grpc *GrpcServer) AddDirectory(ctx context.Context, request *AddDirectoryRequest) (*DirectoryResponse, error) {
+	fileSystem := grpc.fuse.GetVirtualFileSystem()
+
+	parent := fileSystem.GetDirectory(request.ParentNodeId)
 	if parent == nil {
 		message := "Could not find parent directory"
 
@@ -35,9 +37,9 @@ func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirector
 		}, nil
 	}
 
-	newDirectory := server.fileSystem.VirtualFileSystem.NewDirectory(parent, request.Name)
+	newDirectory := fileSystem.NewDirectory(parent, request.Name)
 
-	server.fileSystem.InvalidateEntry(parent.GetIdentifier(), newDirectory.GetName())
+	// server.InvalidateEntry(parent, newDirectory.GetName())
 
 	return &DirectoryResponse{
 		NodeId:  newDirectory.GetIdentifier(),
@@ -46,8 +48,10 @@ func (server *GrpcServer) AddDirectory(ctx context.Context, request *AddDirector
 	}, nil
 }
 
-func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDirectoryRequest) (*DirectoryResponse, error) {
-	directory := server.fileSystem.VirtualFileSystem.GetDirectory(request.NodeId)
+func (grpc *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDirectoryRequest) (*DirectoryResponse, error) {
+	virtualFileSystem := grpc.fuse.GetVirtualFileSystem()
+
+	directory := virtualFileSystem.GetDirectory(request.NodeId)
 	if directory == nil {
 		message := "Could not find directory"
 
@@ -65,9 +69,9 @@ func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDi
 
 	parent := directory.GetParent()
 
-	server.fileSystem.VirtualFileSystem.RenameDirectory(directory, request.Name, parent)
+	virtualFileSystem.RenameDirectory(directory, request.Name, parent)
 
-	server.fileSystem.InvalidateEntry(directory.GetParent().GetIdentifier(), directory.GetName())
+	// server.fuse.InvalidateEntry(directory.GetParent().GetIdentifier(), directory.GetName())
 
 	return &DirectoryResponse{
 		NodeId:  directory.GetIdentifier(),
@@ -76,8 +80,10 @@ func (server *GrpcServer) RenameDirectory(ctx context.Context, request *RenameDi
 	}, nil
 }
 
-func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDirectoryRequest) (*DirectoryResponse, error) {
-	directory := server.fileSystem.VirtualFileSystem.GetDirectory(request.NodeId)
+func (grpc *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDirectoryRequest) (*DirectoryResponse, error) {
+	virtualFileSystem := grpc.fuse.GetVirtualFileSystem()
+
+	directory := virtualFileSystem.GetDirectory(request.NodeId)
 	if directory == nil {
 		message := "Could not find directory"
 
@@ -93,9 +99,9 @@ func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDi
 		}, nil
 	}
 
-	server.fileSystem.VirtualFileSystem.RemoveDirectory(directory)
+	virtualFileSystem.RemoveDirectory(directory)
 
-	server.fileSystem.InvalidateEntry(directory.GetParent().GetIdentifier(), directory.GetName())
+	// server.fuse.InvalidateEntry(directory.GetParent().GetIdentifier(), directory.GetName())
 
 	return &DirectoryResponse{
 		NodeId:  directory.GetIdentifier(),
@@ -104,8 +110,10 @@ func (server *GrpcServer) RemoveDirectory(ctx context.Context, request *RemoveDi
 	}, nil
 }
 
-func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) (*FileResponse, error) {
-	parent := server.fileSystem.VirtualFileSystem.GetDirectory(request.ParentNodeId)
+func (grpc *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) (*FileResponse, error) {
+	virtualFileSystem := grpc.fuse.GetVirtualFileSystem()
+
+	parent := virtualFileSystem.GetDirectory(request.ParentNodeId)
 	if parent == nil {
 		message := "Could not find parent directory"
 
@@ -121,9 +129,9 @@ func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) 
 		}, nil
 	}
 
-	newFile := server.fileSystem.VirtualFileSystem.NewFile(parent, request.Name, request.VideoUrl, request.FetchUrl, request.FileSize)
+	newFile := virtualFileSystem.NewFile(parent, request.Name, request.VideoUrl, request.FetchUrl, request.FileSize)
 
-	server.fileSystem.InvalidateEntry(parent.GetIdentifier(), newFile.GetName())
+	// server.fuse.InvalidateEntry(parent.GetIdentifier(), newFile.GetName())
 
 	return &FileResponse{
 		NodeId:  newFile.GetIdentifier(),
@@ -132,8 +140,10 @@ func (server *GrpcServer) AddFile(ctx context.Context, request *AddFileRequest) 
 	}, nil
 }
 
-func (server *GrpcServer) RenameFile(ctx context.Context, request *RenameFileRequest) (*FileResponse, error) {
-	file := server.fileSystem.VirtualFileSystem.GetFile(request.NodeId)
+func (grpc *GrpcServer) RenameFile(ctx context.Context, request *RenameFileRequest) (*FileResponse, error) {
+	virtualFileSystem := grpc.fuse.GetVirtualFileSystem()
+
+	file := virtualFileSystem.GetFile(request.NodeId)
 	if file == nil {
 		message := "Could not find file"
 
@@ -151,7 +161,7 @@ func (server *GrpcServer) RenameFile(ctx context.Context, request *RenameFileReq
 
 	file.Rename(request.Name)
 
-	server.fileSystem.InvalidateNode(file.GetIdentifier())
+	// server.fuse.InvalidateNode(file.GetIdentifier())
 
 	return &FileResponse{
 		NodeId:  file.GetIdentifier(),
@@ -160,8 +170,10 @@ func (server *GrpcServer) RenameFile(ctx context.Context, request *RenameFileReq
 	}, nil
 }
 
-func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileRequest) (*FileResponse, error) {
-	file := server.fileSystem.VirtualFileSystem.GetFile(request.NodeId)
+func (grpc *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileRequest) (*FileResponse, error) {
+	virtualFileSystem := grpc.fuse.GetVirtualFileSystem()
+
+	file := virtualFileSystem.GetFile(request.NodeId)
 	if file == nil {
 		message := "Could not find file"
 
@@ -177,9 +189,9 @@ func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileReq
 		}, nil
 	}
 
-	server.fileSystem.VirtualFileSystem.RemoveFile(file)
+	virtualFileSystem.RemoveFile(file)
 
-	server.fileSystem.InvalidateNode(file.GetIdentifier())
+	// server.fuse.InvalidateNode(file.GetIdentifier())
 
 	return &FileResponse{
 		NodeId:  file.GetIdentifier(),
@@ -188,7 +200,7 @@ func (server *GrpcServer) RemoveFile(ctx context.Context, request *RemoveFileReq
 	}, nil
 }
 
-func Listen(fileSystem *fuse.FuseFileSystem) {
+func Listen(fileSystem *fuse.Fuse) {
 	listener, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		apiLogger.Fatalf("failed to listen: %v", err)
@@ -197,7 +209,7 @@ func Listen(fileSystem *fuse.FuseFileSystem) {
 	grpcServer := grpc.NewServer()
 
 	RegisterFileSystemServer(grpcServer, &GrpcServer{
-		fileSystem: fileSystem,
+		fuse: fileSystem,
 	})
 
 	apiLogger.Infof("Starting server on port :50051")

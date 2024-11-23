@@ -1,31 +1,34 @@
 package fuse
 
 import (
-	"debrid_drive/logger"
-	"debrid_drive/vfs"
-	"fmt"
+	"fuse_video_steamer/fuse/filesystem"
+	"fuse_video_steamer/logger"
+	"fuse_video_steamer/vfs"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
+	"go.uber.org/zap"
 )
 
-var fuseLogger, _ = logger.GetLogger(logger.FuseLogPath)
-
-var _ fs.FS = &FuseFileSystem{}
-
-type FuseFileSystem struct {
-	VirtualFileSystem *vfs.VirtualFileSystem
-	NodeMap           map[uint64]*fs.Node
-
-	connection *fuse.Conn
+type Fuse struct {
+	fileSystem *vfs.FileSystem
+	server     *fs.Server
+	logger     *zap.SugaredLogger
 }
 
-func NewFuseFileSystem(mountpoint string, vfs *vfs.VirtualFileSystem) *FuseFileSystem {
+func New(mountpoint string, fileSystem *vfs.FileSystem) *Fuse {
+	fuseLogger, err := logger.GetLogger(logger.FuseLogPath)
+	if err != nil {
+		panic(err)
+	}
+
+	fuseLogger.Info("Creating FUSE instance")
+
 	connection, err := fuse.Mount(
 		mountpoint,
-		fuse.VolumeName("debrid_drive"),
-		fuse.Subtype("debrid_drive"),
-		fuse.FSName("debrid_drive"),
+		fuse.VolumeName("fuse_video_steamer"),
+		fuse.Subtype("fuse_video_steamer"),
+		fuse.FSName("fuse_video_steamer"),
 
 		fuse.LocalVolume(),
 		fuse.AllowOther(),
@@ -39,54 +42,30 @@ func NewFuseFileSystem(mountpoint string, vfs *vfs.VirtualFileSystem) *FuseFileS
 		fuseLogger.Fatalf("Failed to create FUSE mount: %v", err)
 	}
 
-	fuseFileSystem := &FuseFileSystem{
-		connection:        connection,
-		VirtualFileSystem: vfs,
-	}
-
-	return fuseFileSystem
-}
-
-func (fileSystem *FuseFileSystem) Root() (fs.Node, error) {
-	rootDirectory := fileSystem.VirtualFileSystem.GetRoot()
-
-	root := fileSystem.NewDirectoryNode(rootDirectory)
-
-	return root, nil
-}
-
-func (fileSystem *FuseFileSystem) Serve() {
-	fuseLogger.Info("Serving FUSE filesystem")
-
-	err := fs.Serve(fileSystem.connection, fileSystem)
-	if err != nil {
-		fuseLogger.Fatalf("Failed to serve FUSE filesystem: %v", err)
-	}
-}
-
-func (fileSystem *FuseFileSystem) NewDirectoryNode(directory *vfs.Directory) *DirectoryNode {
-	return &DirectoryNode{
-		directory:  directory,
+	return &Fuse{
+		server:     fs.New(connection, nil),
 		fileSystem: fileSystem,
+		logger:     fuseLogger,
 	}
 }
 
-func (fileSystem *FuseFileSystem) InvalidateEntry(parentID uint64, name string) {
-	fileSystem.connection.InvalidateEntry(getNodeID(parentID), name)
-}
+func (fuse *Fuse) Serve() {
+	fuse.logger.Info("Serving FUSE filesystem")
 
-func (fileSystem *FuseFileSystem) InvalidateNode(ID uint64) {
-	fileSystem.connection.InvalidateNode(getNodeID(ID), 0, 0)
-}
+	fileSystem := filesystem.New(fuse.fileSystem)
 
-func (fileSystem *FuseFileSystem) GetNode(ID uint64) (*fs.Node, error) {
-	for nodeID, node := range fileSystem.NodeMap {
-		if nodeID == ID {
-			return node, nil
-		}
+	err := fuse.server.Serve(fileSystem)
+	if err != nil {
+		fuse.logger.Fatalf("Failed to serve FUSE filesystem: %v", err)
 	}
+}
 
-	return nil, fmt.Errorf("Node with ID %d not found", ID)
+func (fuse *Fuse) GetVirtualFileSystem() *vfs.FileSystem {
+	return fuse.fileSystem
+}
+
+func (fuse *Fuse) GetServer() *fs.Server {
+	return fuse.server
 }
 
 func getNodeID(ID uint64) fuse.NodeID {
