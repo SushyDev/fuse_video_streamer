@@ -47,7 +47,7 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 	fuseFile.mu.RLock()
 	defer fuseFile.mu.RUnlock()
 
-	vfsFile, err := fuseFile.getVfsFile()
+	vfsFile, err := fuseFile.getFile()
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	virtualFileSystemFile, err := fuseFile.getVfsFile()
+	virtualFileSystemFile, err := fuseFile.getFile()
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 	fuseFile.mu.Lock()
 	defer fuseFile.mu.Unlock()
 
-	vfsFile, err := fuseFile.getVfsFile()
+	vfsFile, err := fuseFile.getFile()
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	fuseFile.mu.RLock()
 	defer fuseFile.mu.RUnlock()
 
-	vfsFile, err := fuseFile.getVfsFile()
+	vfsFile, err := fuseFile.getFile()
 	if err != nil {
 		fmt.Println("File is nil")
 		readResponse.Data = []byte("This file was created to verify if '/Users/sushy/Documents/Projects/fuse_video_steamer/mnt' is writable. It should've been automatically deleted. Feel free to delete it.")
@@ -136,7 +136,7 @@ func (fuseFile *File) Write(ctx context.Context, writeRequest *fuse.WriteRequest
 // --- Helpers
 
 // TODO: Call only once in constructor
-func (fuseFile *File) getVfsFile() (*vfs_node.File, error) {
+func (fuseFile *File) getFile() (*vfs_node.File, error) {
 	vfsFile, err := fuseFile.vfs.GetFile(fuseFile.identifier)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file: %w", err)

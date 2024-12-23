@@ -16,16 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ fs.Node = &Directory{}
 var _ fs.Handle = &Directory{}
-var _ fs.NodeOpener = &Directory{}
-var _ fs.NodeRequestLookuper = &Directory{}
-var _ fs.HandleReadDirAller = &Directory{}
-var _ fs.NodeRemover = &Directory{}
-var _ fs.NodeRenamer = &Directory{}
-var _ fs.NodeCreater = &Directory{}
-var _ fs.NodeMkdirer = &Directory{}
-var _ fs.NodeLinker = &Directory{}
 
 type Directory struct {
 	vfs        *vfs.FileSystem
@@ -46,7 +37,12 @@ func NewDirectory(vfs *vfs.FileSystem, identifier uint64) *Directory {
 	}
 }
 
+var _ fs.Node = &Directory{}
+
 func (fuseDirectory *Directory) Attr(ctx context.Context, attr *fuse.Attr) error {
+	fuseDirectory.mu.RLock()
+	defer fuseDirectory.mu.RUnlock()
+
 	attr.Inode = fuseDirectory.identifier
 	attr.Mode = os.ModeDir | 0o777
 	attr.Valid = 1
@@ -61,11 +57,18 @@ func (fuseDirectory *Directory) Attr(ctx context.Context, attr *fuse.Attr) error
 	return nil
 }
 
+var _ fs.NodeOpener = &Directory{}
+
 func (fuseDirectory *Directory) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+	fuseDirectory.mu.RLock()
+	defer fuseDirectory.mu.RUnlock()
+
 	return fuseDirectory, nil
 }
 
 // Todo Inode matching
+var _ fs.NodeRequestLookuper = &Directory{}
+
 func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
 	fuseDirectory.mu.RLock()
 	defer fuseDirectory.mu.RUnlock()
@@ -76,30 +79,29 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 		return nil, err
 	}
 
-	childFile, err := fuseDirectory.vfs.FindFile(lookupRequest.Name, directory)
+	childNode, err := fuseDirectory.vfs.GetChildNode(lookupRequest.Name, directory)
 	if err != nil {
-		log.Printf("Lookup: Failed to find file\n%v", err)
+		log.Printf("Lookup: Failed to get child node\n%v", err)
 		return nil, err
 	}
 
-	if childFile != nil {
-		identifier := childFile.GetNode().GetIdentifier()
+	if childNode == nil {
+		return nil, syscall.ENOENT
+	}
+
+	switch childNode.GetType() {
+	case vfs_node.FileNode:
+		identifier := childNode.GetIdentifier()
 		return NewFile(fuseDirectory.vfs, identifier), nil
-	}
-
-	childDirectory, err := fuseDirectory.vfs.FindDirectory(lookupRequest.Name, directory)
-	if err != nil {
-		log.Printf("Lookup: Failed to find directory\n%v", err)
-		return nil, err
-	}
-
-	if childDirectory != nil {
-		identifier := childDirectory.GetNode().GetIdentifier()
+	case vfs_node.DirectoryNode:
+		identifier := childNode.GetIdentifier()
 		return NewDirectory(fuseDirectory.vfs, identifier), nil
 	}
 
 	return nil, syscall.ENOENT
 }
+
+var _ fs.HandleReadDirAller = &Directory{}
 
 func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	fuseDirectory.mu.RLock()
@@ -108,17 +110,17 @@ func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, 
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
 		log.Printf("Failed to get directory\n%v", err)
-		return nil, syscall.ENOENT
-	}
-
-	var entries []fuse.Dirent
-
-	childNodes, err := fuseDirectory.vfs.GetChildNodes(directory)
-	if err != nil {
-		log.Print(err)
 		return nil, err
 	}
 
+
+	childNodes, err := fuseDirectory.vfs.GetChildNodes(directory)
+	if err != nil {
+		log.Printf("Failed to get child nodes\n%v", err)
+		return nil, err
+	}
+
+	var entries []fuse.Dirent
 	for _, childNode := range childNodes {
 		switch childNode.GetType() {
 		case vfs_node.FileNode:
@@ -139,76 +141,133 @@ func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, 
 	return entries, nil
 }
 
+var _ fs.NodeRemover = &Directory{}
+
 func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
-	fmt.Println("Remove request on directory", removeRequest.Name)
-
-	return nil // TODO SONARR SUPPORT
-
-	fuseDirectory.mu.Lock()
-
-	// if removeRequest.Dir {
-	// 	entry := node.directory.FindDirectoryByName(removeRequest.Name)
-	// } else {
-	// 	entry := node.directory.FindFileByName(removeRequest.Name)
-	// }
-
-	fuseDirectory.mu.Unlock()
-
-	directory, err := fuseDirectory.getDirectory()
-	if err != nil {
-		return err
-	}
-
-	_, err = fuseDirectory.ReadDirAll(ctx)
-	if err != nil {
-		fuseDirectory.logger.Errorf("Failed to read directory %s\n%v", directory.GetNode().GetName(), err)
-		return err
-	}
-
-	return nil
-}
-
-func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.RenameRequest, newNode fs.Node) error {
-	fmt.Println("Rename request on entry", request.OldName, "new:", request.NewName)
-	return nil
-
-	directory, err := fuseDirectory.getDirectory()
-	if err != nil {
-		return err
-	}
-
-	fuseDirectory.logger.Infof("Rename request on directory %s\n%v", directory.GetNode().GetName())
-
-	fuseDirectory.mu.Lock()
-
-	// oldFile := fuseDirectory.vfs.FindNodeByName(request.OldName)
-	// if oldFile == nil {
-	// 	return syscall.ENOENT
-	// }
-	//
-	// newDirectory, err := newNode.(*Directory).getDirectory()
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// oldFile.Move(newDirectory, request.NewName)
-
-	fuseDirectory.mu.Unlock()
-
-	return nil
-}
-
-func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.CreateRequest, response *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
-	directory, err := fuseDirectory.getDirectory()
-	if err != nil {
-		return nil, nil, err
-	}
-
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
+	directory, err := fuseDirectory.getDirectory()
+	if err != nil {
+        log.Printf("Failed to get directory\n%v", err)
+		return err
+	}
+
+	childNode, err := fuseDirectory.vfs.GetChildNode(removeRequest.Name, directory)
+	if err != nil {
+        log.Printf("Failed to get child node\n%v", err)
+		return err
+	}
+
+	if childNode == nil {
+        log.Printf("Failed to get child node\n%v", syscall.ENOENT)
+		return syscall.ENOENT
+	}
+
+	switch childNode.GetType() {
+	case vfs_node.FileNode:
+		file, err := fuseDirectory.vfs.GetFile(childNode.GetIdentifier())
+		if err != nil {
+            log.Printf("Failed to get file\n%v", err)
+			return err
+		}
+
+		err = fuseDirectory.vfs.DeleteFile(file)
+		if err != nil {
+            log.Printf("Failed to delete file\n%v", err)
+			return err
+		}
+	case vfs_node.DirectoryNode:
+		directory, err := fuseDirectory.vfs.GetDirectory(childNode.GetIdentifier())
+		if err != nil {
+            log.Printf("Failed to get directory\n%v", err)
+			return err
+		}
+
+		err = fuseDirectory.vfs.DeleteDirectory(directory)
+		if err != nil {
+            log.Printf("Failed to delete directory\n%v", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+var _ fs.NodeRenamer = &Directory{}
+
+func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.RenameRequest, newNode fs.Node) error {
+	fuseDirectory.mu.Lock()
+	defer fuseDirectory.mu.Unlock()
+
+	directory, err := fuseDirectory.getDirectory()
+	if err != nil {
+        log.Printf("Failed to get directory\n%v", err)
+		return err
+	}
+
+	newParent, err := newNode.(*Directory).getDirectory()
+	if err != nil {
+        log.Printf("Failed to get new parent\n%v", err)
+		return err
+	}
+
+	childNode, err := fuseDirectory.vfs.GetChildNode(request.OldName, directory)
+	if err != nil {
+        log.Printf("Failed to get child node\n%v", err)
+		return err
+	}
+
+	if childNode == nil {
+        log.Printf("Failed to get child node\n%v", syscall.ENOENT)
+		return syscall.ENOENT
+	}
+
+	switch childNode.GetType() {
+	case vfs_node.FileNode:
+		file, err := fuseDirectory.vfs.GetFile(childNode.GetIdentifier())
+		if err != nil {
+            log.Printf("Failed to get file\n%v", err)
+			return err
+		}
+
+		_, err = fuseDirectory.vfs.UpdateFile(file, request.NewName, newParent, file.GetSize(), file.GetHost())
+		if err != nil {
+            log.Printf("Failed to update file\n%v", err)
+			return err
+		}
+	case vfs_node.DirectoryNode:
+		directory, err := fuseDirectory.vfs.GetDirectory(childNode.GetIdentifier())
+		if err != nil {
+            log.Printf("Failed to get directory\n%v", err)
+			return err
+		}
+
+		_, err = fuseDirectory.vfs.UpdateDirectory(directory, request.NewName, newParent)
+		if err != nil {
+            log.Printf("Failed to update directory\n%v", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+var _ fs.NodeCreater = &Directory{}
+
+func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.CreateRequest, response *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
+	fuseDirectory.mu.Lock()
+	defer fuseDirectory.mu.Unlock()
+
+	directory, err := fuseDirectory.getDirectory()
+	if err != nil {
+        log.Printf("Failed to get directory\n%v", err)
+		return nil, nil, err
+	}
+
 	newFile, err := fuseDirectory.vfs.CreateFile(request.Name, directory, 0, "")
 	if err != nil {
+        log.Printf("Failed to create file\n%v", err)
 		return nil, nil, err
 	}
 
@@ -217,53 +276,65 @@ func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.Create
 	return fuseDirectory, newFileNode, nil
 }
 
+var _ fs.NodeMkdirer = &Directory{}
+
 func (fuseDirectory *Directory) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Node, error) {
+	fuseDirectory.mu.Lock()
+	defer fuseDirectory.mu.Unlock()
+
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
+        log.Printf("Failed to get directory\n%v", err)
 		return nil, err
 	}
-
-	fmt.Println("Mkdir request on directory", directory.GetNode().GetName(), "new:", request.Name)
-
-	fuseDirectory.mu.Lock()
 
 	newDirectory, err := fuseDirectory.vfs.CreateDirectory(request.Name, directory)
 	if err != nil {
+        log.Printf("Failed to create directory\n%v", err)
 		return nil, err
 	}
-
-	fuseDirectory.mu.Unlock()
 
 	newDirectoryNode := NewDirectory(fuseDirectory.vfs, newDirectory.GetNode().GetIdentifier())
 
 	return newDirectoryNode, nil
 }
 
+var _ fs.NodeLinker = &Directory{}
+
 func (fuseDirectory *Directory) Link(ctx context.Context, request *fuse.LinkRequest, node fs.Node) (fs.Node, error) {
-	//    fileSystemDirectory, err := fuseDirectory.getDirectory()
-	//    if err != nil {
-	//        return nil, err
-	//    }
-	//
-	// fmt.Println("Link request on directory", fileSystemDirectory, "new:", request.NewName)
-	//
-	//    fuseDirectory.mu.Lock()
-	//
-	// oldNode, ok := node.(*File)
-	//    if !ok {
-	//        return nil, syscall.EINVAL
-	//    }
-	//
-	//    // todo
-	//    // get generic node entry from vfs
-	//    // call link on generic entry
-	//
-	//    newNode := oldNode.Link(fileSystemDirectory, request.NewName)
-	//
-	//    fuseDirectory.mu.Unlock()
-	//
-	// return NewFile(newNode), nil
-	return nil, nil
+	fuseDirectory.mu.Lock()
+	defer fuseDirectory.mu.Unlock()
+
+	directory, err := fuseDirectory.getDirectory()
+	if err != nil {
+        log.Printf("Failed to get directory\n%v", err)
+		return nil, err
+	}
+
+    node, ok := node.(*File)
+    if !ok {
+        log.Printf("Failed to get file\n%v", syscall.EINVAL)
+        return nil, syscall.EINVAL
+    }
+
+    file, err := node.(*File).getFile()
+    if err != nil {
+        log.Printf("Failed to get file\n%v", err)
+        return nil, err
+    }
+
+
+    fmt.Println("Linking file", file.GetNode().GetName())
+
+    newFile, err := fuseDirectory.vfs.UpdateFile(file, request.NewName, directory, file.GetSize(), file.GetHost())
+    if err != nil {
+        log.Printf("Failed to update file\n%v", err)
+        return nil, err
+    }
+
+    newFileNode := NewFile(fuseDirectory.vfs, newFile.GetNode().GetIdentifier())
+
+	return newFileNode, nil
 }
 
 // --- Helpers

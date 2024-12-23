@@ -69,7 +69,6 @@ func initializeDatabase() (*sql.DB, error) {
             node_id INTEGER NOT NULL,
             size INTEGER NOT NULL,
             host TEXT NOT NULL,
-            video_url TEXT,
 
             FOREIGN KEY(node_id) REFERENCES nodes(id) ON DELETE CASCADE
         );

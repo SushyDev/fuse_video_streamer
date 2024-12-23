@@ -184,6 +184,26 @@ func (service *DirectoryService) FindDirectory(name string, parent *vfs_node.Dir
 	return directory, nil
 }
 
+func (service *DirectoryService) GetChildNode(name string, parent *vfs_node.Directory) (*vfs_node.Node, error) {
+    service.mu.RLock()
+    defer service.mu.RUnlock()
+
+    query := `
+        SELECT id, name, parent_id, type
+        FROM nodes
+        WHERE name = ? AND parent_id = ?
+    `
+
+    row := service.db.QueryRow(query, name, parent.GetNode().GetIdentifier())
+
+    node, err := getNodeFromRow(row)
+    if err != nil {
+        return nil, fmt.Errorf("Failed to get node from row\n%w", err)
+    }
+
+    return node, nil
+}
+
 func (service *DirectoryService) GetChildNodes(parent *vfs_node.Directory) ([]*vfs_node.Node, error) {
 	service.mu.RLock()
 	defer service.mu.RUnlock()
@@ -224,6 +244,10 @@ func getNodeFromRow(row row) (*vfs_node.Node, error) {
 
 	err := row.Scan(&identifier, &name, &parentIdentifier, &nodeTypeStr)
 	if err != nil {
+        if err == sql.ErrNoRows {
+            return nil, nil
+        }
+
 		return nil, fmt.Errorf("Failed to scan directory\n%w", err)
 	}
 

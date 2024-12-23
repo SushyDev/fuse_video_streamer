@@ -2,3 +2,4 @@ logs
 api/fuse.pb.go
 api/fuse_grpc.pb.go
 mnt
+*.db
