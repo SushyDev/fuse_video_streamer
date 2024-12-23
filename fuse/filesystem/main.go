@@ -9,8 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ fs.FS = &FileSystem{}
-
 type FileSystem struct {
 	fileSystem *vfs.FileSystem
 	logger     *zap.SugaredLogger
@@ -25,6 +23,8 @@ func New(fileSystem *vfs.FileSystem) *FileSystem {
 	}
 
 }
+
+var _ fs.FS = &FileSystem{}
 
 func (fileSystem *FileSystem) Root() (fs.Node, error) {
 	vfsRoot := fileSystem.fileSystem.GetRoot()

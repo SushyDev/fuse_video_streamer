@@ -6,22 +6,17 @@ import (
 	"os"
 	"sync"
 	"syscall"
-	"time"
-
-	"github.com/anacrolix/fuse"
-	"github.com/anacrolix/fuse/fs"
-	"go.uber.org/zap"
 
 	"fuse_video_steamer/logger"
 	"fuse_video_steamer/vfs"
 	vfs_node "fuse_video_steamer/vfs/node"
+
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
+	"go.uber.org/zap"
 )
 
-var _ fs.Node = &File{}
-var _ fs.NodeOpener = &File{}
 var _ fs.Handle = &File{}
-var _ fs.HandleReader = &File{}
-var _ fs.HandleWriter = &File{}
 var _ fs.HandleReleaser = &File{}
 
 type File struct {
@@ -43,22 +38,21 @@ func NewFile(vfs *vfs.FileSystem, identifier uint64) *File {
 	}
 }
 
+var _ fs.Node = &File{}
+
 func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 	fuseFile.mu.RLock()
 	defer fuseFile.mu.RUnlock()
 
 	vfsFile, err := fuseFile.getFile()
 	if err != nil {
+		fuseFile.logger.Infof("Attr: Failed to get file: %v", err)
 		return err
 	}
 
-	attr.Size = vfsFile.GetSize()
-	attr.Inode = vfsFile.GetNode().GetIdentifier()
+	attr.Inode = fuseFile.identifier
 	attr.Mode = os.ModePerm | 0o777
-
-	attr.Atime = time.Unix(0, 0)
-	attr.Mtime = time.Unix(0, 0)
-	attr.Ctime = time.Unix(0, 0)
+	attr.Size = vfsFile.GetSize()
 
 	attr.Gid = uint32(os.Getgid())
 	attr.Uid = uint32(os.Getuid())
@@ -66,34 +60,15 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
+var _ fs.NodeOpener = &File{}
+
 func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	virtualFileSystemFile, err := fuseFile.getFile()
-	if err != nil {
-		return nil, err
-	}
-
-	fuseFile.logger.Infof("Opening file %s - %d", virtualFileSystemFile.GetNode().GetName(), virtualFileSystemFile.GetNode().GetIdentifier())
-
 	openResponse.Flags |= fuse.OpenKeepCache
 
 	return fuseFile, nil
 }
 
-func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
-	fuseFile.mu.Lock()
-	defer fuseFile.mu.Unlock()
-
-	vfsFile, err := fuseFile.getFile()
-	if err != nil {
-		return err
-	}
-
-	fuseFile.logger.Infof("Releasing file %s", vfsFile.GetNode().GetName())
-
-	vfsFile.Close()
-
-	return nil
-}
+var _ fs.HandleReader = &File{}
 
 func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
 	fuseFile.mu.RLock()
@@ -101,12 +76,13 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 
 	vfsFile, err := fuseFile.getFile()
 	if err != nil {
-		fmt.Println("File is nil")
+		fuseFile.logger.Infof("Read: Failed to get file: %v", err)
 		readResponse.Data = []byte("This file was created to verify if '/Users/sushy/Documents/Projects/fuse_video_steamer/mnt' is writable. It should've been automatically deleted. Feel free to delete it.")
 		return nil
 	}
 
 	if readRequest.Dir {
+		fuseFile.logger.Infof("Read: Read request is for a directory")
 		return fmt.Errorf("read request is for a directory")
 	}
 
@@ -114,7 +90,8 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		buffer := make([]byte, readRequest.Size)
 		bytesRead, err := vfsFile.Read(buffer, readRequest.Offset, readRequest.Pid)
 		if err != nil {
-			return fmt.Errorf("failed to read from file: %w", err)
+			fuseFile.logger.Infof("Read: Failed to read file: %v", err)
+			return err
 		}
 
 		readResponse.Data = buffer[:bytesRead]
@@ -123,12 +100,33 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	return nil
 }
 
+var _ fs.HandleWriter = &File{}
+
 func (fuseFile *File) Write(ctx context.Context, writeRequest *fuse.WriteRequest, writeResponse *fuse.WriteResponse) error {
 	fuseFile.mu.RLock()
 	defer fuseFile.mu.RUnlock()
 
 	// TODO SONARR SUPPORT
 	writeResponse.Size = len(writeRequest.Data)
+
+	return nil
+}
+
+var _ fs.HandleReleaser = &File{}
+
+func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
+	fuseFile.mu.Lock()
+	defer fuseFile.mu.Unlock()
+
+	vfsFile, err := fuseFile.getFile()
+	if err != nil {
+		fuseFile.logger.Infof("Release: Failed to get file: %v", err)
+		return err
+	}
+
+	fuseFile.logger.Infof("Releasing file %s", vfsFile.GetNode().GetName())
+
+	vfsFile.Close()
 
 	return nil
 }

@@ -44,15 +44,6 @@ func (file *File) GetHost() string {
 	return file.host
 }
 
-// func (file *File) Move(newParent *Directory, newName string) {
-// 	file.parent = newParent
-// 	file.name = newName
-// }
-
-func (file *File) Link(parent *Directory, name string) *File {
-	return nil
-}
-
 func (file *File) GetVideoURL() string {
 	return ""
 	// return file.videoURL
@@ -75,10 +66,6 @@ func (file *File) Read(p []byte, offset int64, pid uint32) (int, error) {
 	}
 
 	return bytesRead, nil
-}
-
-func (file *File) Rename(name string) {
-	// file.name = name
 }
 
 func (file *File) Close() {

@@ -3,13 +3,13 @@ package node
 import (
 	"context"
 	"fmt"
-	"fuse_video_steamer/logger"
-	"fuse_video_steamer/vfs"
-	vfs_node "fuse_video_steamer/vfs/node"
-	"log"
 	"os"
 	"sync"
 	"syscall"
+
+	"fuse_video_steamer/logger"
+	"fuse_video_steamer/vfs"
+	vfs_node "fuse_video_steamer/vfs/node"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -45,14 +45,10 @@ func (fuseDirectory *Directory) Attr(ctx context.Context, attr *fuse.Attr) error
 
 	attr.Inode = fuseDirectory.identifier
 	attr.Mode = os.ModeDir | 0o777
-	attr.Valid = 1
+	// attr.Valid = 1
 
 	attr.Gid = uint32(os.Getgid())
 	attr.Uid = uint32(os.Getuid())
-
-	attr.Atime = attr.Ctime
-	attr.Mtime = attr.Ctime
-	attr.Crtime = attr.Ctime
 
 	return nil
 }
@@ -75,13 +71,13 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
-		log.Printf("Lookup: Failed to get directory\n%v", err)
+		fuseDirectory.logger.Errorf("Lookup: Failed to get directory\n%v", err)
 		return nil, err
 	}
 
 	childNode, err := fuseDirectory.vfs.GetChildNode(lookupRequest.Name, directory)
 	if err != nil {
-		log.Printf("Lookup: Failed to get child node\n%v", err)
+		fuseDirectory.logger.Errorf("Lookup: Failed to get child node\n%v", err)
 		return nil, err
 	}
 
@@ -109,14 +105,13 @@ func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, 
 
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
-		log.Printf("Failed to get directory\n%v", err)
+		fuseDirectory.logger.Errorf("ReadDirAll: Failed to get directory\n%v", err)
 		return nil, err
 	}
 
-
 	childNodes, err := fuseDirectory.vfs.GetChildNodes(directory)
 	if err != nil {
-		log.Printf("Failed to get child nodes\n%v", err)
+		fuseDirectory.logger.Errorf("ReadDirAll: Failed to get child nodes\n%v", err)
 		return nil, err
 	}
 
@@ -149,18 +144,18 @@ func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.
 
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
-        log.Printf("Failed to get directory\n%v", err)
+		fuseDirectory.logger.Errorf("Remove: Failed to get directory\n%v", err)
 		return err
 	}
 
 	childNode, err := fuseDirectory.vfs.GetChildNode(removeRequest.Name, directory)
 	if err != nil {
-        log.Printf("Failed to get child node\n%v", err)
+		fuseDirectory.logger.Errorf("Remove: Failed to get child node\n%v", err)
 		return err
 	}
 
 	if childNode == nil {
-        log.Printf("Failed to get child node\n%v", syscall.ENOENT)
+		fuseDirectory.logger.Errorf("Remove: Failed to get child node\n%v", syscall.ENOENT)
 		return syscall.ENOENT
 	}
 
@@ -168,25 +163,25 @@ func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.
 	case vfs_node.FileNode:
 		file, err := fuseDirectory.vfs.GetFile(childNode.GetIdentifier())
 		if err != nil {
-            log.Printf("Failed to get file\n%v", err)
+			fuseDirectory.logger.Errorf("Remove: Failed to get file\n%v", err)
 			return err
 		}
 
 		err = fuseDirectory.vfs.DeleteFile(file)
 		if err != nil {
-            log.Printf("Failed to delete file\n%v", err)
+			fuseDirectory.logger.Errorf("Remove: Failed to delete file\n%v", err)
 			return err
 		}
 	case vfs_node.DirectoryNode:
 		directory, err := fuseDirectory.vfs.GetDirectory(childNode.GetIdentifier())
 		if err != nil {
-            log.Printf("Failed to get directory\n%v", err)
+			fuseDirectory.logger.Errorf("Remove: Failed to get directory\n%v", err)
 			return err
 		}
 
 		err = fuseDirectory.vfs.DeleteDirectory(directory)
 		if err != nil {
-            log.Printf("Failed to delete directory\n%v", err)
+			fuseDirectory.logger.Errorf("Remove: Failed to delete directory\n%v", err)
 			return err
 		}
 	}
@@ -202,24 +197,24 @@ func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.Rename
 
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
-        log.Printf("Failed to get directory\n%v", err)
+		fuseDirectory.logger.Errorf("Rename: Failed to get directory\n%v", err)
 		return err
 	}
 
 	newParent, err := newNode.(*Directory).getDirectory()
 	if err != nil {
-        log.Printf("Failed to get new parent\n%v", err)
+		fuseDirectory.logger.Errorf("Rename: Failed to get new parent\n%v", err)
 		return err
 	}
 
 	childNode, err := fuseDirectory.vfs.GetChildNode(request.OldName, directory)
 	if err != nil {
-        log.Printf("Failed to get child node\n%v", err)
+		fuseDirectory.logger.Errorf("Rename: Failed to get child node\n%v", err)
 		return err
 	}
 
 	if childNode == nil {
-        log.Printf("Failed to get child node\n%v", syscall.ENOENT)
+		fuseDirectory.logger.Errorf("Rename: Failed to get child node\n%v", syscall.ENOENT)
 		return syscall.ENOENT
 	}
 
@@ -227,25 +222,25 @@ func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.Rename
 	case vfs_node.FileNode:
 		file, err := fuseDirectory.vfs.GetFile(childNode.GetIdentifier())
 		if err != nil {
-            log.Printf("Failed to get file\n%v", err)
+			fuseDirectory.logger.Errorf("Rename: Failed to get file\n%v", err)
 			return err
 		}
 
 		_, err = fuseDirectory.vfs.UpdateFile(file, request.NewName, newParent, file.GetSize(), file.GetHost())
 		if err != nil {
-            log.Printf("Failed to update file\n%v", err)
+			fuseDirectory.logger.Errorf("Rename: Failed to update file\n%v", err)
 			return err
 		}
 	case vfs_node.DirectoryNode:
 		directory, err := fuseDirectory.vfs.GetDirectory(childNode.GetIdentifier())
 		if err != nil {
-            log.Printf("Failed to get directory\n%v", err)
+			fuseDirectory.logger.Errorf("Rename: Failed to get directory\n%v", err)
 			return err
 		}
 
 		_, err = fuseDirectory.vfs.UpdateDirectory(directory, request.NewName, newParent)
 		if err != nil {
-            log.Printf("Failed to update directory\n%v", err)
+			fuseDirectory.logger.Errorf("Rename: Failed to update directory\n%v", err)
 			return err
 		}
 	}
@@ -261,13 +256,13 @@ func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.Create
 
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
-        log.Printf("Failed to get directory\n%v", err)
+		fuseDirectory.logger.Errorf("Create: Failed to get directory\n%v", err)
 		return nil, nil, err
 	}
 
 	newFile, err := fuseDirectory.vfs.CreateFile(request.Name, directory, 0, "")
 	if err != nil {
-        log.Printf("Failed to create file\n%v", err)
+		fuseDirectory.logger.Errorf("Create: Failed to create file\n%v", err)
 		return nil, nil, err
 	}
 
@@ -284,13 +279,13 @@ func (fuseDirectory *Directory) Mkdir(ctx context.Context, request *fuse.MkdirRe
 
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
-        log.Printf("Failed to get directory\n%v", err)
+		fuseDirectory.logger.Errorf("Mkdir: Failed to get directory\n%v", err)
 		return nil, err
 	}
 
 	newDirectory, err := fuseDirectory.vfs.CreateDirectory(request.Name, directory)
 	if err != nil {
-        log.Printf("Failed to create directory\n%v", err)
+		fuseDirectory.logger.Errorf("Mkdir: Failed to create directory\n%v", err)
 		return nil, err
 	}
 
@@ -307,32 +302,29 @@ func (fuseDirectory *Directory) Link(ctx context.Context, request *fuse.LinkRequ
 
 	directory, err := fuseDirectory.getDirectory()
 	if err != nil {
-        log.Printf("Failed to get directory\n%v", err)
+		fuseDirectory.logger.Errorf("Link: Failed to get directory\n%v", err)
 		return nil, err
 	}
 
-    node, ok := node.(*File)
-    if !ok {
-        log.Printf("Failed to get file\n%v", syscall.EINVAL)
-        return nil, syscall.EINVAL
-    }
+	node, ok := node.(*File)
+	if !ok {
+		fuseDirectory.logger.Errorf("Link: Failed to get file\n%v", syscall.EINVAL)
+		return nil, syscall.EINVAL
+	}
 
-    file, err := node.(*File).getFile()
-    if err != nil {
-        log.Printf("Failed to get file\n%v", err)
-        return nil, err
-    }
+	file, err := node.(*File).getFile()
+	if err != nil {
+		fuseDirectory.logger.Errorf("Link: Failed to get file\n%v", err)
+		return nil, err
+	}
 
+	newFile, err := fuseDirectory.vfs.UpdateFile(file, request.NewName, directory, file.GetSize(), file.GetHost())
+	if err != nil {
+		fuseDirectory.logger.Errorf("Link: Failed to update file\n%v", err)
+		return nil, err
+	}
 
-    fmt.Println("Linking file", file.GetNode().GetName())
-
-    newFile, err := fuseDirectory.vfs.UpdateFile(file, request.NewName, directory, file.GetSize(), file.GetHost())
-    if err != nil {
-        log.Printf("Failed to update file\n%v", err)
-        return nil, err
-    }
-
-    newFileNode := NewFile(fuseDirectory.vfs, newFile.GetNode().GetIdentifier())
+	newFileNode := NewFile(fuseDirectory.vfs, newFile.GetNode().GetIdentifier())
 
 	return newFileNode, nil
 }

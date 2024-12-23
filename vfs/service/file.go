@@ -31,7 +31,7 @@ func (service *FileService) CreateFile(name string, parent *vfs_node.Directory, 
 	}
 	defer transaction.Rollback()
 
-	nodeId, err := service.nodeService.CreateNode(transaction, name, parent, vfs_node.FileNode)
+	identifier, err := service.nodeService.CreateNode(transaction, name, parent, vfs_node.FileNode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node\n%w", err)
 	}
@@ -39,15 +39,20 @@ func (service *FileService) CreateFile(name string, parent *vfs_node.Directory, 
 	query := `
         INSERT INTO files (node_id, size, host)
         VALUES (?, ?, ?) 
-        RETURNING node_id
     `
 
-	row := transaction.QueryRow(query, nodeId, size, host)
-
-	var identifier uint64
-	err = row.Scan(&identifier)
+	result, err := transaction.Exec(query, identifier, size, host)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan file\n%w", err)
+		return nil, fmt.Errorf("failed to insert file\n%w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rows affected\n%w", err)
+	}
+
+	if rowsAffected != 1 {
+		return nil, fmt.Errorf("failed to insert file\n%w", err)
 	}
 
 	err = transaction.Commit()
@@ -55,47 +60,52 @@ func (service *FileService) CreateFile(name string, parent *vfs_node.Directory, 
 		return nil, fmt.Errorf("Failed to commit transaction\n%w", err)
 	}
 
-	return &identifier, nil
+	return identifier, nil
 }
 
-func (service *FileService) UpdateFile(nodeId uint64, name string, parent *vfs_node.Directory, size uint64, host string) (*uint64, error) {
+func (service *FileService) UpdateFile(identifier uint64, name string, parent *vfs_node.Directory, size uint64, host string) error {
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
 	transaction, err := service.db.Begin()
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction\n%w", err)
+		return fmt.Errorf("failed to begin transaction\n%w", err)
 	}
 	defer transaction.Rollback()
 
-	err = service.nodeService.UpdateNode(transaction, nodeId, name, parent)
+	err = service.nodeService.UpdateNode(transaction, identifier, name, parent)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update node\n%w", err)
+		return fmt.Errorf("failed to update node\n%w", err)
 	}
 
 	query := `
         UPDATE files SET size = ?, host = ?
         WHERE node_id = ? 
-        RETURNING node_id
     `
 
-	row := transaction.QueryRow(query, size, host, nodeId)
-
-	var identifier uint64
-	err = row.Scan(&identifier)
+	result, err := transaction.Exec(query, size, host, identifier)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan file\n%w", err)
+		return fmt.Errorf("failed to update file\n%w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected\n%w", err)
+	}
+
+	if rowsAffected != 1 {
+		return fmt.Errorf("failed to update file\n%w", err)
 	}
 
 	err = transaction.Commit()
 	if err != nil {
-		return nil, fmt.Errorf("failed to commit transaction\n%w", err)
+		return fmt.Errorf("failed to commit transaction\n%w", err)
 	}
 
-	return &identifier, nil
+	return nil
 }
 
-func (service *FileService) DeleteFile(nodeId uint64) error {
+func (service *FileService) DeleteFile(identifier uint64) error {
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
@@ -104,7 +114,7 @@ func (service *FileService) DeleteFile(nodeId uint64) error {
 		return fmt.Errorf("failed to begin transaction\n%w", err)
 	}
 
-	err = service.nodeService.DeleteNode(transaction, nodeId)
+	err = service.nodeService.DeleteNode(transaction, identifier)
 	if err != nil {
 		return fmt.Errorf("failed to delete node\n%w", err)
 	}
@@ -117,7 +127,7 @@ func (service *FileService) DeleteFile(nodeId uint64) error {
 	return nil
 }
 
-func (service *FileService) GetFile(nodeId uint64) (*vfs_node.File, error) {
+func (service *FileService) GetFile(identifier uint64) (*vfs_node.File, error) {
 	service.mu.RLock()
 	defer service.mu.RUnlock()
 
@@ -128,7 +138,7 @@ func (service *FileService) GetFile(nodeId uint64) (*vfs_node.File, error) {
         WHERE n.id = ? AND type = ?
     `
 
-	row := service.db.QueryRow(query, nodeId, vfs_node.FileNode.String())
+	row := service.db.QueryRow(query, identifier, vfs_node.FileNode.String())
 
 	file, err := getFileFromRow(row)
 	if err != nil {

@@ -6,7 +6,6 @@ import (
 	"os"
 
 	// "fuse_video_steamer/api"
-	// "fuse_video_steamer/communicator"
 	"fuse_video_steamer/fuse"
 	"fuse_video_steamer/vfs"
 )
@@ -32,10 +31,9 @@ func main() {
 
 	mountpoint := flag.Arg(0)
 
-	// communicator := communicator.NewCommunicator()
 	fileSystem, err := vfs.NewFileSystem()
 	if err != nil {
-		log.Fatalf(err.Error())
+		log.Fatal(err)
 
 	}
 

@@ -1,10 +1,9 @@
 package service
 
 import (
+	"database/sql"
 	"fmt"
 	"sync"
-
-	"database/sql"
 
 	vfs_node "fuse_video_steamer/vfs/node"
 )
@@ -24,15 +23,6 @@ func NewDirectoryService(db *sql.DB, nodeService *NodeService) *DirectoryService
 }
 
 func (service *DirectoryService) CreateDirectory(name string, parent *vfs_node.Directory) (*uint64, error) {
-	existingDirectory, err := service.FindDirectory(name, parent)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to find directory\n%w", err)
-	}
-
-	if existingDirectory != nil {
-		return nil, fmt.Errorf("Directory already exists")
-	}
-
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
@@ -42,7 +32,7 @@ func (service *DirectoryService) CreateDirectory(name string, parent *vfs_node.D
 	}
 	defer transaction.Rollback()
 
-	nodeId, err := service.nodeService.CreateNode(transaction, name, parent, vfs_node.DirectoryNode)
+	identifier, err := service.nodeService.CreateNode(transaction, name, parent, vfs_node.DirectoryNode)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create node\n%w", err)
 	}
@@ -50,15 +40,20 @@ func (service *DirectoryService) CreateDirectory(name string, parent *vfs_node.D
 	query := `
         INSERT INTO directories (node_id)
         VALUES (?)
-        RETURNING node_id
     `
 
-	row := transaction.QueryRow(query, nodeId)
-
-	var nodeIdentifier uint64
-	err = row.Scan(&nodeIdentifier)
+	result, err := transaction.Exec(query, identifier)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to scan node\n%w", err)
+		return nil, fmt.Errorf("Failed to insert directory\n%w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get rows affected\n%w", err)
+	}
+
+	if rowsAffected != 1 {
+		return nil, fmt.Errorf("Failed to insert directory\n%w", err)
 	}
 
 	err = transaction.Commit()
@@ -66,47 +61,10 @@ func (service *DirectoryService) CreateDirectory(name string, parent *vfs_node.D
 		return nil, fmt.Errorf("Failed to commit transaction\n%w", err)
 	}
 
-	return &nodeIdentifier, nil
+	return identifier, nil
 }
 
-func (service *DirectoryService) UpdateDirectory(nodeId uint64, name string, parent *vfs_node.Directory) (*uint64, error) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	transaction, err := service.db.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("Failed to begin transaction\n%w", err)
-	}
-	defer transaction.Rollback()
-
-	err = service.nodeService.UpdateNode(transaction, nodeId, name, parent)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to update node\n%w", err)
-	}
-
-	query := `
-        UPDATE directories SET node_id = ?
-        WHERE node_id = ?
-        RETURNING node_id
-    `
-
-	row := transaction.QueryRow(query, nodeId, nodeId)
-
-	var nodeIdentifier uint64
-	err = row.Scan(&nodeIdentifier)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to scan node\n%w", err)
-	}
-
-	err = transaction.Commit()
-	if err != nil {
-		return nil, fmt.Errorf("Failed to commit transaction\n%w", err)
-	}
-
-	return &nodeIdentifier, err
-}
-
-func (service *DirectoryService) DeleteDirectory(nodeId uint64) error {
+func (service *DirectoryService) UpdateDirectory(identifier uint64, name string, parent *vfs_node.Directory) error {
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
@@ -116,7 +74,49 @@ func (service *DirectoryService) DeleteDirectory(nodeId uint64) error {
 	}
 	defer transaction.Rollback()
 
-	err = service.nodeService.DeleteNode(transaction, nodeId)
+	err = service.nodeService.UpdateNode(transaction, identifier, name, parent)
+	if err != nil {
+		return fmt.Errorf("Failed to update node\n%w", err)
+	}
+
+	query := `
+        UPDATE directories SET node_id = ?
+        WHERE node_id = ?
+    `
+
+	result, err := transaction.Exec(query, identifier, identifier)
+	if err != nil {
+		return fmt.Errorf("Failed to update directory\n%w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("Failed to get rows affected\n%w", err)
+	}
+
+	if rowsAffected != 1 {
+		return fmt.Errorf("Failed to update directory\n%w", err)
+	}
+
+	err = transaction.Commit()
+	if err != nil {
+		return fmt.Errorf("Failed to commit transaction\n%w", err)
+	}
+
+	return nil
+}
+
+func (service *DirectoryService) DeleteDirectory(identifier uint64) error {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+
+	transaction, err := service.db.Begin()
+	if err != nil {
+		return fmt.Errorf("Failed to begin transaction\n%w", err)
+	}
+	defer transaction.Rollback()
+
+	err = service.nodeService.DeleteNode(transaction, identifier)
 	if err != nil {
 		return fmt.Errorf("Failed to delete node\n%w", err)
 	}
@@ -129,7 +129,7 @@ func (service *DirectoryService) DeleteDirectory(nodeId uint64) error {
 	return nil
 }
 
-func (service *DirectoryService) GetDirectory(nodeId uint64) (*vfs_node.Directory, error) {
+func (service *DirectoryService) GetDirectory(identifier uint64) (*vfs_node.Directory, error) {
 	service.mu.RLock()
 	defer service.mu.RUnlock()
 
@@ -140,14 +140,9 @@ func (service *DirectoryService) GetDirectory(nodeId uint64) (*vfs_node.Director
         WHERE node_id = ? and type = ?
     `
 
-	row := service.db.QueryRow(query, nodeId, vfs_node.DirectoryNode.String())
+	row := service.db.QueryRow(query, identifier, vfs_node.DirectoryNode.String())
 
-	directory, err := getDirectoryFromRow(row)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get directory from row\n%w", err)
-	}
-
-	return directory, nil
+	return getDirectoryFromRow(row)
 }
 
 func (service *DirectoryService) FindDirectory(name string, parent *vfs_node.Directory) (*vfs_node.Directory, error) {
@@ -176,32 +171,22 @@ func (service *DirectoryService) FindDirectory(name string, parent *vfs_node.Dir
 		row = service.db.QueryRow(query, name, parent.GetNode().GetIdentifier(), vfs_node.DirectoryNode.String())
 	}
 
-	directory, err := getDirectoryFromRow(row)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get directory from row\n%w", err)
-	}
-
-	return directory, nil
+	return getDirectoryFromRow(row)
 }
 
 func (service *DirectoryService) GetChildNode(name string, parent *vfs_node.Directory) (*vfs_node.Node, error) {
-    service.mu.RLock()
-    defer service.mu.RUnlock()
+	service.mu.RLock()
+	defer service.mu.RUnlock()
 
-    query := `
+	query := `
         SELECT id, name, parent_id, type
         FROM nodes
         WHERE name = ? AND parent_id = ?
     `
 
-    row := service.db.QueryRow(query, name, parent.GetNode().GetIdentifier())
+	row := service.db.QueryRow(query, name, parent.GetNode().GetIdentifier())
 
-    node, err := getNodeFromRow(row)
-    if err != nil {
-        return nil, fmt.Errorf("Failed to get node from row\n%w", err)
-    }
-
-    return node, nil
+	return getNodeFromRow(row)
 }
 
 func (service *DirectoryService) GetChildNodes(parent *vfs_node.Directory) ([]*vfs_node.Node, error) {
@@ -244,9 +229,9 @@ func getNodeFromRow(row row) (*vfs_node.Node, error) {
 
 	err := row.Scan(&identifier, &name, &parentIdentifier, &nodeTypeStr)
 	if err != nil {
-        if err == sql.ErrNoRows {
-            return nil, nil
-        }
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 
 		return nil, fmt.Errorf("Failed to scan directory\n%w", err)
 	}
@@ -265,29 +250,14 @@ func getNodeFromRow(row row) (*vfs_node.Node, error) {
 }
 
 func getDirectoryFromRow(row row) (*vfs_node.Directory, error) {
-	var identifier uint64
-	var name string
-	var parentIdentifier sql.NullInt64
-	var nodeTypeStr string
-
-	err := row.Scan(&identifier, &name, &parentIdentifier, &nodeTypeStr)
+	node, err := getNodeFromRow(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("Failed to scan directory\n%w", err)
+		return nil, fmt.Errorf("Failed to get node from row\n%w", err)
 	}
 
-	var parentIdentifierPtr *uint64
-	if parentIdentifier.Valid {
-		parentIdentifierPtr = new(uint64)
-		*parentIdentifierPtr = uint64(parentIdentifier.Int64)
+	if node == nil {
+		return nil, nil
 	}
-
-	nodeType := vfs_node.NodeTypeFromString(nodeTypeStr)
-
-	node := vfs_node.NewNode(identifier, name, parentIdentifierPtr, nodeType)
 
 	directory := vfs_node.NewDirectory(node)
 
