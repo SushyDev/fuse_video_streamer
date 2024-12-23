@@ -5,7 +5,8 @@ import (
 	"log"
 	"os"
 
-	"fuse_video_steamer/api"
+	// "fuse_video_steamer/api"
+	// "fuse_video_steamer/communicator"
 	"fuse_video_steamer/fuse"
 	"fuse_video_steamer/vfs"
 )
@@ -19,6 +20,8 @@ func usage() {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Llongfile)
+
 	flag.Usage = usage
 	flag.Parse()
 
@@ -29,11 +32,17 @@ func main() {
 
 	mountpoint := flag.Arg(0)
 
-	fileSystem := vfs.NewFileSystem()
+	// communicator := communicator.NewCommunicator()
+	fileSystem, err := vfs.NewFileSystem()
+	if err != nil {
+		log.Fatalf(err.Error())
+
+	}
+
 	fuseInstance := fuse.New(mountpoint, fileSystem)
 
 	go fuseInstance.Serve()
-	go api.Listen(fuseInstance)
+	// go api.Listen(fuseInstance)
 
 	done := make(chan bool)
 	<-done

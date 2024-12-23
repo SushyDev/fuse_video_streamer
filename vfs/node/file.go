@@ -1,4 +1,4 @@
-package vfs
+package node
 
 import (
 	"fmt"
@@ -9,30 +9,27 @@ import (
 )
 
 type File struct {
-	identifier uint64
-	name       string
-	videoUrl   string
-	host       string
-	size       uint64
-	parent     *Directory
+	node *Node
 
+	size uint64
+	host string
+
+	// Todo videoStream struct
 	videoStreams sync.Map // map[uint64]*stream.Stream // map of video streams per PID
-
-	fileSystem *FileSystem
 
 	// mu sync.RWMutex TODO
 }
 
-func (file *File) GetIdentifier() uint64 {
-	return file.identifier
+func NewFile(node *Node, size uint64, host string) *File {
+	return &File{
+		node: node,
+		size: size,
+		host: host,
+	}
 }
 
-func (file *File) GetName() string {
-	return file.name
-}
-
-func (file *File) GetParent() *Directory {
-	return file.parent
+func (file *File) GetNode() *Node {
+	return file.node
 }
 
 func (file *File) GetSize() uint64 {
@@ -47,8 +44,18 @@ func (file *File) GetHost() string {
 	return file.host
 }
 
-func (file *File) GetVideoUrl() string {
-	return file.videoUrl
+// func (file *File) Move(newParent *Directory, newName string) {
+// 	file.parent = newParent
+// 	file.name = newName
+// }
+
+func (file *File) Link(parent *Directory, name string) *File {
+	return nil
+}
+
+func (file *File) GetVideoURL() string {
+	return ""
+	// return file.videoURL
 }
 
 func (file *File) Read(p []byte, offset int64, pid uint32) (int, error) {
@@ -71,7 +78,7 @@ func (file *File) Read(p []byte, offset int64, pid uint32) (int, error) {
 }
 
 func (file *File) Rename(name string) {
-	file.name = name
+	// file.name = name
 }
 
 func (file *File) Close() {
@@ -91,16 +98,18 @@ func (file *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 		return existingVideoStream.(*stream.Stream), nil
 	}
 
-	if file.videoUrl == "" && file.host != "" {
-		videoUrl, err := fetchVideoUrl(file.host)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch video URL: %w", err)
-		}
+	// if file.videoURL == "" && file.host != "" {
+	// 	videoUrl, err := fetchVideoUrl(file.host)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("failed to fetch video URL: %w", err)
+	// 	}
+	//
+	// 	file.videoURL = videoUrl
+	// }
 
-		file.videoUrl = videoUrl
-	}
+	videoUrl := ""
 
-	videoStream := stream.NewStream(file.videoUrl, file.size)
+	videoStream := stream.NewStream(videoUrl, file.size)
 
 	file.videoStreams.Store(pid, videoStream)
 

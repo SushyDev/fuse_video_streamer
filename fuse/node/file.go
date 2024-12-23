@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/anacrolix/fuse"
@@ -13,6 +14,7 @@ import (
 
 	"fuse_video_steamer/logger"
 	"fuse_video_steamer/vfs"
+	vfs_node "fuse_video_steamer/vfs/node"
 )
 
 var _ fs.Node = &File{}
@@ -23,30 +25,36 @@ var _ fs.HandleWriter = &File{}
 var _ fs.HandleReleaser = &File{}
 
 type File struct {
-	file   *vfs.File
+	vfs        *vfs.FileSystem
+	identifier uint64
+
 	logger *zap.SugaredLogger
 
 	mu sync.RWMutex
 }
 
-func NewFile(file *vfs.File) *File {
+func NewFile(vfs *vfs.FileSystem, identifier uint64) *File {
 	fuseLogger, _ := logger.GetLogger(logger.FuseLogPath)
 
 	return &File{
-		file:   file,
-		logger: fuseLogger,
+		vfs:        vfs,
+		identifier: identifier,
+		logger:     fuseLogger,
 	}
 }
 
-func (node *File) Attr(ctx context.Context, attr *fuse.Attr) error {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
+func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
+	fuseFile.mu.RLock()
+	defer fuseFile.mu.RUnlock()
 
-	if node.file != nil {
-		attr.Size = node.file.GetSize()
-		attr.Inode = node.file.GetIdentifier()
-		attr.Mode = os.ModePerm | 0o777
+	vfsFile, err := fuseFile.getVfsFile()
+	if err != nil {
+		return err
 	}
+
+	attr.Size = vfsFile.GetSize()
+	attr.Inode = vfsFile.GetNode().GetIdentifier()
+	attr.Mode = os.ModePerm | 0o777
 
 	attr.Atime = time.Unix(0, 0)
 	attr.Mtime = time.Unix(0, 0)
@@ -58,32 +66,41 @@ func (node *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
-func (node *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	node.logger.Infof("Opening file %s - %d", node.file.GetName(), node.file.GetIdentifier())
+func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+	virtualFileSystemFile, err := fuseFile.getVfsFile()
+	if err != nil {
+		return nil, err
+	}
+
+	fuseFile.logger.Infof("Opening file %s - %d", virtualFileSystemFile.GetNode().GetName(), virtualFileSystemFile.GetNode().GetIdentifier())
 
 	openResponse.Flags |= fuse.OpenKeepCache
 
-	return node, nil
+	return fuseFile, nil
 }
 
-func (node *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
-	node.mu.Lock()
-	defer node.mu.Unlock()
+func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
+	fuseFile.mu.Lock()
+	defer fuseFile.mu.Unlock()
 
-	if node.file != nil {
-		node.logger.Infof("Releasing file %s", node.file.GetName())
-
-		node.file.Close()
+	vfsFile, err := fuseFile.getVfsFile()
+	if err != nil {
+		return err
 	}
+
+	fuseFile.logger.Infof("Releasing file %s", vfsFile.GetNode().GetName())
+
+	vfsFile.Close()
 
 	return nil
 }
 
-func (node *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
+func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
+	fuseFile.mu.RLock()
+	defer fuseFile.mu.RUnlock()
 
-	if node.file == nil {
+	vfsFile, err := fuseFile.getVfsFile()
+	if err != nil {
 		fmt.Println("File is nil")
 		readResponse.Data = []byte("This file was created to verify if '/Users/sushy/Documents/Projects/fuse_video_steamer/mnt' is writable. It should've been automatically deleted. Feel free to delete it.")
 		return nil
@@ -93,23 +110,41 @@ func (node *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readR
 		return fmt.Errorf("read request is for a directory")
 	}
 
-	buffer := make([]byte, readRequest.Size)
-	bytesRead, err := node.file.Read(buffer, readRequest.Offset, readRequest.Pid)
-	if err != nil {
-		return fmt.Errorf("failed to read from file: %w", err)
-	}
+	if vfsFile.GetVideoURL() != "" {
+		buffer := make([]byte, readRequest.Size)
+		bytesRead, err := vfsFile.Read(buffer, readRequest.Offset, readRequest.Pid)
+		if err != nil {
+			return fmt.Errorf("failed to read from file: %w", err)
+		}
 
-	readResponse.Data = buffer[:bytesRead]
+		readResponse.Data = buffer[:bytesRead]
+	}
 
 	return nil
 }
 
-func (node *File) Write(ctx context.Context, writeRequest *fuse.WriteRequest, writeResponse *fuse.WriteResponse) error {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
+func (fuseFile *File) Write(ctx context.Context, writeRequest *fuse.WriteRequest, writeResponse *fuse.WriteResponse) error {
+	fuseFile.mu.RLock()
+	defer fuseFile.mu.RUnlock()
 
 	// TODO SONARR SUPPORT
 	writeResponse.Size = len(writeRequest.Data)
 
 	return nil
+}
+
+// --- Helpers
+
+// TODO: Call only once in constructor
+func (fuseFile *File) getVfsFile() (*vfs_node.File, error) {
+	vfsFile, err := fuseFile.vfs.GetFile(fuseFile.identifier)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file: %w", err)
+	}
+
+	if vfsFile == nil {
+		return nil, fmt.Errorf("failed to get file: %w", syscall.ENOENT)
+	}
+
+	return vfsFile, nil
 }

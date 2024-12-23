@@ -1,155 +1,246 @@
 package vfs
 
 import (
-	"sync/atomic"
+	"fmt"
+	"fuse_video_steamer/vfs/index"
+	"fuse_video_steamer/vfs/node"
+	"fuse_video_steamer/vfs/service"
+	"log"
 )
 
 type FileSystem struct {
-	root      *Directory
-	IDCounter atomic.Uint64
+	root *node.Directory
 
-	index *Index
+	nodeService      *service.NodeService
+	directoryService *service.DirectoryService
+	fileService      *service.FileService
 
-	// mu sync.RWMutex TODO
+	// mu sync.RWMutex // TODO
 }
 
-func NewFileSystem() *FileSystem {
-	index := newIndex()
-
-	fileSystem := &FileSystem{
-		index: index,
+func NewFileSystem() (*FileSystem, error) {
+	index, err := index.New()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create index\n%w", err)
 	}
 
-	fileSystem.root = fileSystem.NewDirectory(nil, "root")
+	db := index.GetDB()
 
-	return fileSystem
+	nodeService := service.NewNodeService()
+
+	directoryService := service.NewDirectoryService(db, nodeService)
+	fileService := service.NewFileService(db, nodeService)
+
+	fileSystem := &FileSystem{
+		nodeService:      nodeService,
+		directoryService: directoryService,
+		fileService:      fileService,
+	}
+
+	root, err := fileSystem.FindOrCreateDirectory("root", nil)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get root directory\n%w", err)
+	}
+
+	fileSystem.root = root
+
+	return fileSystem, nil
 }
 
-func (fileSystem *FileSystem) GetRoot() *Directory {
+func (fileSystem *FileSystem) GetRoot() *node.Directory {
 	return fileSystem.root
 }
 
 // --- Directory
 
-func (fileSystem *FileSystem) NewDirectory(parent *Directory, name string) *Directory {
-	id := fileSystem.IDCounter.Add(1)
-
-	index := newIndex()
-
-	directory := &Directory{
-		identifier: id,
-		name:       name,
-		parent:     parent,
-		index:      index,
-
-		fileSystem: fileSystem,
+func (fileSystem *FileSystem) FindOrCreateDirectory(name string, parent *node.Directory) (*node.Directory, error) {
+	directory, err := fileSystem.FindDirectory(name, parent)
+	if err != nil {
+		log.Printf("Failed to find directory %s\n", name)
+		return nil, err
 	}
 
-	fileSystem.index.registerDirectory(directory)
-
-	if parent != nil {
-		parent.index.registerDirectory(directory)
+	if directory != nil {
+		return directory, nil
 	}
 
-	return directory
-}
-
-func (fileSystem *FileSystem) RemoveDirectory(directory *Directory) {
-	directory.index.close()
-
-	if directory.parent != nil {
-		directory.parent.index.deregisterDirectory(directory)
+	directory, err = fileSystem.CreateDirectory(name, parent)
+	if err != nil {
+		return nil, err
 	}
 
-	fileSystem.index.deregisterDirectory(directory)
+	return directory, nil
 }
 
-func (fileSystem *FileSystem) RenameDirectory(directory *Directory, name string, parent *Directory) *Directory {
-	if directory.parent != nil {
-		directory.parent.index.deregisterDirectory(directory)
+func (fileSystem *FileSystem) FindDirectory(name string, parent *node.Directory) (*node.Directory, error) {
+	directory, err := fileSystem.directoryService.FindDirectory(name, parent)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to find directory\n%w", err)
 	}
 
-	directory.name = name
-	directory.parent = parent
+	return directory, nil
+}
 
-	if parent != nil {
-		parent.index.registerDirectory(directory)
+func (fileSystem *FileSystem) CreateDirectory(name string, parent *node.Directory) (*node.Directory, error) {
+	nodeId, err := fileSystem.directoryService.CreateDirectory(name, parent)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create directory\n%w", err)
 	}
 
-	return directory
+	if nodeId == nil {
+		return nil, fmt.Errorf("Failed to create directory\n")
+	}
+
+	directory, err := fileSystem.GetDirectory(*nodeId)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get directory\n%w", err)
+	}
+
+	return directory, nil
 }
 
-func (fileSystem *FileSystem) GetDirectory(ID uint64) *Directory {
-	return fileSystem.index.getDirectory(ID)
+func (fileSystem *FileSystem) DeleteDirectory(directory *node.Directory) error {
+	node := directory.GetNode()
+
+	if node == nil {
+		return fmt.Errorf("Node is nil")
+	}
+
+	err := fileSystem.directoryService.DeleteDirectory(node.GetIdentifier())
+	if err != nil {
+		return fmt.Errorf("Failed to delete directory\n%w", err)
+	}
+
+	return nil
 }
 
-func (fileSystem *FileSystem) FindDirectory(name string) *Directory {
-	return fileSystem.index.findDirectory(name)
+func (fileSystem *FileSystem) UpdateDirectory(directory *node.Directory, name string, parent *node.Directory) (*node.Directory, error) {
+	nodeId, err := fileSystem.directoryService.UpdateDirectory(directory.GetNode().GetIdentifier(), name, parent)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to update directory\n%w", err)
+	}
+
+	newDirectory, err := fileSystem.GetDirectory(*nodeId)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get directory\n%w", err)
+	}
+
+	return newDirectory, nil
 }
 
-func (fileSystem *FileSystem) ListDirectories() []*Directory {
-	return fileSystem.index.listDirectories()
+func (fileSystem *FileSystem) GetDirectory(identifier uint64) (*node.Directory, error) {
+	directory, err := fileSystem.directoryService.GetDirectory(identifier)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get directory\n%w", err)
+	}
+
+	return directory, nil
 }
+
+func (fileSystem *FileSystem) FindDirector(name string, parent *node.Directory) (*node.Directory, error) {
+	directory, err := fileSystem.directoryService.FindDirectory(name, parent)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to find directory\n%w", err)
+	}
+
+	return directory, nil
+}
+
+func (fileSystem *FileSystem) GetChildNodes(parent *node.Directory) ([]*node.Node, error) {
+	nodes, err := fileSystem.directoryService.GetChildNodes(parent)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get directories\n%w", err)
+	}
+
+	return nodes, nil
+}
+
+// func (fileSystem *FileSystem) FindDirectory(name string) (*node.Directory, error) {
+//     directory, err := fileSystem.index.FindDirectory(name)
+//     if err != nil {
+//         return nil, fmt.Errorf("Failed to find directory\n%w", err)
+//     }
+//
+//     return directory, nil
+// }
 
 // --- File
 
-func (fileSystem *FileSystem) NewFile(parent *Directory, name string, host string, fetchUrl string, size uint64) *File {
-	ID := fileSystem.IDCounter.Add(1)
-
-	file := &File{
-		identifier: ID,
-		name:       name,
-		videoUrl:   host,
-		host:       fetchUrl,
-		size:       size,
-		parent:     parent,
-
-		fileSystem: fileSystem,
+func (fileSystem *FileSystem) CreateFile(name string, parent *node.Directory, size uint64, host string) (*node.File, error) {
+	identifier, err := fileSystem.fileService.CreateFile(name, parent, size, host)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to register file\n%w", err)
 	}
 
-	fileSystem.index.registerFile(file)
-
-	if parent != nil {
-		parent.index.registerFile(file)
+	file, err := fileSystem.GetFile(*identifier)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get file\n%w", err)
 	}
 
-	// event := &Event{
-	//     EventType: EventFileCreated,
-	//     File: file,
-	// }
-	//
-	// http.NewRequest("GET", fetchUrl, event)
-
-	return file
+	return file, nil
 }
 
-func (fileSystem *FileSystem) RemoveFile(file *File) {
-	if file.parent != nil {
-		file.parent.index.deregisterFile(file)
+func (fileSystem *FileSystem) DeleteFile(file *node.File) error {
+	err := fileSystem.fileService.DeleteFile(file.GetNode().GetIdentifier())
+	if err != nil {
+		return fmt.Errorf("Failed to deregister file\n%w", err)
 	}
 
-	fileSystem.index.deregisterFile(file)
+	return nil
 }
 
-func (fileSystem *FileSystem) RenameFile(file *File, name string, parent *Directory) *File {
-	if file.parent != nil {
-		file.parent.index.deregisterFile(file)
+func (fileSystem *FileSystem) UpdateFile(file *node.File, name string, parent *node.Directory, size uint64, host string) (*node.File, error) {
+	identifier, err := fileSystem.fileService.UpdateFile(
+		file.GetNode().GetIdentifier(),
+		name,
+		parent,
+		size,
+		host,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to update file\n%w", err)
 	}
 
-	file.name = name
-	file.parent = parent
-
-	if parent != nil {
-		parent.index.registerFile(file)
+	newFile, err := fileSystem.GetFile(*identifier)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get file\n%w", err)
 	}
 
-	return file
+	return newFile, nil
 }
 
-func (fileSystem *FileSystem) GetFile(ID uint64) *File {
-	return fileSystem.index.getFile(ID)
+func (fileSystem *FileSystem) GetFile(identifier uint64) (*node.File, error) {
+	file, err := fileSystem.fileService.GetFile(identifier)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get file\n%w", err)
+	}
+
+	return file, nil
 }
 
-func (fileSystem *FileSystem) FindFile(name string) *File {
-	return fileSystem.index.findFile(name)
+func (fileSystem *FileSystem) FindFile(name string, parent *node.Directory) (*node.File, error) {
+	file, err := fileSystem.fileService.FindFile(name, parent)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to find file by name\n%w", err)
+	}
+
+	return file, nil
 }
+
+func (fileSystem *FileSystem) GetFiles(parent *node.Directory) ([]*node.File, error) {
+	files, err := fileSystem.fileService.GetFiles(parent)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get files\n%w", err)
+	}
+
+	return files, nil
+}
+
+// func (fileSystem *FileSystem) FindFile(name string) (*node.File, error) {
+//     file, err := fileSystem.index.FindFile(name)
+//     if err != nil {
+//         return nil, fmt.Errorf("Failed to find file\n%w", err)
+//     }
+//
+//     return file, nil
+// }

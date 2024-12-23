@@ -27,7 +27,9 @@ func New(fileSystem *vfs.FileSystem) *FileSystem {
 }
 
 func (fileSystem *FileSystem) Root() (fs.Node, error) {
-	root := node.NewDirectory(fileSystem.fileSystem.GetRoot())
+	vfsRoot := fileSystem.fileSystem.GetRoot()
+
+	root := node.NewDirectory(fileSystem.fileSystem, vfsRoot.GetNode().GetIdentifier())
 
 	return root, nil
 }
