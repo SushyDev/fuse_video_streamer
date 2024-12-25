@@ -5,9 +5,7 @@ import (
 	"log"
 	"os"
 
-	// "fuse_video_steamer/api"
 	"fuse_video_steamer/fuse"
-	"fuse_video_steamer/vfs"
 )
 
 const useVfs = true
@@ -31,16 +29,9 @@ func main() {
 
 	mountpoint := flag.Arg(0)
 
-	fileSystem, err := vfs.NewFileSystem()
-	if err != nil {
-		log.Fatal(err)
-
-	}
-
-	fuseInstance := fuse.New(mountpoint, fileSystem)
+	fuseInstance := fuse.New(mountpoint)
 
 	go fuseInstance.Serve()
-	// go api.Listen(fuseInstance)
 
 	done := make(chan bool)
 	<-done

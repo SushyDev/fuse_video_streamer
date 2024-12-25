@@ -2,14 +2,14 @@ package node
 
 import (
 	"context"
-	"fmt"
+	"io"
+	"log"
 	"os"
 	"sync"
-	"syscall"
 
 	"fuse_video_steamer/logger"
-	"fuse_video_steamer/vfs"
-	vfs_node "fuse_video_steamer/vfs/node"
+	"fuse_video_steamer/stream"
+	"fuse_video_steamer/vfs_api"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -20,20 +20,26 @@ var _ fs.Handle = &File{}
 var _ fs.HandleReleaser = &File{}
 
 type File struct {
-	vfs        *vfs.FileSystem
+	client     vfs_api.FileSystemServiceClient
 	identifier uint64
+    
+    videoStreams sync.Map
+    size         uint64
 
 	logger *zap.SugaredLogger
 
 	mu sync.RWMutex
 }
 
-func NewFile(vfs *vfs.FileSystem, identifier uint64) *File {
+func NewFile(client vfs_api.FileSystemServiceClient, identifier uint64, size uint64) *File {
 	fuseLogger, _ := logger.GetLogger(logger.FuseLogPath)
 
 	return &File{
-		vfs:        vfs,
+		client:     client,
 		identifier: identifier,
+
+        size: size,
+
 		logger:     fuseLogger,
 	}
 }
@@ -44,15 +50,9 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 	fuseFile.mu.RLock()
 	defer fuseFile.mu.RUnlock()
 
-	vfsFile, err := fuseFile.getFile()
-	if err != nil {
-		fuseFile.logger.Infof("Attr: Failed to get file: %v", err)
-		return err
-	}
-
 	attr.Inode = fuseFile.identifier
 	attr.Mode = os.ModePerm | 0o777
-	attr.Size = vfsFile.GetSize()
+	attr.Size = fuseFile.size
 
 	attr.Gid = uint32(os.Getgid())
 	attr.Uid = uint32(os.Getuid())
@@ -74,40 +74,24 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	fuseFile.mu.RLock()
 	defer fuseFile.mu.RUnlock()
 
-	vfsFile, err := fuseFile.getFile()
-	if err != nil {
-		fuseFile.logger.Infof("Read: Failed to get file: %v", err)
-		readResponse.Data = []byte("This file was created to verify if '/Users/sushy/Documents/Projects/fuse_video_steamer/mnt' is writable. It should've been automatically deleted. Feel free to delete it.")
-		return nil
-	}
+    videoStream, err := fuseFile.getVideoStream(readRequest.Pid)
+    if err != nil {
+        return err
+    }
 
-	if readRequest.Dir {
-		fuseFile.logger.Infof("Read: Read request is for a directory")
-		return fmt.Errorf("read request is for a directory")
-	}
+    _, err = videoStream.Seek(uint64(readRequest.Offset), io.SeekStart)
+    if err != nil { 
+        return err
+    }
 
-	if vfsFile.GetVideoURL() != "" {
-		buffer := make([]byte, readRequest.Size)
-		bytesRead, err := vfsFile.Read(buffer, readRequest.Offset, readRequest.Pid)
-		if err != nil {
-			fuseFile.logger.Infof("Read: Failed to read file: %v", err)
-			return err
-		}
+    buffer := make([]byte, readRequest.Size)
 
-		readResponse.Data = buffer[:bytesRead]
-	}
+    bytesRead, err := videoStream.Read(buffer)
+    if err != nil {
+        return err
+    }
 
-	return nil
-}
-
-var _ fs.HandleWriter = &File{}
-
-func (fuseFile *File) Write(ctx context.Context, writeRequest *fuse.WriteRequest, writeResponse *fuse.WriteResponse) error {
-	fuseFile.mu.RLock()
-	defer fuseFile.mu.RUnlock()
-
-	// TODO SONARR SUPPORT
-	writeResponse.Size = len(writeRequest.Data)
+    readResponse.Data = buffer[:bytesRead]
 
 	return nil
 }
@@ -118,31 +102,41 @@ func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 	fuseFile.mu.Lock()
 	defer fuseFile.mu.Unlock()
 
-	vfsFile, err := fuseFile.getFile()
-	if err != nil {
-		fuseFile.logger.Infof("Release: Failed to get file: %v", err)
-		return err
-	}
-
-	fuseFile.logger.Infof("Releasing file %s", vfsFile.GetNode().GetName())
-
-	vfsFile.Close()
+	// vfsFile, err := fuseFile.getFile()
+	// if err != nil {
+	// 	fuseFile.logger.Infof("Release: Failed to get file: %v", err)
+	// 	return err
+	// }
+	//
+	// fuseFile.logger.Infof("Releasing file %s", vfsFile.GetNode().GetName())
+	//
+	// vfsFile.Close()
 
 	return nil
 }
 
 // --- Helpers
 
-// TODO: Call only once in constructor
-func (fuseFile *File) getFile() (*vfs_node.File, error) {
-	vfsFile, err := fuseFile.vfs.GetFile(fuseFile.identifier)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get file: %w", err)
-	}
+func (fuseFile *File) getVideoStream(pid uint32) (*stream.Stream, error) {
+    videoStream, ok := fuseFile.videoStreams.Load(pid)
+    if ok {
+        return videoStream.(*stream.Stream), nil
+    }
 
-	if vfsFile == nil {
-		return nil, fmt.Errorf("failed to get file: %w", syscall.ENOENT)
-	}
+    log.Printf("Creating new video stream for pid %d", pid)
 
-	return vfsFile, nil
+    response, err := fuseFile.client.GetVideoUrl(context.Background(), &vfs_api.GetVideoUrlRequest{
+        Identifier: fuseFile.identifier,
+    })
+
+    if err != nil {
+        fuseFile.logger.Infof("Failed to get video stream: %v", err)
+        return nil, err
+    }
+
+    newVideoStream := stream.NewStream(response.Url, fuseFile.size)
+
+    fuseFile.videoStreams.Store(pid, newVideoStream)
+
+    return newVideoStream, nil
 }
