@@ -22,9 +22,9 @@ var _ fs.HandleReleaser = &File{}
 type File struct {
 	client     vfs_api.FileSystemServiceClient
 	identifier uint64
-    
-    videoStreams sync.Map
-    size         uint64
+
+	videoStreams sync.Map
+	size         uint64
 
 	logger *zap.SugaredLogger
 
@@ -38,9 +38,9 @@ func NewFile(client vfs_api.FileSystemServiceClient, identifier uint64, size uin
 		client:     client,
 		identifier: identifier,
 
-        size: size,
+		size: size,
 
-		logger:     fuseLogger,
+		logger: fuseLogger,
 	}
 }
 
@@ -74,24 +74,24 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	fuseFile.mu.RLock()
 	defer fuseFile.mu.RUnlock()
 
-    videoStream, err := fuseFile.getVideoStream(readRequest.Pid)
-    if err != nil {
-        return err
-    }
+	videoStream, err := fuseFile.getVideoStream(readRequest.Pid)
+	if err != nil {
+		return err
+	}
 
-    _, err = videoStream.Seek(uint64(readRequest.Offset), io.SeekStart)
-    if err != nil { 
-        return err
-    }
+	_, err = videoStream.Seek(uint64(readRequest.Offset), io.SeekStart)
+	if err != nil {
+		return err
+	}
 
-    buffer := make([]byte, readRequest.Size)
+	buffer := make([]byte, readRequest.Size)
 
-    bytesRead, err := videoStream.Read(buffer)
-    if err != nil {
-        return err
-    }
+	bytesRead, err := videoStream.Read(buffer)
+	if err != nil {
+		return err
+	}
 
-    readResponse.Data = buffer[:bytesRead]
+	readResponse.Data = buffer[:bytesRead]
 
 	return nil
 }
@@ -118,25 +118,25 @@ func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 // --- Helpers
 
 func (fuseFile *File) getVideoStream(pid uint32) (*stream.Stream, error) {
-    videoStream, ok := fuseFile.videoStreams.Load(pid)
-    if ok {
-        return videoStream.(*stream.Stream), nil
-    }
+	videoStream, ok := fuseFile.videoStreams.Load(pid)
+	if ok {
+		return videoStream.(*stream.Stream), nil
+	}
 
-    log.Printf("Creating new video stream for pid %d", pid)
+	log.Printf("Creating new video stream for pid %d", pid)
 
-    response, err := fuseFile.client.GetVideoUrl(context.Background(), &vfs_api.GetVideoUrlRequest{
-        Identifier: fuseFile.identifier,
-    })
+	response, err := fuseFile.client.GetVideoUrl(context.Background(), &vfs_api.GetVideoUrlRequest{
+		Identifier: fuseFile.identifier,
+	})
 
-    if err != nil {
-        fuseFile.logger.Infof("Failed to get video stream: %v", err)
-        return nil, err
-    }
+	if err != nil {
+		fuseFile.logger.Infof("Failed to get video stream: %v", err)
+		return nil, err
+	}
 
-    newVideoStream := stream.NewStream(response.Url, fuseFile.size)
+	newVideoStream := stream.NewStream(response.Url, fuseFile.size)
 
-    fuseFile.videoStreams.Store(pid, newVideoStream)
+	fuseFile.videoStreams.Store(pid, newVideoStream)
 
-    return newVideoStream, nil
+	return newVideoStream, nil
 }

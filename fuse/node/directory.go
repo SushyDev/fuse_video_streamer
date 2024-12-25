@@ -21,7 +21,7 @@ type Directory struct {
 	client     vfs_api.FileSystemServiceClient
 	identifier uint64
 
-    tempFiles []*TempFile
+	tempFiles []*TempFile
 
 	logger *zap.SugaredLogger
 
@@ -77,33 +77,33 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 		return nil, err
 	}
 
-    if response.Node == nil {
-        return nil, syscall.ENOENT
-    }
+	if response.Node == nil {
+		return nil, syscall.ENOENT
+	}
 
 	switch response.Node.Type {
 	case vfs_api.NodeType_FILE:
-        sizeResponse, err := fuseDirectory.client.GetVideoSize(ctx, &vfs_api.GetVideoSizeRequest{
-            Identifier: response.Node.Identifier,
-        })
+		sizeResponse, err := fuseDirectory.client.GetVideoSize(ctx, &vfs_api.GetVideoSizeRequest{
+			Identifier: response.Node.Identifier,
+		})
 
-        if err != nil {
-            fuseDirectory.logger.Errorf("Failed to get video size: %v", err)
-            return nil, err
-        }
+		if err != nil {
+			fuseDirectory.logger.Errorf("Failed to get video size: %v", err)
+			return nil, err
+		}
 
-        log.Printf("Size: %v\n", sizeResponse.Size)
+		log.Printf("Size: %v\n", sizeResponse.Size)
 
 		return NewFile(fuseDirectory.client, response.Node.Identifier, sizeResponse.Size), nil
 	case vfs_api.NodeType_DIRECTORY:
 		return NewDirectory(fuseDirectory.client, response.Node.Identifier), nil
 	}
 
-    for _, tempFile := range fuseDirectory.tempFiles {
-        if tempFile.name == lookupRequest.Name {
-            return tempFile, nil
-        }
-    }
+	for _, tempFile := range fuseDirectory.tempFiles {
+		if tempFile.name == lookupRequest.Name {
+			return tempFile, nil
+		}
+	}
 
 	return nil, syscall.ENOENT
 }
@@ -129,23 +129,23 @@ func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, 
 		switch entry.Type {
 		case vfs_api.NodeType_FILE:
 			entries = append(entries, fuse.Dirent{
-				Name:  entry.Name,
-				Type:  fuse.DT_File,
+				Name: entry.Name,
+				Type: fuse.DT_File,
 			})
 		case vfs_api.NodeType_DIRECTORY:
 			entries = append(entries, fuse.Dirent{
-				Name:  entry.Name,
-				Type:  fuse.DT_Dir,
+				Name: entry.Name,
+				Type: fuse.DT_Dir,
 			})
 		}
 	}
 
-    for _, tempFile := range fuseDirectory.tempFiles {
-        entries = append(entries, fuse.Dirent{
-            Name:  tempFile.name,
-            Type:  fuse.DT_File,
-        })
-    }
+	for _, tempFile := range fuseDirectory.tempFiles {
+		entries = append(entries, fuse.Dirent{
+			Name: tempFile.name,
+			Type: fuse.DT_File,
+		})
+	}
 
 	return entries, nil
 }
@@ -156,15 +156,15 @@ func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-    _, err := fuseDirectory.client.Remove(ctx, &vfs_api.RemoveRequest{
-        Identifier: fuseDirectory.identifier,
-        Name:       removeRequest.Name,
-    })
+	_, err := fuseDirectory.client.Remove(ctx, &vfs_api.RemoveRequest{
+		Identifier: fuseDirectory.identifier,
+		Name:       removeRequest.Name,
+	})
 
-    if err != nil {
-        fuseDirectory.logger.Errorf("Failed to remove: %v", err)
-        return err
-    }
+	if err != nil {
+		fuseDirectory.logger.Errorf("Failed to remove: %v", err)
+		return err
+	}
 
 	return nil
 }
@@ -175,20 +175,20 @@ func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.Rename
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-    _, err := fuseDirectory.client.Rename(ctx, &vfs_api.RenameRequest{
-        ParentIdentifier: fuseDirectory.identifier,
-        Name:    request.OldName,
-        NewName:    request.NewName,
-        NewParentIdentifier:  newDir.(*Directory).identifier,
-    })
+	_, err := fuseDirectory.client.Rename(ctx, &vfs_api.RenameRequest{
+		ParentIdentifier:    fuseDirectory.identifier,
+		Name:                request.OldName,
+		NewName:             request.NewName,
+		NewParentIdentifier: newDir.(*Directory).identifier,
+	})
 
-    if err != nil {
-        log.Printf("Failed to rename: %v", err)
-        fuseDirectory.logger.Errorf("Failed to rename: %v", err)
-        return err
-    }
+	if err != nil {
+		log.Printf("Failed to rename: %v", err)
+		fuseDirectory.logger.Errorf("Failed to rename: %v", err)
+		return err
+	}
 
-    return nil
+	return nil
 }
 
 var _ fs.NodeCreater = &Directory{}
@@ -197,13 +197,13 @@ func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.Create
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-    log.Printf("Create: %s\n", request.Name)
+	log.Printf("Create: %s\n", request.Name)
 
-    tempFile := NewTempFile(request.Name, 0)
+	tempFile := NewTempFile(request.Name, 0)
 
-    fuseDirectory.tempFiles = append(fuseDirectory.tempFiles, tempFile)
+	fuseDirectory.tempFiles = append(fuseDirectory.tempFiles, tempFile)
 
-    return tempFile, tempFile, nil
+	return tempFile, tempFile, nil
 }
 
 var _ fs.NodeMkdirer = &Directory{}
@@ -212,17 +212,17 @@ func (fuseDirectory *Directory) Mkdir(ctx context.Context, request *fuse.MkdirRe
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-    response, err := fuseDirectory.client.Mkdir(ctx, &vfs_api.MkdirRequest{
-        ParentIdentifier: fuseDirectory.identifier,
-        Name:    request.Name,
-    })
+	response, err := fuseDirectory.client.Mkdir(ctx, &vfs_api.MkdirRequest{
+		ParentIdentifier: fuseDirectory.identifier,
+		Name:             request.Name,
+	})
 
-    if err != nil {
-        fuseDirectory.logger.Errorf("Failed to mkdir: %v", err)
-        return nil, err
-    }
+	if err != nil {
+		fuseDirectory.logger.Errorf("Failed to mkdir: %v", err)
+		return nil, err
+	}
 
-    return NewDirectory(fuseDirectory.client, response.Node.Identifier), nil
+	return NewDirectory(fuseDirectory.client, response.Node.Identifier), nil
 }
 
 var _ fs.NodeLinker = &Directory{}
@@ -231,18 +231,18 @@ func (fuseDirectory *Directory) Link(ctx context.Context, request *fuse.LinkRequ
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-    oldFile := oldNode.(*File)
+	oldFile := oldNode.(*File)
 
-    _, err := fuseDirectory.client.Link(ctx, &vfs_api.LinkRequest{
-        Identifier: oldFile.identifier,
-        ParentIdentifier: fuseDirectory.identifier,
-        Name:    request.NewName,
-    })
+	_, err := fuseDirectory.client.Link(ctx, &vfs_api.LinkRequest{
+		Identifier:       oldFile.identifier,
+		ParentIdentifier: fuseDirectory.identifier,
+		Name:             request.NewName,
+	})
 
-    if err != nil {
-        fuseDirectory.logger.Errorf("Failed to link: %v", err)
-        return nil, err
-    }
+	if err != nil {
+		fuseDirectory.logger.Errorf("Failed to link: %v", err)
+		return nil, err
+	}
 
-    return oldFile, nil
+	return oldFile, nil
 }

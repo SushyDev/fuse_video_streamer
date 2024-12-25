@@ -9,14 +9,14 @@ import (
 )
 
 type FileSystem struct {
-	logger     *zap.SugaredLogger
+	logger *zap.SugaredLogger
 }
 
 func New() *FileSystem {
 	sugaredLogger, _ := logger.GetLogger(logger.FuseLogPath)
 
 	return &FileSystem{
-		logger:     sugaredLogger,
+		logger: sugaredLogger,
 	}
 
 }

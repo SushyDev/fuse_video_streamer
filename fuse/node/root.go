@@ -33,16 +33,16 @@ type Root struct {
 func NewRoot() *Root {
 	fuseLogger, _ := logger.GetLogger(logger.FuseLogPath)
 
-    for _, host := range hosts {
-        connection, err := grpc.Dial(host, grpc.WithInsecure())
-        if err != nil {
-            log.Fatalf("Failed to connect to %s: %v", host, err)
-        }
+	for _, host := range hosts {
+		connection, err := grpc.Dial(host, grpc.WithInsecure())
+		if err != nil {
+			log.Fatalf("Failed to connect to %s: %v", host, err)
+		}
 
-        client := vfs_api.NewFileSystemServiceClient(connection)
+		client := vfs_api.NewFileSystemServiceClient(connection)
 
-        clients = append(clients, client)
-    }
+		clients = append(clients, client)
+	}
 
 	return &Root{
 		logger: fuseLogger,
@@ -78,15 +78,15 @@ func (fuseRoot *Root) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequ
 	fuseRoot.mu.RLock()
 	defer fuseRoot.mu.RUnlock()
 
-    client := clients[lookupRequest.Node - 1]
+	client := clients[lookupRequest.Node-1]
 
-    response, err := client.Root(ctx, &vfs_api.RootRequest{})
-    if err != nil {
-        log.Fatalf("Failed to get root: %v", err)
-        return nil, err
-    }
+	response, err := client.Root(ctx, &vfs_api.RootRequest{})
+	if err != nil {
+		log.Fatalf("Failed to get root: %v", err)
+		return nil, err
+	}
 
-    return NewDirectory(client, response.Root.Identifier), nil
+	return NewDirectory(client, response.Root.Identifier), nil
 }
 
 var _ fs.HandleReadDirAller = &Root{}
@@ -102,15 +102,15 @@ func (fuseRoot *Root) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 
 	var entries []fuse.Dirent
 	for _, client := range clients {
-        response, err := client.Root(ctx, &vfs_api.RootRequest{})
-        if err != nil {
-            log.Fatalf("Failed to get root: %v", err)
-            return nil, err
-        }
+		response, err := client.Root(ctx, &vfs_api.RootRequest{})
+		if err != nil {
+			log.Fatalf("Failed to get root: %v", err)
+			return nil, err
+		}
 
 		entries = append(entries, fuse.Dirent{
-			Name:  response.Root.Name,
-			Type:  fuse.DT_Dir,
+			Name: response.Root.Name,
+			Type: fuse.DT_Dir,
 		})
 	}
 

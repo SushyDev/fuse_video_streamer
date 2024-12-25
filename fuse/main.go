@@ -10,8 +10,8 @@ import (
 )
 
 type Fuse struct {
-	server     *fs.Server
-	logger     *zap.SugaredLogger
+	server *fs.Server
+	logger *zap.SugaredLogger
 }
 
 func New(mountpoint string) *Fuse {
@@ -41,8 +41,8 @@ func New(mountpoint string) *Fuse {
 	}
 
 	return &Fuse{
-		server:     fs.New(connection, nil),
-		logger:     fuseLogger,
+		server: fs.New(connection, nil),
+		logger: fuseLogger,
 	}
 }
 
