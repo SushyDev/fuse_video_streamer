@@ -10,7 +10,6 @@ import (
 var AppLogPath = "logs/app.log"
 var StreamLogPath = "logs/stream.log"
 var FuseLogPath = "logs/fuse.log"
-var ApiLogPath = "logs/api.log"
 
 var loggers = make(map[string]*zap.SugaredLogger)
 

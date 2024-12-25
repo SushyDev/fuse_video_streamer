@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 
+	"fuse_video_steamer/config"
 	"fuse_video_steamer/logger"
 
 	"fuse_video_steamer/vfs_api"
@@ -18,10 +19,6 @@ import (
 
 var _ fs.Handle = &Directory{}
 
-var hosts = []string{
-	"localhost:6969",
-}
-
 var clients = []vfs_api.FileSystemServiceClient{}
 
 type Root struct {
@@ -33,13 +30,17 @@ type Root struct {
 func NewRoot() *Root {
 	fuseLogger, _ := logger.GetLogger(logger.FuseLogPath)
 
-	for _, host := range hosts {
-		connection, err := grpc.Dial(host, grpc.WithInsecure())
+	fileServers := config.GetFileServers()
+
+	for _, fileServer := range fileServers {
+		connection, err := grpc.Dial(fileServer, grpc.WithInsecure())
 		if err != nil {
-			log.Fatalf("Failed to connect to %s: %v", host, err)
+			log.Fatalf("Failed to connect to %s: %v", fileServer, err)
 		}
 
 		client := vfs_api.NewFileSystemServiceClient(connection)
+
+		log.Printf("Connected to %s", fileServer)
 
 		clients = append(clients, client)
 	}

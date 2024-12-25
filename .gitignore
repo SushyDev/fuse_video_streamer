@@ -1,6 +1,5 @@
 .DS_Store
 logs
-api/fuse.pb.go
-api/fuse_grpc.pb.go
 mnt
 *.db
+config.yaml

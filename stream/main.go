@@ -60,7 +60,6 @@ func NewStream(url string, size uint64) *Stream {
 }
 
 func (stream *Stream) startStream(seekPosition uint64) {
-	// stream.chart.LogStream(fmt.Sprintf("Stream started for position: %d\n", seekPosition))
 	streamLogger.Infof("Stream \"%s\" started for position: %d", stream.url, seekPosition)
 
 	defer func() {
@@ -157,12 +156,12 @@ func (stream *Stream) stopStream() {
 }
 
 func (stream *Stream) Read(p []byte) (int, error) {
+	stream.mu.RLock()
+	defer stream.mu.RUnlock()
+
 	if stream.closed {
 		return 0, fmt.Errorf("Streamer is closed")
 	}
-
-	stream.mu.RLock()
-	defer stream.mu.RUnlock()
 
 	seekPosition := stream.GetSeekPosition()
 	requestedSize := uint64(len(p))

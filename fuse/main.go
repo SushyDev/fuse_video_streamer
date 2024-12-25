@@ -1,6 +1,7 @@
 package fuse
 
 import (
+	"fuse_video_steamer/config"
 	"fuse_video_steamer/fuse/filesystem"
 	"fuse_video_steamer/logger"
 
@@ -22,11 +23,13 @@ func New(mountpoint string) *Fuse {
 
 	fuseLogger.Info("Creating FUSE instance")
 
+	volumeName := config.GetVolumeName()
+
 	connection, err := fuse.Mount(
 		mountpoint,
-		fuse.VolumeName("fuse_video_steamer"),
-		fuse.Subtype("fuse_video_steamer"),
-		fuse.FSName("fuse_video_steamer"),
+		fuse.VolumeName(volumeName),
+		fuse.Subtype(volumeName),
+		fuse.FSName(volumeName),
 
 		fuse.LocalVolume(),
 		fuse.AllowOther(),

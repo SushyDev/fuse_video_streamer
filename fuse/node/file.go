@@ -63,6 +63,9 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 var _ fs.NodeOpener = &File{}
 
 func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+	fuseFile.mu.Lock()
+	defer fuseFile.mu.Unlock()
+
 	openResponse.Flags |= fuse.OpenKeepCache
 
 	return fuseFile, nil
@@ -71,8 +74,8 @@ func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, o
 var _ fs.HandleReader = &File{}
 
 func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
-	fuseFile.mu.RLock()
-	defer fuseFile.mu.RUnlock()
+	fuseFile.mu.Lock()
+	defer fuseFile.mu.Unlock()
 
 	videoStream, err := fuseFile.getVideoStream(readRequest.Pid)
 	if err != nil {
@@ -102,15 +105,12 @@ func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 	fuseFile.mu.Lock()
 	defer fuseFile.mu.Unlock()
 
-	// vfsFile, err := fuseFile.getFile()
-	// if err != nil {
-	// 	fuseFile.logger.Infof("Release: Failed to get file: %v", err)
-	// 	return err
-	// }
-	//
-	// fuseFile.logger.Infof("Releasing file %s", vfsFile.GetNode().GetName())
-	//
-	// vfsFile.Close()
+	videoStream, ok := fuseFile.videoStreams.Load(releaseRequest.Pid)
+	if ok {
+		log.Printf("Closing video stream for pid %d", releaseRequest.Pid)
+
+		videoStream.(*stream.Stream).Close()
+	}
 
 	return nil
 }
