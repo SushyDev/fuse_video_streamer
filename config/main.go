@@ -13,7 +13,7 @@ type Config struct {
 }
 
 func get() Config {
-	file, err := os.Open("config.yaml")
+	file, err := os.Open("config.yml")
 	if err != nil {
 		panic(err)
 	}
