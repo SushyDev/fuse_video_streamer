@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"io"
-	"log"
 	"os"
 	"sync"
 
@@ -107,8 +106,6 @@ func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 
 	videoStream, ok := fuseFile.videoStreams.Load(releaseRequest.Pid)
 	if ok {
-		log.Printf("Closing video stream for pid %d", releaseRequest.Pid)
-
 		videoStream.(*stream.Stream).Close()
 	}
 
@@ -123,14 +120,11 @@ func (fuseFile *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 		return videoStream.(*stream.Stream), nil
 	}
 
-	log.Printf("Creating new video stream for pid %d", pid)
-
 	response, err := fuseFile.client.GetVideoUrl(context.Background(), &vfs_api.GetVideoUrlRequest{
 		Identifier: fuseFile.identifier,
 	})
 
 	if err != nil {
-		fuseFile.logger.Infof("Failed to get video stream: %v", err)
 		return nil, err
 	}
 

@@ -92,8 +92,6 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 			return nil, err
 		}
 
-		log.Printf("Size: %v\n", sizeResponse.Size)
-
 		return NewFile(fuseDirectory.client, response.Node.Identifier, sizeResponse.Size), nil
 	case vfs_api.NodeType_DIRECTORY:
 		return NewDirectory(fuseDirectory.client, response.Node.Identifier), nil

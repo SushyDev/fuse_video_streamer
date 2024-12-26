@@ -60,10 +60,7 @@ func NewStream(url string, size uint64) *Stream {
 }
 
 func (stream *Stream) startStream(seekPosition uint64) {
-	streamLogger.Infof("Stream \"%s\" started for position: %d", stream.url, seekPosition)
-
 	defer func() {
-		streamLogger.Infof("Stream \"%s\" closed for position: %d", stream.url, seekPosition)
 		stream.wg.Done()
 	}()
 
