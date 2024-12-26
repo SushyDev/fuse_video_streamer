@@ -41,7 +41,7 @@ func New(mountpoint string) *Fuse {
 	)
 
 	if err != nil {
-        fuseLogger.Fatalf("Failed to create connection: %v", err)
+		fuseLogger.Fatalf("Failed to create connection: %v", err)
 	}
 
 	fuseLogger.Info("Successfully created connection")
@@ -54,19 +54,19 @@ func New(mountpoint string) *Fuse {
 }
 
 func (instance *Fuse) Serve(ctx context.Context) {
-    var wg sync.WaitGroup
+	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
 		<-ctx.Done()
-        instance.Close()
+		instance.Close()
 		wg.Done()
 	}()
 
 	fileSystem := filesystem.New()
 	server := fs.New(instance.connection, nil)
 
-    instance.logger.Info("Serving filesystem")
+	instance.logger.Info("Serving filesystem")
 
 	err := server.Serve(fileSystem)
 	if err != nil {
@@ -75,27 +75,27 @@ func (instance *Fuse) Serve(ctx context.Context) {
 
 	wg.Wait()
 
-    instance.logger.Info("Filesystem shutdown")
+	instance.logger.Info("Filesystem shutdown")
 }
 
 func (instance *Fuse) Close() error {
-        instance.logger.Info("Shutting down filesystem")
+	instance.logger.Info("Shutting down filesystem")
 
-		err := fuse.Unmount(instance.mountpoint)
-		if err != nil {
-			instance.logger.Fatalf("Failed to unmount filesystem: %v", err)
-		}
+	err := fuse.Unmount(instance.mountpoint)
+	if err != nil {
+		instance.logger.Fatalf("Failed to unmount filesystem: %v", err)
+	}
 
-        instance.logger.Info("Unmounted filesystem")
+	instance.logger.Info("Unmounted filesystem")
 
-		err = instance.connection.Close()
-		if err != nil {
-			instance.logger.Fatalf("Failed to close connection: %v", err)
-		}
+	err = instance.connection.Close()
+	if err != nil {
+		instance.logger.Fatalf("Failed to close connection: %v", err)
+	}
 
-        instance.logger.Info("Closed connection")
+	instance.logger.Info("Closed connection")
 
-        return nil
+	return nil
 }
 
 func getNodeID(ID uint64) fuse.NodeID {

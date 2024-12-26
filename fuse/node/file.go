@@ -104,7 +104,22 @@ func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 	fuseFile.mu.Lock()
 	defer fuseFile.mu.Unlock()
 
-	videoStream, ok := fuseFile.videoStreams.Load(releaseRequest.Pid)
+	// Release also can happen when still streaming so this is not okay
+	// videoStream, ok := fuseFile.videoStreams.Load(releaseRequest.Pid)
+	// if ok {
+	// 	videoStream.(*stream.Stream).Close()
+	// }
+
+	return nil
+}
+
+var _ fs.HandleFlusher = &File{}
+
+func (fuseFile *File) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) error {
+	fuseFile.mu.Lock()
+	defer fuseFile.mu.Unlock()
+
+	videoStream, ok := fuseFile.videoStreams.Load(flushRequest.Pid)
 	if ok {
 		videoStream.(*stream.Stream).Close()
 	}
