@@ -166,6 +166,11 @@ func (buffer *Buffer) IsPositionInBuffer(position uint64) bool {
 	}
 
 	bufferCap := buffer.Cap()
+
+	if bufferCap == 0 {
+		return false
+	}
+
 	bufferPosition := relativePosition % bufferCap
 	bufferPositionPage := relativePosition / bufferCap
 
