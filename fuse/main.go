@@ -1,9 +1,11 @@
 package fuse
 
 import (
+	"context"
 	"fuse_video_steamer/config"
 	"fuse_video_steamer/fuse/filesystem"
 	"fuse_video_steamer/logger"
+	"sync"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -11,8 +13,9 @@ import (
 )
 
 type Fuse struct {
-	server *fs.Server
-	logger *zap.SugaredLogger
+	mountpoint string
+	connection *fuse.Conn
+	logger     *zap.SugaredLogger
 }
 
 func New(mountpoint string) *Fuse {
@@ -20,8 +23,6 @@ func New(mountpoint string) *Fuse {
 	if err != nil {
 		panic(err)
 	}
-
-	fuseLogger.Info("Creating FUSE instance")
 
 	volumeName := config.GetVolumeName()
 
@@ -40,28 +41,61 @@ func New(mountpoint string) *Fuse {
 	)
 
 	if err != nil {
-		fuseLogger.Fatalf("Failed to create FUSE mount: %v", err)
+        fuseLogger.Fatalf("Failed to create connection: %v", err)
 	}
+
+	fuseLogger.Info("Successfully created connection")
 
 	return &Fuse{
-		server: fs.New(connection, nil),
-		logger: fuseLogger,
+		mountpoint: mountpoint,
+		connection: connection,
+		logger:     fuseLogger,
 	}
 }
 
-func (fuse *Fuse) Serve() {
-	fuse.logger.Info("Serving FUSE filesystem")
+func (instance *Fuse) Serve(ctx context.Context) {
+    var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		<-ctx.Done()
+        instance.Close()
+		wg.Done()
+	}()
 
 	fileSystem := filesystem.New()
+	server := fs.New(instance.connection, nil)
 
-	err := fuse.server.Serve(fileSystem)
+    instance.logger.Info("Serving filesystem")
+
+	err := server.Serve(fileSystem)
 	if err != nil {
-		fuse.logger.Fatalf("Failed to serve FUSE filesystem: %v", err)
+		instance.logger.Fatalf("Failed to serve filesystem: %v", err)
 	}
+
+	wg.Wait()
+
+    instance.logger.Info("Filesystem shutdown")
 }
 
-func (fuse *Fuse) GetServer() *fs.Server {
-	return fuse.server
+func (instance *Fuse) Close() error {
+        instance.logger.Info("Shutting down filesystem")
+
+		err := fuse.Unmount(instance.mountpoint)
+		if err != nil {
+			instance.logger.Fatalf("Failed to unmount filesystem: %v", err)
+		}
+
+        instance.logger.Info("Unmounted filesystem")
+
+		err = instance.connection.Close()
+		if err != nil {
+			instance.logger.Fatalf("Failed to close connection: %v", err)
+		}
+
+        instance.logger.Info("Closed connection")
+
+        return nil
 }
 
 func getNodeID(ID uint64) fuse.NodeID {

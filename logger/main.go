@@ -7,13 +7,17 @@ import (
 	"path/filepath"
 )
 
-var AppLogPath = "logs/app.log"
-var StreamLogPath = "logs/stream.log"
-var FuseLogPath = "logs/fuse.log"
+var AppLogPath = "app.log"
+var StreamLogPath = "stream.log"
+var FuseLogPath = "fuse.log"
+
+var LogDir = "logs"
 
 var loggers = make(map[string]*zap.SugaredLogger)
 
-func createLogger(filePath string) (*zap.SugaredLogger, error) {
+func createLogger(fileName string) (*zap.SugaredLogger, error) {
+	filePath := filepath.Join(LogDir, fileName)
+
 	// Create the log directory if it doesn't exist
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
@@ -39,17 +43,17 @@ func createLogger(filePath string) (*zap.SugaredLogger, error) {
 	return logger.Sugar(), nil
 }
 
-func GetLogger(filePath string) (*zap.SugaredLogger, error) {
-	if logger, ok := loggers[filePath]; ok {
+func GetLogger(fileName string) (*zap.SugaredLogger, error) {
+	if logger, ok := loggers[fileName]; ok {
 		return logger, nil
 	}
 
-	logger, err := createLogger(filePath)
+	logger, err := createLogger(fileName)
 	if err != nil {
 		return nil, err
 	}
 
-	loggers[filePath] = logger
+	loggers[fileName] = logger
 
 	return logger, nil
 }

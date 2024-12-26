@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"fuse_video_steamer/config"
 	"fuse_video_steamer/fuse"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -10,10 +14,20 @@ func main() {
 
 	mountpoint := config.GetMountPoint()
 
-	fuseInstance := fuse.New(mountpoint)
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
 
-	go fuseInstance.Serve()
+    go handleSignals(cancel)
 
-	done := make(chan bool)
-	<-done
+    fuseInstance := fuse.New(mountpoint)
+
+	fuseInstance.Serve(ctx)
+}
+
+func handleSignals(cancel context.CancelFunc) {
+    signals := make(chan os.Signal, 1)
+
+    signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+    <-signals
+    cancel()
 }
