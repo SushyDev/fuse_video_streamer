@@ -23,15 +23,17 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o fuse-app main.go
+RUN go build -o main main.go
 
 FROM alpine:latest
 
+WORKDIR /app
+
 RUN apk add --no-cache fuse
 
-COPY --from=builder /app/fuse-app /app/fuse-app
+COPY --from=builder /app/main /app/main
 
-RUN chmod +x /app/fuse-app
+RUN chmod +x /app/main
 RUN chmod -R 755 /app
 
-ENTRYPOINT ["/app/fuse-app"]
+ENTRYPOINT ["/app/main"]
