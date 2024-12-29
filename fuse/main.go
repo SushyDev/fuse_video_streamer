@@ -88,11 +88,15 @@ func (instance *Fuse) Close() error {
 		instance.logger.Info("Unmounted filesystem")
 	}
 
-	err = instance.connection.Close()
-	if err != nil {
-		instance.logger.Errorf("Failed to close connection: %v", err)
+	if instance.connection != nil {
+		err = instance.connection.Close()
+		if err != nil {
+			instance.logger.Errorf("Failed to close connection: %v", err)
+		} else {
+			instance.logger.Info("Closed connection")
+		}
 	} else {
-		instance.logger.Info("Closed connection")
+		instance.logger.Info("Connection already closed")
 	}
 
 	instance.logger.Info("Fuse closed")
