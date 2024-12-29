@@ -27,12 +27,12 @@ Fuse Video Streamer creates a virtual disk sort of like Rclone that contains fil
 
 ### Docker Setup
 
-The image for this project is available on Docker at `ghcr.io/sushydev/fuse_video_streamer:main`. Below is an example of a `docker-compose.yml` file to set up the project:
+The image for this project is available on Docker at `ghcr.io/sushydev/fuse_video_streamer:latest`. Below is an example of a `docker-compose.yml` file to set up the project:
 
 ```yaml
 fuse_video_streamer:
   container_name: fuse_video_streamer
-  image: ghcr.io/sushydev/fuse_video_streamer:main
+  image: ghcr.io/sushydev/fuse_video_streamer:latest
   restart: unless-stopped
   network_mode: host  # Preferable if using a specific network
   volumes:
