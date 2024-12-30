@@ -1,9 +1,7 @@
 package fuse
 
 import (
-	"fmt"
 	"context"
-	"fuse_video_steamer/config"
 	"fuse_video_steamer/fuse/filesystem"
 	"fuse_video_steamer/logger"
 	"sync"
@@ -18,13 +16,11 @@ type Fuse struct {
 	logger     *logger.Logger
 }
 
-func New(mountpoint string) *Fuse {
-	fuseLogger, err := logger.NewLogger("Fuse")
+func New(mountpoint string, volumeName string) *Fuse {
+	logger, err := logger.NewLogger("Fuse")
 	if err != nil {
 		panic(err)
 	}
-
-	volumeName := config.GetVolumeName()
 
 	connection, err := fuse.Mount(
 		mountpoint,
@@ -41,15 +37,15 @@ func New(mountpoint string) *Fuse {
 	)
 
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create connection: %v", err))
+		logger.Fatal("Failed to mount filesystem", err)
 	}
 
-	fuseLogger.Info("Successfully created connection")
+	logger.Info("Successfully created connection")
 
 	return &Fuse{
 		mountpoint: mountpoint,
 		connection: connection,
-		logger:     fuseLogger,
+		logger:     logger,
 	}
 }
 
@@ -102,8 +98,4 @@ func (instance *Fuse) Close() error {
 	instance.logger.Info("Fuse closed")
 
 	return nil
-}
-
-func getNodeID(ID uint64) fuse.NodeID {
-	return fuse.NodeID(ID)
 }

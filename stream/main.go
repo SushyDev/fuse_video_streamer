@@ -78,7 +78,8 @@ func (stream *Stream) startStream(seekPosition uint64) {
 	rangeHeader := fmt.Sprintf("bytes=%d-", max(seekPosition, 0))
 	req, err := http.NewRequestWithContext(ctx, "GET", stream.url, nil)
 	if err != nil {
-		stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to create request", stream.url), err)
+		message := fmt.Sprintf("Stream \"%s\" failed to create request", stream.url)
+		stream.logger.Error(message, err)
 		stream.cancel()
 		return
 	}
@@ -87,7 +88,8 @@ func (stream *Stream) startStream(seekPosition uint64) {
 
 	resp, err := stream.client.Do(req)
 	if err != nil {
-		stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to do request", stream.url), err)
+		message := fmt.Sprintf("Stream \"%s\" failed to do request", stream.url)
+		stream.logger.Error(message, err)
 		stream.cancel()
 		return
 	}
@@ -127,7 +129,8 @@ func (stream *Stream) startStream(seekPosition uint64) {
 		if bytesRead > 0 {
 			_, err := stream.buffer.Write(chunk[:bytesRead])
 			if err != nil {
-				stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to write", stream.url), err)
+				message := fmt.Sprintf("Stream \"%s\" failed to write", stream.url)
+				stream.logger.Error(message, err)
 				return // Crash ?
 			}
 
@@ -136,14 +139,16 @@ func (stream *Stream) startStream(seekPosition uint64) {
 
 		switch {
 		case err == io.ErrUnexpectedEOF:
-			stream.logger.Error(fmt.Sprintf("Stream \"%s\" unexpected EOF, Bytes read: %d", stream.url, bytesRead), nil)
+			message := fmt.Sprintf("Stream \"%s\" unexpected EOF, Bytes read: %d", stream.url, bytesRead)
+			stream.logger.Error(message, nil)
 			return // Decide if the loop should crash or retry logic can be added.
 		case err == io.EOF:
 			// TODO FINISHED
 			retryDelay = 5 * time.Second
 			continue
 		case err != nil:
-			stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to read", stream.url), err)
+			message := fmt.Sprintf("Stream \"%s\" failed to read", stream.url)
+			stream.logger.Error(message, err)
 			retryDelay = 5 * time.Second
 			continue
 		}
@@ -206,7 +211,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition uint64, requested
 
 		waitForSize := min(seekPosition+requestedSize, stream.size)
 
-		stream.buffer.WaitForPositionInBuffer(waitForSize, stream.context)
+		stream.buffer.WaitForPositionInBuffer(stream.context, waitForSize)
 
 		return
 	}
@@ -216,7 +221,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition uint64, requested
 	if !dataInBuffer {
 		waitForSize := min(seekPosition+requestedSize, stream.size)
 
-		stream.buffer.WaitForPositionInBuffer(waitForSize, stream.context)
+		stream.buffer.WaitForPositionInBuffer(stream.context, waitForSize)
 	}
 }
 

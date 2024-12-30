@@ -12,19 +12,20 @@ import (
 func main() {
 	config.Validate()
 
-	mountpoint := config.GetMountPoint()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go handleSignals(cancel)
+	go captureExitSignals(cancel)
 
-	fuseInstance := fuse.New(mountpoint)
+	mountpoint := config.GetMountPoint()
+	volumeName := config.GetVolumeName()
+
+	fuseInstance := fuse.New(mountpoint, volumeName)
 
 	fuseInstance.Serve(ctx)
 }
 
-func handleSignals(cancel context.CancelFunc) {
+func captureExitSignals(cancel context.CancelFunc) {
 	signals := make(chan os.Signal, 1)
 
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)

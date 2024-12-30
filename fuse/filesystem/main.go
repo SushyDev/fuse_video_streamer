@@ -12,7 +12,10 @@ type FileSystem struct {
 }
 
 func New() *FileSystem {
-	logger, _ := logger.NewLogger("File System")
+	logger, err := logger.NewLogger("File System")
+	if err != nil {
+		panic(err)
+	}
 
 	return &FileSystem{
 		logger: logger,

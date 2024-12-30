@@ -203,7 +203,7 @@ func (buffer *Buffer) IsPositionInBuffer(position uint64) bool {
 	return readPage < writePage
 }
 
-func (buffer *Buffer) WaitForPositionInBuffer(position uint64, context context.Context) {
+func (buffer *Buffer) WaitForPositionInBuffer(context context.Context, position uint64) {
 	for {
 		if buffer.closed {
 			return

@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -15,7 +16,6 @@ import (
 )
 
 var _ fs.Handle = &File{}
-var _ fs.HandleReleaser = &File{}
 
 type File struct {
 	client     vfs_api.FileSystemServiceClient
@@ -80,11 +80,15 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 
 	videoStream, err := fuseFile.getVideoStream(readRequest.Pid)
 	if err != nil {
+		message := fmt.Sprintf("Failed to get video stream for pid %d", readRequest.Pid)
+		fuseFile.logger.Error(message, err)
 		return err
 	}
 
 	_, err = videoStream.Seek(uint64(readRequest.Offset), io.SeekStart)
 	if err != nil {
+		message := fmt.Sprintf("Failed to seek video stream for pid %d", readRequest.Pid)
+		fuseFile.logger.Error(message, err)
 		return err
 	}
 
@@ -92,25 +96,12 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 
 	bytesRead, err := videoStream.Read(buffer)
 	if err != nil {
+		message := fmt.Sprintf("Failed to read video stream for pid %d", readRequest.Pid)
+		fuseFile.logger.Error(message, err)
 		return err
 	}
 
 	readResponse.Data = buffer[:bytesRead]
-
-	return nil
-}
-
-var _ fs.HandleReleaser = &File{}
-
-func (fuseFile *File) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
-	fuseFile.mu.Lock()
-	defer fuseFile.mu.Unlock()
-
-	// Release also can happen when still streaming so this is not okay
-	// videoStream, ok := fuseFile.videoStreams.Load(releaseRequest.Pid)
-	// if ok {
-	// 	videoStream.(*stream.Stream).Close()
-	// }
 
 	return nil
 }
@@ -142,6 +133,8 @@ func (fuseFile *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 	})
 
 	if err != nil {
+		message := fmt.Sprintf("Failed to get video url for pid %d", pid)
+		fuseFile.logger.Error(message, err)
 		return nil, err
 	}
 

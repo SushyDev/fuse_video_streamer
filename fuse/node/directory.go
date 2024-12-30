@@ -2,7 +2,7 @@ package node
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"sync"
 	"syscall"
@@ -75,7 +75,8 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Error("Failed to lookup", err)
+		message := fmt.Sprintf("Failed to lookup %s", lookupRequest.Name)
+		fuseDirectory.logger.Error(message, err)
 		return nil, syscall.ENOENT
 	}
 
@@ -90,7 +91,8 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 		})
 
 		if err != nil {
-			fuseDirectory.logger.Error("Failed to get video size", err)
+			message := fmt.Sprintf("Failed to get video size for %s", lookupRequest.Name)
+			fuseDirectory.logger.Error(message, err)
 			return nil, syscall.ENOENT
 		}
 
@@ -119,7 +121,8 @@ func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, 
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Error("Failed to read directory", err)
+		message := fmt.Sprintf("Failed to read directory %d", fuseDirectory.identifier)
+		fuseDirectory.logger.Error(message, err)
 		return nil, err
 	}
 
@@ -162,7 +165,8 @@ func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Error("Failed to remove", err)
+		message := fmt.Sprintf("Failed to remove %s", removeRequest.Name)
+		fuseDirectory.logger.Error(message, err)
 		return err
 	}
 
@@ -183,8 +187,8 @@ func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.Rename
 	})
 
 	if err != nil {
-		log.Printf("Failed to rename: %v", err)
-		fuseDirectory.logger.Error("Failed to rename", err)
+		message := fmt.Sprintf("Failed to rename %s to %s", request.OldName, request.NewName)
+		fuseDirectory.logger.Error(message, err)
 		return err
 	}
 
@@ -197,7 +201,7 @@ func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.Create
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-	log.Printf("Create: %s\n", request.Name)
+	fuseDirectory.logger.Info(fmt.Sprintf("Create: %s", request.Name))
 
 	tempFile := NewTempFile(request.Name, 0)
 
@@ -218,7 +222,8 @@ func (fuseDirectory *Directory) Mkdir(ctx context.Context, request *fuse.MkdirRe
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Error("Failed to mkdir", err)
+		message := fmt.Sprintf("Failed to mkdir %s", request.Name)
+		fuseDirectory.logger.Error(message, err)
 		return nil, err
 	}
 
@@ -240,7 +245,8 @@ func (fuseDirectory *Directory) Link(ctx context.Context, request *fuse.LinkRequ
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Error("Failed to link", err)
+		message := fmt.Sprintf("Failed to link %s", request.NewName)
+		fuseDirectory.logger.Error(message, err)
 		return nil, err
 	}
 

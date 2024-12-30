@@ -9,8 +9,7 @@ import (
 	"github.com/anacrolix/fuse/fs"
 )
 
-var _ fs.Handle = &File{}
-var _ fs.HandleReleaser = &File{}
+var _ fs.Handle = &TempFile{}
 
 type TempFile struct {
 	name string
@@ -35,7 +34,7 @@ func (tempFile *TempFile) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
-var _ fs.NodeOpener = &File{}
+var _ fs.NodeOpener = &TempFile{}
 
 func (tempFile *TempFile) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
 	openResponse.Flags |= fuse.OpenKeepCache

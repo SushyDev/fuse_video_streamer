@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var _ fs.Handle = &Directory{}
+var _ fs.Handle = &Root{}
 
 var clients = []vfs_api.FileSystemServiceClient{}
 
@@ -46,7 +46,8 @@ func NewRoot() *Root {
 		)
 
 		if err != nil {
-			fuseLogger.Error(fmt.Sprintf("Failed to connect to %s", fileServer), err)
+			message := fmt.Sprintf("Failed to connect to %s", fileServer)
+			fuseLogger.Error(message, err)
 			continue
 		}
 
@@ -76,7 +77,7 @@ func (fuseRoot *Root) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
-var _ fs.NodeOpener = &Directory{}
+var _ fs.NodeOpener = &Root{}
 
 func (fuseRoot *Root) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
 	fuseRoot.mu.RLock()
@@ -95,7 +96,8 @@ func (fuseRoot *Root) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequ
 
 	response, err := client.Root(ctx, &vfs_api.RootRequest{})
 	if err != nil {
-		fuseRoot.logger.Error("Failed to get root", err)
+		message := fmt.Sprintf("Failed to lookup %s", lookupRequest.Name)
+		fuseRoot.logger.Error(message, err)
 		return nil, err
 	}
 
@@ -109,10 +111,11 @@ func (fuseRoot *Root) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	defer fuseRoot.mu.RUnlock()
 
 	var entries []fuse.Dirent
-	for _, client := range clients {
+	for index, client := range clients {
 		response, err := client.Root(ctx, &vfs_api.RootRequest{})
 		if err != nil {
-			fuseRoot.logger.Error("Failed to get root", err)
+			message := fmt.Sprintf("Failed to get root for client %d", index)
+			fuseRoot.logger.Error(message, err)
 			return nil, err
 		}
 
