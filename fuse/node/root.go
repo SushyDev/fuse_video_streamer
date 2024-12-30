@@ -2,7 +2,7 @@ package node
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"sync"
 
@@ -13,8 +13,9 @@ import (
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var _ fs.Handle = &Directory{}
@@ -22,25 +23,36 @@ var _ fs.Handle = &Directory{}
 var clients = []vfs_api.FileSystemServiceClient{}
 
 type Root struct {
-	identifier uint64
-	logger     *zap.SugaredLogger
+	logger     *logger.Logger
 	mu         sync.RWMutex
 }
 
 func NewRoot() *Root {
-	fuseLogger, _ := logger.GetLogger(logger.FuseLogPath)
+	fuseLogger, _ := logger.NewLogger("Root Node")
+
+	backoffConfig := backoff.DefaultConfig
+	insecureCredentials := insecure.NewCredentials()
+	connectParams := grpc.ConnectParams{
+		Backoff: backoffConfig,
+	}
 
 	fileServers := config.GetFileServers()
-
 	for _, fileServer := range fileServers {
-		connection, err := grpc.Dial(fileServer, grpc.WithInsecure())
+		connection, err := grpc.NewClient(
+			fileServer,
+			grpc.WithTransportCredentials(insecureCredentials),
+			grpc.WithConnectParams(connectParams),
+
+		)
+
 		if err != nil {
-			log.Fatalf("Failed to connect to %s: %v", fileServer, err)
+			fuseLogger.Error(fmt.Sprintf("Failed to connect to %s", fileServer), err)
+			continue
 		}
 
 		client := vfs_api.NewFileSystemServiceClient(connection)
 
-		log.Printf("Connected to %s", fileServer)
+		fuseLogger.Info(fmt.Sprintf("Connected to %s", fileServer))
 
 		clients = append(clients, client)
 	}
@@ -83,7 +95,7 @@ func (fuseRoot *Root) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequ
 
 	response, err := client.Root(ctx, &vfs_api.RootRequest{})
 	if err != nil {
-		log.Fatalf("Failed to get root: %v", err)
+		fuseRoot.logger.Error("Failed to get root", err)
 		return nil, err
 	}
 
@@ -91,11 +103,6 @@ func (fuseRoot *Root) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequ
 }
 
 var _ fs.HandleReadDirAller = &Root{}
-
-type DirectoryResponse struct {
-	Identifier uint64 `json:"identifier"`
-	Name       string `json:"name"`
-}
 
 func (fuseRoot *Root) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	fuseRoot.mu.RLock()
@@ -105,7 +112,7 @@ func (fuseRoot *Root) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	for _, client := range clients {
 		response, err := client.Root(ctx, &vfs_api.RootRequest{})
 		if err != nil {
-			log.Fatalf("Failed to get root: %v", err)
+			fuseRoot.logger.Error("Failed to get root", err)
 			return nil, err
 		}
 

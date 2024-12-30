@@ -28,16 +28,21 @@ type Stream struct {
 	buffer       *buffer.Buffer
 	seekPosition atomic.Uint64
 
+	logger *logger.Logger
+
 	mu sync.RWMutex
 
 	closed bool
 }
 
-var streamLogger, _ = logger.GetLogger(logger.StreamLogPath)
-
 var bufferCreateSize = uint64(1024 * 1024 * 1024 * 1)
 
 func NewStream(url string, size uint64) *Stream {
+	logger, err := logger.NewLogger("Stream")
+	if err != nil {
+		panic(err)
+	}
+
 	buffer := buffer.NewBuffer(min(size, bufferCreateSize), 0)
 
 	client := &http.Client{
@@ -56,6 +61,8 @@ func NewStream(url string, size uint64) *Stream {
 		client: client,
 
 		buffer: buffer,
+
+		logger: logger,
 	}
 }
 
@@ -71,7 +78,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 	rangeHeader := fmt.Sprintf("bytes=%d-", max(seekPosition, 0))
 	req, err := http.NewRequestWithContext(ctx, "GET", stream.url, nil)
 	if err != nil {
-		streamLogger.Errorf("Stream \"%s\" failed to create request: %v", stream.url, err)
+		stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to create request", stream.url), err)
 		stream.cancel()
 		return
 	}
@@ -80,7 +87,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 
 	resp, err := stream.client.Do(req)
 	if err != nil {
-		streamLogger.Errorf("Stream \"%s\" failed to do request: %v", stream.url, err)
+		stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to do request", stream.url), err)
 		stream.cancel()
 		return
 	}
@@ -88,7 +95,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusPartialContent {
-		streamLogger.Errorf("Stream \"%s\" failed to get partial content: %d", stream.url, resp.StatusCode)
+		stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to get partial content: %d", stream.url, resp.StatusCode), nil)
 		stream.cancel()
 		return
 	}
@@ -120,7 +127,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 		if bytesRead > 0 {
 			_, err := stream.buffer.Write(chunk[:bytesRead])
 			if err != nil {
-				streamLogger.Errorf("Stream \"%s\" failed to write: %v", stream.url, err)
+				stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to write", stream.url), err)
 				return // Crash ?
 			}
 
@@ -129,14 +136,14 @@ func (stream *Stream) startStream(seekPosition uint64) {
 
 		switch {
 		case err == io.ErrUnexpectedEOF:
-			streamLogger.Errorf("Stream \"%s\" unexpected EOF, Bytes read: %d", stream.url, bytesRead)
+			stream.logger.Error(fmt.Sprintf("Stream \"%s\" unexpected EOF, Bytes read: %d", stream.url, bytesRead), nil)
 			return // Decide if the loop should crash or retry logic can be added.
 		case err == io.EOF:
 			// TODO FINISHED
 			retryDelay = 5 * time.Second
 			continue
 		case err != nil:
-			streamLogger.Errorf("Stream \"%s\" failed to read: %v", stream.url, err)
+			stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to read", stream.url), err)
 			retryDelay = 5 * time.Second
 			continue
 		}

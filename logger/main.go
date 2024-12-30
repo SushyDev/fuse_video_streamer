@@ -1,15 +1,15 @@
 package logger
 
 import (
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"fmt"
 	"os"
 	"path/filepath"
-)
+	"strings"
+	"log"
 
-var AppLogPath = "app.log"
-var StreamLogPath = "stream.log"
-var FuseLogPath = "fuse.log"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
 
 var LogDir = "logs"
 
@@ -43,7 +43,7 @@ func createLogger(fileName string) (*zap.SugaredLogger, error) {
 	return logger.Sugar(), nil
 }
 
-func GetLogger(fileName string) (*zap.SugaredLogger, error) {
+func getLogger(fileName string) (*zap.SugaredLogger, error) {
 	if logger, ok := loggers[fileName]; ok {
 		return logger, nil
 	}
@@ -56,4 +56,51 @@ func GetLogger(fileName string) (*zap.SugaredLogger, error) {
 	loggers[fileName] = logger
 
 	return logger, nil
+}
+
+type Logger struct {
+	logger  *zap.SugaredLogger
+	service string
+}
+
+func NewLogger(service string) (*Logger, error) {
+	filename := strings.ToLower(strings.ReplaceAll(service, " ", "_"))
+
+	logger, err := getLogger(filename + ".log")
+	if err != nil {
+		return nil, err
+	}
+
+	return &Logger{
+		logger:  logger,
+		service: service,
+	}, nil
+}
+
+func (instance *Logger) Info(message string) {
+	// replace tabs with spaces
+	loggerMessage := strings.ReplaceAll(message, "\t", " ")
+
+	instance.logger.Infof(loggerMessage)
+
+	formattedMessage := fmt.Sprintf("INFO	%s:	%s", instance.service, message)
+
+	log.Println(formattedMessage)
+}
+
+func (instance Logger) Error(message string, err error) {
+	instance.logger.Error(fmt.Sprintf("%s: %v", message, err))
+
+	formattedMessage := fmt.Sprintf("ERROR	%s:	%s: %v", instance.service, message, err)
+
+	log.Println(formattedMessage)
+}
+
+
+func (instance *Logger) Fatal(message string, err error) {
+	instance.logger.Fatal(fmt.Sprintf("%s: %v", message, err))
+
+	formattedMessage := fmt.Sprintf("FATAL	%s:	%s: %v", instance.service, message, err)
+
+	log.Fatal(formattedMessage)
 }

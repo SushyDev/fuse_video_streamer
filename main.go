@@ -28,6 +28,8 @@ func handleSignals(cancel context.CancelFunc) {
 	signals := make(chan os.Signal, 1)
 
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
 	<-signals
+
 	cancel()
 }

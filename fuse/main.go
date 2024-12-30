@@ -1,6 +1,7 @@
 package fuse
 
 import (
+	"fmt"
 	"context"
 	"fuse_video_steamer/config"
 	"fuse_video_steamer/fuse/filesystem"
@@ -9,17 +10,16 @@ import (
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
-	"go.uber.org/zap"
 )
 
 type Fuse struct {
 	mountpoint string
 	connection *fuse.Conn
-	logger     *zap.SugaredLogger
+	logger     *logger.Logger
 }
 
 func New(mountpoint string) *Fuse {
-	fuseLogger, err := logger.GetLogger(logger.FuseLogPath)
+	fuseLogger, err := logger.NewLogger("Fuse")
 	if err != nil {
 		panic(err)
 	}
@@ -41,7 +41,7 @@ func New(mountpoint string) *Fuse {
 	)
 
 	if err != nil {
-		fuseLogger.Fatalf("Failed to create connection: %v", err)
+		panic(fmt.Sprintf("Failed to create connection: %v", err))
 	}
 
 	fuseLogger.Info("Successfully created connection")
@@ -70,7 +70,7 @@ func (instance *Fuse) Serve(ctx context.Context) {
 
 	err := server.Serve(fileSystem)
 	if err != nil {
-		instance.logger.Fatalf("Failed to serve filesystem: %v", err)
+		instance.logger.Fatal("Failed to serve filesystem", err)
 	}
 
 	wg.Wait()
@@ -83,7 +83,7 @@ func (instance *Fuse) Close() error {
 
 	err := fuse.Unmount(instance.mountpoint)
 	if err != nil {
-		instance.logger.Errorf("Failed to unmount filesystem: %v", err)
+		instance.logger.Error("Failed to unmount filesystem", err)
 	} else {
 		instance.logger.Info("Unmounted filesystem")
 	}
@@ -91,7 +91,7 @@ func (instance *Fuse) Close() error {
 	if instance.connection != nil {
 		err = instance.connection.Close()
 		if err != nil {
-			instance.logger.Errorf("Failed to close connection: %v", err)
+			instance.logger.Error("Failed to close connection", err)
 		} else {
 			instance.logger.Info("Closed connection")
 		}

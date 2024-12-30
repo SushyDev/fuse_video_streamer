@@ -12,7 +12,6 @@ import (
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
-	"go.uber.org/zap"
 )
 
 var _ fs.Handle = &File{}
@@ -25,13 +24,16 @@ type File struct {
 	videoStreams sync.Map
 	size         uint64
 
-	logger *zap.SugaredLogger
+	logger *logger.Logger
 
 	mu sync.RWMutex
 }
 
 func NewFile(client vfs_api.FileSystemServiceClient, identifier uint64, size uint64) *File {
-	fuseLogger, _ := logger.GetLogger(logger.FuseLogPath)
+	logger, err := logger.NewLogger("File Node")
+	if err != nil {
+		panic(err)
+	}
 
 	return &File{
 		client:     client,
@@ -39,7 +41,7 @@ func NewFile(client vfs_api.FileSystemServiceClient, identifier uint64, size uin
 
 		size: size,
 
-		logger: fuseLogger,
+		logger: logger,
 	}
 }
 

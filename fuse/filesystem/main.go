@@ -5,18 +5,17 @@ import (
 	"fuse_video_steamer/logger"
 
 	"github.com/anacrolix/fuse/fs"
-	"go.uber.org/zap"
 )
 
 type FileSystem struct {
-	logger *zap.SugaredLogger
+	logger *logger.Logger
 }
 
 func New() *FileSystem {
-	sugaredLogger, _ := logger.GetLogger(logger.FuseLogPath)
+	logger, _ := logger.NewLogger("File System")
 
 	return &FileSystem{
-		logger: sugaredLogger,
+		logger: logger,
 	}
 
 }

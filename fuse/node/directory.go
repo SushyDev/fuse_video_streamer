@@ -12,7 +12,6 @@ import (
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
-	"go.uber.org/zap"
 )
 
 var _ fs.Handle = &Directory{}
@@ -23,18 +22,21 @@ type Directory struct {
 
 	tempFiles []*TempFile
 
-	logger *zap.SugaredLogger
+	logger *logger.Logger
 
 	mu sync.RWMutex
 }
 
 func NewDirectory(client vfs_api.FileSystemServiceClient, identifier uint64) *Directory {
-	fuseLogger, _ := logger.GetLogger(logger.FuseLogPath)
+	logger, err := logger.NewLogger("Directory Node")
+	if err != nil {
+		panic(err)
+	}
 
 	return &Directory{
 		client:     client,
 		identifier: identifier,
-		logger:     fuseLogger,
+		logger:     logger,
 	}
 }
 
@@ -73,8 +75,8 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Errorf("Failed to lookup: %v", err)
-		return nil, err
+		fuseDirectory.logger.Error("Failed to lookup", err)
+		return nil, syscall.ENOENT
 	}
 
 	if response.Node == nil {
@@ -88,8 +90,8 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 		})
 
 		if err != nil {
-			fuseDirectory.logger.Errorf("Failed to get video size: %v", err)
-			return nil, err
+			fuseDirectory.logger.Error("Failed to get video size", err)
+			return nil, syscall.ENOENT
 		}
 
 		return NewFile(fuseDirectory.client, response.Node.Identifier, sizeResponse.Size), nil
@@ -117,7 +119,7 @@ func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, 
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Errorf("Failed to read directory: %v", err)
+		fuseDirectory.logger.Error("Failed to read directory", err)
 		return nil, err
 	}
 
@@ -160,7 +162,7 @@ func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Errorf("Failed to remove: %v", err)
+		fuseDirectory.logger.Error("Failed to remove", err)
 		return err
 	}
 
@@ -182,7 +184,7 @@ func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.Rename
 
 	if err != nil {
 		log.Printf("Failed to rename: %v", err)
-		fuseDirectory.logger.Errorf("Failed to rename: %v", err)
+		fuseDirectory.logger.Error("Failed to rename", err)
 		return err
 	}
 
@@ -216,7 +218,7 @@ func (fuseDirectory *Directory) Mkdir(ctx context.Context, request *fuse.MkdirRe
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Errorf("Failed to mkdir: %v", err)
+		fuseDirectory.logger.Error("Failed to mkdir", err)
 		return nil, err
 	}
 
@@ -238,7 +240,7 @@ func (fuseDirectory *Directory) Link(ctx context.Context, request *fuse.LinkRequ
 	})
 
 	if err != nil {
-		fuseDirectory.logger.Errorf("Failed to link: %v", err)
+		fuseDirectory.logger.Error("Failed to link", err)
 		return nil, err
 	}
 
