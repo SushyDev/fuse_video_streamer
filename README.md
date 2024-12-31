@@ -68,7 +68,7 @@ Fuse Video Streamer uses a `config.yml` file (Very important its `yml` and not `
 
 Example `config.yml`.
 ```yaml
-mount_points: "/mnt/fvs"
+mount_point: "/mnt/fvs"
 volume_name: "fvs"
 file_servers:
   - "localhost:xxxx"
