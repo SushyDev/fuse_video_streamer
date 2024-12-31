@@ -42,7 +42,7 @@ fuse_video_streamer:
   cap_add:
     - SYS_ADMIN
   security_opt:
-    - apparmor:unconfirmed
+    - apparmor:unconfined
   devices:
     - /dev/fuse:/dev/fuse:rwm
   pid: host # Very important, each stream is opened per PID!
