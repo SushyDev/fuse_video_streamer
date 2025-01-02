@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"sync"
 
@@ -75,8 +74,8 @@ func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, o
 var _ fs.HandleReader = &File{}
 
 func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
-	fuseFile.mu.Lock()
-	defer fuseFile.mu.Unlock()
+	fuseFile.mu.RLock()
+	defer fuseFile.mu.RUnlock()
 
 	videoStream, err := fuseFile.getVideoStream(readRequest.Pid)
 	if err != nil {
@@ -85,16 +84,9 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		return err
 	}
 
-	_, err = videoStream.Seek(uint64(readRequest.Offset), io.SeekStart)
-	if err != nil {
-		message := fmt.Sprintf("Failed to seek video stream for pid %d", readRequest.Pid)
-		fuseFile.logger.Error(message, err)
-		return err
-	}
-
 	buffer := make([]byte, readRequest.Size)
 
-	bytesRead, err := videoStream.Read(buffer)
+	bytesRead, err := videoStream.ReadAt(buffer, readRequest.Offset)
 	if err != nil {
 		message := fmt.Sprintf("Failed to read video stream for pid %d", readRequest.Pid)
 		fuseFile.logger.Error(message, err)
@@ -138,7 +130,7 @@ func (fuseFile *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 		return nil, err
 	}
 
-	newVideoStream := stream.NewStream(response.Url, fuseFile.size)
+	newVideoStream := stream.NewStream(response.Url, int64(fuseFile.size))
 
 	fuseFile.videoStreams.Store(pid, newVideoStream)
 

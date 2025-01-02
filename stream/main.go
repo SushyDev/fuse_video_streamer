@@ -3,277 +3,129 @@ package stream
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"fuse_video_steamer/logger"
+	"fuse_video_steamer/stream/loader"
+	"fuse_video_steamer/stream/streamer/connection"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
 
 type Stream struct {
-	url    string
-	size   uint64
-	client *http.Client
-
-	stopChannel chan struct{}
-	waitChannel chan struct{}
+	url  string
+	size int64
 
 	context context.Context
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 
-	buffer       ring_buffer.LockingRingBufferInterface
-	seekPosition atomic.Uint64
-
-	logger *logger.Logger
+	buffer ring_buffer.LockingRingBufferInterface
+	connection *connection.Connection
 
 	mu sync.RWMutex
-
-	closed bool
 }
 
-var bufferCreateSize = uint64(1024 * 1024 * 1024 * 1)
+func NewStream(url string, size int64) *Stream {
+	context, cancel := context.WithCancel(context.Background())
 
-func NewStream(url string, size uint64) *Stream {
-	logger, err := logger.NewLogger("Stream")
-	if err != nil {
-		panic(err)
-	}
+	bufferSize := min(uint64(size), 1024*1024*1024) // 1GB
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			MaxIdleConns:        1,
-			MaxConnsPerHost:     1,
-			MaxIdleConnsPerHost: 1,
-			Proxy:               http.ProxyFromEnvironment,
-		},
-		Timeout: 6 * time.Hour,
-	}
+	buffer := ring_buffer.NewLockingRingBuffer(context, bufferSize, 0)
 
-	bufferContext, _ := context.WithCancel(context.Background())
+	steam := &Stream{
+		url:  url,
+		size: size,
 
-	buffer := ring_buffer.NewLockingRingBuffer(bufferContext, bufferCreateSize, 0)
-
-	return &Stream{
-		url:    url,
-		size:   size,
-		client: client,
+		context: context,
+		cancel:  cancel,
 
 		buffer: buffer,
-
-		logger: logger,
 	}
+
+	return steam
 }
 
-func (stream *Stream) startStream(seekPosition uint64) {
-	defer func() {
-		stream.wg.Done()
-	}()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	defer cancel()
-
-	rangeHeader := fmt.Sprintf("bytes=%d-", max(seekPosition, 0))
-	req, err := http.NewRequestWithContext(ctx, "GET", stream.url, nil)
+func (instance *Stream) updateConnection(position int64) (*connection.Connection, error) {
+	connection, err := connection.NewConnection(instance.url, position)
 	if err != nil {
-		message := fmt.Sprintf("Stream \"%s\" failed to create request", stream.url)
-		stream.logger.Error(message, err)
-		stream.cancel()
-		return
+		fmt.Println("Failed to create new connection:", err)
+		return nil, err
 	}
 
-	req.Header.Set("Range", rangeHeader)
+	instance.buffer.ResetToPosition(uint64(connection.GetSeekPosition()))
 
-	resp, err := stream.client.Do(req)
-	if err != nil {
-		message := fmt.Sprintf("Stream \"%s\" failed to do request", stream.url)
-		stream.logger.Error(message, err)
-		stream.cancel()
-		return
-	}
+	go loader.Copy(instance.buffer, connection)
 
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusPartialContent {
-		stream.logger.Error(fmt.Sprintf("Stream \"%s\" failed to get partial content: %d", stream.url, resp.StatusCode), nil)
-		stream.cancel()
-		return
-	}
-
-	chunk := make([]byte, 8192)
-
-	var normalDelay time.Duration = 100 * time.Microsecond
-	var retryDelay time.Duration = normalDelay
-
-	for {
-		select {
-		case <-stream.context.Done():
-			return
-		case <-ctx.Done():
-			return
-		case <-time.After(retryDelay):
-		}
-
-		bytesToOverwrite := max(stream.buffer.GetBytesToOverwrite(), 0)
-		chunkSizeToRead := min(uint64(len(chunk)), bytesToOverwrite)
-
-		if chunkSizeToRead == 0 {
-			retryDelay = 100 * time.Millisecond // Retry after 100 milliseconds
-			continue
-		}
-
-		bytesRead, err := resp.Body.Read(chunk[:chunkSizeToRead])
-
-		if bytesRead > 0 {
-			_, err := stream.buffer.Write(chunk[:bytesRead])
-			if err != nil {
-				message := fmt.Sprintf("Stream \"%s\" failed to write", stream.url)
-				stream.logger.Error(message, err)
-				return // Crash ?
-			}
-
-			retryDelay = normalDelay // Reset
-		}
-
-		switch {
-		case err == io.ErrUnexpectedEOF:
-			message := fmt.Sprintf("Stream \"%s\" unexpected EOF, Bytes read: %d", stream.url, bytesRead)
-			stream.logger.Error(message, nil)
-			return // Decide if the loop should crash or retry logic can be added.
-		case err == io.EOF:
-			// TODO FINISHED
-			retryDelay = 5 * time.Second
-			continue
-		case err != nil:
-			message := fmt.Sprintf("Stream \"%s\" failed to read", stream.url)
-			stream.logger.Error(message, err)
-			retryDelay = 5 * time.Second
-			continue
-		}
-	}
+	return connection, nil
 }
 
-func (stream *Stream) stopStream() {
-	if stream.cancel == nil {
-		return
+func (instance *Stream) ReadAt(p []byte, absolutePosition int64) (int, error) {
+	instance.mu.RLock()
+	defer instance.mu.RUnlock()
+
+	requestedSize := int64(len(p))
+
+	if absolutePosition+requestedSize >= instance.size {
+		absolutePosition = instance.size - absolutePosition - 1
 	}
 
-	stream.cancel()
-	stream.wg.Wait()
+	instance.checkAndWait(p, absolutePosition)
+
+	return instance.buffer.ReadAt(p, uint64(absolutePosition))
 }
 
-func (stream *Stream) Read(p []byte) (int, error) {
-	stream.mu.RLock()
-	defer stream.mu.RUnlock()
+func (instance *Stream) checkAndWait(p []byte, position int64) {
+	positionWithData := max(0, min(instance.size, int64(position)+int64(len(p)))) - 1
 
-	if stream.closed {
-		return 0, fmt.Errorf("Streamer is closed")
+	if instance.connection == nil {
+		fmt.Println("Creating new connection")
+		newConnection, _ := instance.updateConnection(int64(position))
+		instance.connection = newConnection
+
+		instance.buffer.WaitForPositionInBuffer(uint64(positionWithData), 3 * time.Second)
+
+		return 
 	}
 
-	seekPosition := stream.GetSeekPosition()
-	requestedSize := uint64(len(p))
+	if instance.connection.IsClosed() {
+		fmt.Println("Connection is closed")
+		newConnection, _ := instance.updateConnection(int64(position))
+		instance.connection = newConnection
 
-	if seekPosition+requestedSize >= stream.size {
-		requestedSize = stream.size - seekPosition - 1
-	}
-
-	stream.checkAndStartBufferIfNeeded(seekPosition, requestedSize)
-
-	n, err := stream.buffer.ReadAt(p, seekPosition)
-	if err != nil {
-		return 0, fmt.Errorf("ReadAt error %v\n", err)
-	}
-
-	return n, err
-}
-
-func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition uint64, requestedSize uint64) {
-	if seekPosition >= stream.size {
-		return
-	}
-
-	seekInBuffer := stream.buffer.IsPositionInBuffer(seekPosition)
-
-	if !seekInBuffer {
-		stream.stopStream()
-
-		context, cancel := context.WithCancel(context.Background())
-		stream.context = context
-		stream.cancel = cancel
-
-		stream.wg.Add(1)
-
-		stream.buffer.ResetToPosition(seekPosition)
-
-		go stream.startStream(seekPosition)
-
-		waitForSize := min(seekPosition+requestedSize, stream.size)
-
-		stream.buffer.WaitForPositionInBuffer(waitForSize)
+		instance.buffer.WaitForPositionInBuffer(uint64(positionWithData), 3 * time.Second)
 
 		return
 	}
 
-	dataInBuffer := stream.buffer.IsPositionInBuffer(seekPosition + requestedSize)
+	positionInBuffer := instance.buffer.IsPositionInBuffer(uint64(position))
 
-	if !dataInBuffer {
-		waitForSize := min(seekPosition+requestedSize, stream.size)
+	if !positionInBuffer {
+		fmt.Println("Position is not in buffer")
+		newConnection, _ := instance.updateConnection(int64(position))
+		instance.connection = newConnection
 
-		stream.buffer.WaitForPositionInBuffer(waitForSize)
-	}
-}
+		instance.buffer.WaitForPositionInBuffer(uint64(positionWithData), 3 * time.Second)
 
-func (stream *Stream) Seek(offset uint64, whence int) (uint64, error) {
-	stream.mu.Lock()
-	defer stream.mu.Unlock()
-
-	if stream.closed {
-		return 0, fmt.Errorf("Streamer is closed")
+		return 
 	}
 
-	var newOffset uint64
+	dataPositionInBuffer := instance.buffer.IsPositionInBuffer(uint64(positionWithData))
 
-	switch whence {
-	case io.SeekStart:
-		newOffset = offset
-	case io.SeekCurrent:
-		return 0, fmt.Errorf("SeekCurrent is not supported")
-	case io.SeekEnd:
-		return 0, fmt.Errorf("SeekEnd is not supported")
-	default:
-		return 0, fmt.Errorf("Invalid whence: %d", whence)
+	if !dataPositionInBuffer {
+		instance.buffer.WaitForPositionInBuffer(uint64(positionWithData), 3 * time.Second)
 	}
-
-	if newOffset < 0 {
-		return 0, fmt.Errorf("Negative position is invalid")
-	}
-
-	var err error
-	if newOffset >= stream.size {
-		newOffset = stream.size
-		err = io.EOF
-	}
-
-	stream.seekPosition.Store(newOffset)
-
-	return newOffset, err
-}
-
-func (stream *Stream) GetSeekPosition() uint64 {
-	return stream.seekPosition.Load()
 }
 
 func (stream *Stream) Close() error {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
 
-	stream.stopStream()
-	// stream.buffer.Close()
+	if stream.connection != nil {
+		stream.connection.Close()
+	}
+
+	stream.cancel()
 
 	return nil
 }
