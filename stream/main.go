@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"fuse_video_steamer/logger"
-	"fuse_video_steamer/stream/buffer"
+
+	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
 
 type Stream struct {
@@ -25,7 +26,7 @@ type Stream struct {
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 
-	buffer       *buffer.Buffer
+	buffer       ring_buffer.LockingRingBufferInterface
 	seekPosition atomic.Uint64
 
 	logger *logger.Logger
@@ -43,8 +44,6 @@ func NewStream(url string, size uint64) *Stream {
 		panic(err)
 	}
 
-	buffer := buffer.NewBuffer(min(size, bufferCreateSize), 0)
-
 	client := &http.Client{
 		Transport: &http.Transport{
 			MaxIdleConns:        1,
@@ -54,6 +53,10 @@ func NewStream(url string, size uint64) *Stream {
 		},
 		Timeout: 6 * time.Hour,
 	}
+
+	bufferContext, _ := context.WithCancel(context.Background())
+
+	buffer := ring_buffer.NewLockingRingBuffer(bufferContext, bufferCreateSize, 0)
 
 	return &Stream{
 		url:    url,
@@ -116,7 +119,7 @@ func (stream *Stream) startStream(seekPosition uint64) {
 		case <-time.After(retryDelay):
 		}
 
-		bytesToOverwrite := max(stream.buffer.GetBytesToOverwriteSync(), 0)
+		bytesToOverwrite := max(stream.buffer.GetBytesToOverwrite(), 0)
 		chunkSizeToRead := min(uint64(len(chunk)), bytesToOverwrite)
 
 		if chunkSizeToRead == 0 {
@@ -194,7 +197,7 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition uint64, requested
 		return
 	}
 
-	seekInBuffer := stream.buffer.IsPositionInBufferSync(seekPosition)
+	seekInBuffer := stream.buffer.IsPositionInBuffer(seekPosition)
 
 	if !seekInBuffer {
 		stream.stopStream()
@@ -205,23 +208,23 @@ func (stream *Stream) checkAndStartBufferIfNeeded(seekPosition uint64, requested
 
 		stream.wg.Add(1)
 
-		stream.buffer.Reset(seekPosition)
+		stream.buffer.ResetToPosition(seekPosition)
 
 		go stream.startStream(seekPosition)
 
 		waitForSize := min(seekPosition+requestedSize, stream.size)
 
-		stream.buffer.WaitForPositionInBuffer(stream.context, waitForSize)
+		stream.buffer.WaitForPositionInBuffer(waitForSize)
 
 		return
 	}
 
-	dataInBuffer := stream.buffer.IsPositionInBufferSync(seekPosition + requestedSize)
+	dataInBuffer := stream.buffer.IsPositionInBuffer(seekPosition + requestedSize)
 
 	if !dataInBuffer {
 		waitForSize := min(seekPosition+requestedSize, stream.size)
 
-		stream.buffer.WaitForPositionInBuffer(stream.context, waitForSize)
+		stream.buffer.WaitForPositionInBuffer(waitForSize)
 	}
 }
 
@@ -270,7 +273,7 @@ func (stream *Stream) Close() error {
 	defer stream.mu.Unlock()
 
 	stream.stopStream()
-	stream.buffer.Close()
+	// stream.buffer.Close()
 
 	return nil
 }

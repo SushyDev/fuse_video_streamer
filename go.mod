@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/sushydev/ring_buffer_go v0.1.2 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/exp v0.0.0-20241204233417-43b7b7cde48d // indirect
 	golang.org/x/net v0.30.0 // indirect
