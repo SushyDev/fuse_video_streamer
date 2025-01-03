@@ -3,129 +3,121 @@ package stream
 import (
 	"context"
 	"fmt"
+	"fuse_video_steamer/stream/connection"
+	"fuse_video_steamer/stream/transfer"
 	"sync"
-	"time"
-
-	"fuse_video_steamer/stream/loader"
-	"fuse_video_steamer/stream/streamer/connection"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
 
 type Stream struct {
-	url  string
-	size int64
+	url    string
+	size   uint64
+	buffer ring_buffer.LockingRingBufferInterface
 
 	context context.Context
 	cancel  context.CancelFunc
-	wg      sync.WaitGroup
 
-	buffer ring_buffer.LockingRingBufferInterface
-	connection *connection.Connection
+	// Job
+	transfer *transfer.Transfer
 
-	mu sync.RWMutex
+	mu sync.Mutex
 }
 
-func NewStream(url string, size int64) *Stream {
+func NewStream(url string, size uint64) *Stream {
+	bufferSize := min(uint64(1024*1024*1024), size)
+
 	context, cancel := context.WithCancel(context.Background())
 
-	bufferSize := min(uint64(size), 1024*1024*1024) // 1GB
+	buffer := ring_buffer.NewLockingRingBuffer(context, uint64(bufferSize), 0)
 
-	buffer := ring_buffer.NewLockingRingBuffer(context, bufferSize, 0)
-
-	steam := &Stream{
-		url:  url,
-		size: size,
+	manager := &Stream{
+		size:   size,
+		url:    url,
+		buffer: buffer,
 
 		context: context,
 		cancel:  cancel,
-
-		buffer: buffer,
 	}
 
-	return steam
+	return manager
 }
 
-func (instance *Stream) updateConnection(position int64) (*connection.Connection, error) {
-	connection, err := connection.NewConnection(instance.url, position)
+func (manager *Stream) newTransferJob(startPosition uint64) error {
+	connection, err := connection.NewConnection(manager.url, startPosition)
 	if err != nil {
-		fmt.Println("Failed to create new connection:", err)
-		return nil, err
+		return err
 	}
 
-	instance.buffer.ResetToPosition(uint64(connection.GetSeekPosition()))
+	manager.buffer.ResetToPosition(startPosition)
 
-	go loader.Copy(instance.buffer, connection)
+	oldTransfer := manager.transfer
+	transfer := transfer.NewTransfer(manager.buffer, connection)
+	manager.transfer = transfer
 
-	return connection, nil
+	if oldTransfer != nil {
+		oldTransfer.Close()
+	}
+
+	return nil
 }
 
-func (instance *Stream) ReadAt(p []byte, absolutePosition int64) (int, error) {
-	instance.mu.RLock()
-	defer instance.mu.RUnlock()
+func (manager *Stream) ReadAt(p []byte, seekPosition uint64) (int, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
 
-	requestedSize := int64(len(p))
-
-	if absolutePosition+requestedSize >= instance.size {
-		absolutePosition = instance.size - absolutePosition - 1
+	if manager.IsClosed() {
+		return 0, fmt.Errorf("manager is closed")
 	}
 
-	instance.checkAndWait(p, absolutePosition)
+	requestedSize := uint64(len(p))
+	if seekPosition+requestedSize >= manager.size {
+		requestedSize = manager.size - seekPosition - 1
+	}
 
-	return instance.buffer.ReadAt(p, uint64(absolutePosition))
+	if !manager.buffer.IsPositionAvailable(seekPosition) {
+		fmt.Println("Seek position is not available in the buffer. Starting a new connection...")
+
+		if err := manager.newTransferJob(seekPosition); err != nil {
+			return 0, err
+		}
+	}
+
+	requestedPosition := min(seekPosition+requestedSize, manager.size)
+
+	if !manager.buffer.IsPositionAvailable(requestedPosition) {
+		manager.buffer.WaitForPosition(requestedPosition)
+	}
+
+	return manager.buffer.ReadAt(p, uint64(seekPosition))
 }
 
-func (instance *Stream) checkAndWait(p []byte, position int64) {
-	positionWithData := max(0, min(instance.size, int64(position)+int64(len(p)))) - 1
-
-	if instance.connection == nil {
-		fmt.Println("Creating new connection")
-		newConnection, _ := instance.updateConnection(int64(position))
-		instance.connection = newConnection
-
-		instance.buffer.WaitForPositionInBuffer(uint64(positionWithData), 3 * time.Second)
-
-		return 
-	}
-
-	if instance.connection.IsClosed() {
-		fmt.Println("Connection is closed")
-		newConnection, _ := instance.updateConnection(int64(position))
-		instance.connection = newConnection
-
-		instance.buffer.WaitForPositionInBuffer(uint64(positionWithData), 3 * time.Second)
-
-		return
-	}
-
-	positionInBuffer := instance.buffer.IsPositionInBuffer(uint64(position))
-
-	if !positionInBuffer {
-		fmt.Println("Position is not in buffer")
-		newConnection, _ := instance.updateConnection(int64(position))
-		instance.connection = newConnection
-
-		instance.buffer.WaitForPositionInBuffer(uint64(positionWithData), 3 * time.Second)
-
-		return 
-	}
-
-	dataPositionInBuffer := instance.buffer.IsPositionInBuffer(uint64(positionWithData))
-
-	if !dataPositionInBuffer {
-		instance.buffer.WaitForPositionInBuffer(uint64(positionWithData), 3 * time.Second)
+func (manager *Stream) IsClosed() bool {
+	select {
+	case <-manager.context.Done():
+		return true
+	default:
+		return false
 	}
 }
 
-func (stream *Stream) Close() error {
-	stream.mu.Lock()
-	defer stream.mu.Unlock()
+func (manager *Stream) Close() error {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
 
-	if stream.connection != nil {
-		stream.connection.Close()
+	if manager.IsClosed() {
+		return nil
 	}
 
-	stream.cancel()
+	fmt.Println("closing manager")
+
+	if manager.transfer != nil {
+		manager.transfer.Close()
+	}
+
+	manager.cancel()
+
+	fmt.Println("closed manager")
 
 	return nil
 }

@@ -13,25 +13,26 @@ var _ io.ReadCloser = &Connection{}
 
 type Connection struct {
 	url          string
-	seekPosition int64
-	context      context.Context
-	cancel       context.CancelFunc
+	startPosition uint64
+
+	context context.Context
+	cancel  context.CancelFunc
 
 	body io.ReadCloser
 
 	mu sync.RWMutex
 }
 
-func NewConnection(url string, seekPosition int64) (*Connection, error) {
-	if seekPosition < 0 {
-		return nil, fmt.Errorf("Invalid seek position: %d", seekPosition)
+func NewConnection(url string, startPosition uint64) (*Connection, error) {
+	if startPosition < 0 {
+		return nil, fmt.Errorf("Invalid seek position: %d", startPosition)
 	}
 
 	connectionContext, connectionCancel := context.WithCancel(context.Background())
 
 	connection := &Connection{
 		url:          url,
-		seekPosition: seekPosition,
+		startPosition: startPosition,
 		context:      connectionContext,
 		cancel:       connectionCancel,
 	}
@@ -40,8 +41,8 @@ func NewConnection(url string, seekPosition int64) (*Connection, error) {
 }
 
 func (connection *Connection) Read(buf []byte) (int, error) {
-	connection.mu.RLock()
-	defer connection.mu.RUnlock()
+	connection.mu.Lock()
+	defer connection.mu.Unlock()
 
 	if connection.IsClosed() {
 		return 0, context.Canceled
@@ -56,7 +57,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 		return 0, fmt.Errorf("Failed to create request")
 	}
 
-	rangeHeader := fmt.Sprintf("bytes=%d-", connection.seekPosition)
+	rangeHeader := fmt.Sprintf("bytes=%d-", connection.startPosition)
 	request.Header.Set("Range", rangeHeader)
 
 	fmt.Println("Requesting", rangeHeader)
@@ -85,28 +86,30 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	return response.Body.Read(buf)
 }
 
-func (connection *Connection) GetSeekPosition() int64 {
-	return connection.seekPosition
-}
-
 func (connection *Connection) IsClosed() bool {
 	select {
 	case <-connection.context.Done():
 		return true
 	default:
+		return false
 	}
-
-	return false
 }
 
 func (connection *Connection) Close() error {
+	connection.mu.Lock()
+	defer connection.mu.Unlock()
+
+	fmt.Println("closing connection")
+
+	connection.cancel()
+
 	if connection.body != nil {
 		connection.body.Close()
 	}
 
-	connection.cancel()
-
 	connection.body = nil
+
+	fmt.Println("closed connection")
 
 	return nil
 }
