@@ -99,7 +99,9 @@ func (connection *Connection) Close() error {
 	connection.mu.Lock()
 	defer connection.mu.Unlock()
 
-	fmt.Println("closing connection")
+	if connection.IsClosed() {
+		return nil
+	}
 
 	connection.cancel()
 
@@ -108,8 +110,6 @@ func (connection *Connection) Close() error {
 	}
 
 	connection.body = nil
-
-	fmt.Println("closed connection")
 
 	return nil
 }

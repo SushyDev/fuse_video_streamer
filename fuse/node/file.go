@@ -63,8 +63,8 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 var _ fs.NodeOpener = &File{}
 
 func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	fuseFile.mu.Lock()
-	defer fuseFile.mu.Unlock()
+	fuseFile.mu.RLock()
+	defer fuseFile.mu.RUnlock()
 
 	openResponse.Flags |= fuse.OpenKeepCache
 

@@ -30,10 +30,9 @@ type Transfer struct {
 	wg *sync.WaitGroup
 }
 
-var normalDelay time.Duration = 1 * time.Millisecond
+var normalDelay time.Duration = 100 * time.Microsecond
 var errorDelay time.Duration = 1 * time.Second
 var waitDelay time.Duration = 1 * time.Millisecond
-
 var buf = make([]byte, 1024*1024*4)
 
 func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection) *Transfer {
@@ -54,14 +53,11 @@ func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *conn
 	return transfer
 }
 
-
 func (transfer *Transfer) start() {
 	defer func() {
 		if transfer.connection != nil && !transfer.connection.IsClosed() {
 			transfer.connection.Close()
 		}
-
-		fmt.Println("stopped transfer")
 
 		transfer.wg.Done()
 	}()
@@ -115,8 +111,6 @@ func (transfer *Transfer) start() {
 			if n > 0 {
 				retryDelay = normalDelay
 			}
-
-			break
 		}
 	}
 }
@@ -135,13 +129,8 @@ func (transfer *Transfer) Close() error {
 		return nil
 	}
 
-	fmt.Println("closing transfer")
-
 	transfer.cancel()
-
 	transfer.wg.Wait()
-
-	fmt.Println("closed transfer")
 
 	return nil
 }
