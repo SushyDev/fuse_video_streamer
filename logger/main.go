@@ -2,10 +2,10 @@ package logger
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
-	"log"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -100,7 +100,6 @@ func (instance Logger) Error(message string, err error) {
 	formattedMessage := fmt.Sprintf("ERROR	%s:	%s: %v", instance.service, message, err)
 	log.Println(formattedMessage)
 }
-
 
 func (instance *Logger) Fatal(message string, err error) {
 	loggerMessage := fmt.Sprintf("%s: %v", message, err)

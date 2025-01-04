@@ -21,7 +21,7 @@ type File struct {
 	identifier uint64
 
 	streams stream.Map
-	size         uint64
+	size    uint64
 
 	logger *logger.Logger
 

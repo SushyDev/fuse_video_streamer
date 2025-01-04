@@ -12,7 +12,7 @@ import (
 var _ io.ReadCloser = &Connection{}
 
 type Connection struct {
-	url          string
+	url           string
 	startPosition uint64
 
 	context context.Context
@@ -31,10 +31,10 @@ func NewConnection(url string, startPosition uint64) (*Connection, error) {
 	connectionContext, connectionCancel := context.WithCancel(context.Background())
 
 	connection := &Connection{
-		url:          url,
+		url:           url,
 		startPosition: startPosition,
-		context:      connectionContext,
-		cancel:       connectionCancel,
+		context:       connectionContext,
+		cancel:        connectionCancel,
 	}
 
 	return connection, nil

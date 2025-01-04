@@ -23,8 +23,8 @@ var _ fs.Handle = &Root{}
 var clients = []vfs_api.FileSystemServiceClient{}
 
 type Root struct {
-	logger     *logger.Logger
-	mu         sync.RWMutex
+	logger *logger.Logger
+	mu     sync.RWMutex
 }
 
 func NewRoot() *Root {
@@ -42,7 +42,6 @@ func NewRoot() *Root {
 			fileServer,
 			grpc.WithTransportCredentials(insecureCredentials),
 			grpc.WithConnectParams(connectParams),
-
 		)
 
 		if err != nil {
