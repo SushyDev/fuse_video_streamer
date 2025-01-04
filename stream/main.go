@@ -11,7 +11,12 @@ import (
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
 
-var standardBufferSize uint64 = 1024 * 1024 * 1024
+const (
+	maxBufferSize  = int64(1024 * 1024 * 1024) // 1GB
+	minBufferSize  = int64(100 * 1024 * 1024)  // 100MB
+	maxPreloadSize = float64(25 * 1024 * 1024) // 25MB
+	minPreloadSize = int64(10 * 1024 * 1024)   // 10MB
+)
 
 type Stream struct {
 	url  string
@@ -28,20 +33,16 @@ type Stream struct {
 	mu sync.Mutex
 }
 
+// Buffer size is 10% of buffer size, capped at 1GB or at least 100 mb or max buffer size
 func calculateBufferSize(fileSize int64) int64 {
-	maxBufferSize := int64(1024 * 1024 * 1024)
-	minBufferSize := max(100*1024*1024, fileSize)
-
-	// Buffer size is 10% of buffer size, capped at 1GB or at least 100 mb or max buffer size
-	return min(int64(min(float64(fileSize)*0.1, float64(maxBufferSize))), minBufferSize)
+	bufferSize := int64(float64(fileSize) * 0.1)
+	return min(maxBufferSize, max(minBufferSize, bufferSize))
 }
 
+// Preload size is half the buffer size, capped at 200 MB or at least 10 mb or max buffer size
 func calculatePreloadSize(bufferSize int64) int64 {
-	maxPreloadSize := float64(1024 * 1024 * 25)
-	minPreloadSize := max(10*1024*1024, bufferSize)
-
-	// Preload size is half the buffer size, capped at 200 MB or at least 10 mb or max buffer size
-	return min(int64(min(float64(bufferSize)*0.5, maxPreloadSize)), minPreloadSize)
+	preloadSize := int64(float64(bufferSize) * 0.5)
+	return min(int64(maxPreloadSize), max(minPreloadSize, preloadSize))
 }
 
 func NewStream(url string, size uint64) *Stream {
@@ -64,14 +65,14 @@ func NewStream(url string, size uint64) *Stream {
 	return manager
 }
 
-func (manager *Stream) newTransfer(startPosition uint64) error {
+func (manager *Stream) newTransfer(startPosition uint64, requestedBytes uint64) error {
 	if manager.transfer != nil {
 		manager.transfer.Close()
 	}
 
-	preloadSize := calculatePreloadSize(int64(manager.buffer.Size()))
+	preloadSizeBefore := calculatePreloadSize(int64(manager.buffer.Size()))
 
-	bufferStartPosition := uint64(max(0, int64(startPosition)-preloadSize))
+	bufferStartPosition := uint64(max(0, int64(startPosition)-preloadSizeBefore))
 
 	connection, err := connection.NewConnection(manager.url, bufferStartPosition)
 	if err != nil {
@@ -82,10 +83,18 @@ func (manager *Stream) newTransfer(startPosition uint64) error {
 	transfer := transfer.NewTransfer(manager.buffer, connection)
 	manager.transfer = transfer
 
+	preloadSizeAhead := min(int64(manager.size), preloadSizeBefore)
+
+	if startPosition == 0 {
+		// If we're just starting we don't need to preload that far ahead just the requested bytes
+		requestedPosition := int64(min(startPosition+requestedBytes, manager.size))
+		preloadSizeAhead = min(requestedPosition, preloadSizeAhead)
+	}
+
 	ctx, cancel := context.WithTimeout(manager.context, 10*time.Second)
 	defer cancel()
 
-	ok := manager.buffer.WaitForPosition(ctx, min(manager.size, bufferStartPosition+uint64(preloadSize)))
+	ok := manager.buffer.WaitForPosition(ctx, min(manager.size, bufferStartPosition+uint64(preloadSizeAhead)))
 	if !ok {
 		return fmt.Errorf("Timeout waiting for the buffer to fill")
 	}
@@ -101,18 +110,19 @@ func (manager *Stream) ReadAt(p []byte, seekPosition uint64) (int, error) {
 		return 0, fmt.Errorf("manager is closed")
 	}
 
+	requestedBytes := uint64(len(p))
+
 	if !manager.buffer.IsPositionAvailable(seekPosition) {
 		fmt.Println("Seek position is not available in the buffer. Starting a new connection...")
 
-		if err := manager.newTransfer(seekPosition); err != nil {
+		if err := manager.newTransfer(seekPosition, requestedBytes); err != nil {
 			return 0, err
 		}
 
 		return manager.buffer.ReadAt(p, seekPosition)
 	}
 
-	requestedSize := uint64(len(p))
-	requestedPosition := min(seekPosition+requestedSize, manager.size)
+	requestedPosition := min(seekPosition+requestedBytes, manager.size)
 
 	if !manager.buffer.IsPositionAvailable(requestedPosition) {
 		ctx, cancel := context.WithTimeout(manager.context, 10*time.Second)
@@ -137,6 +147,9 @@ func (manager *Stream) IsClosed() bool {
 }
 
 func (manager *Stream) Close() error {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+
 	if manager.IsClosed() {
 		return nil
 	}
