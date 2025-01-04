@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"sync"
 
@@ -21,8 +20,8 @@ type File struct {
 	client     vfs_api.FileSystemServiceClient
 	identifier uint64
 
-	videoStreams sync.Map
-	size         uint64
+	streams stream.Map
+	size    uint64
 
 	logger *logger.Logger
 
@@ -64,8 +63,8 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 var _ fs.NodeOpener = &File{}
 
 func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	fuseFile.mu.Lock()
-	defer fuseFile.mu.Unlock()
+	fuseFile.mu.RLock()
+	defer fuseFile.mu.RUnlock()
 
 	openResponse.Flags |= fuse.OpenKeepCache
 
@@ -75,26 +74,20 @@ func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, o
 var _ fs.HandleReader = &File{}
 
 func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
-	fuseFile.mu.Lock()
-	defer fuseFile.mu.Unlock()
+	fuseFile.mu.RLock()
+	defer fuseFile.mu.RUnlock()
 
-	videoStream, err := fuseFile.getVideoStream(readRequest.Pid)
+	videoStream, err := fuseFile.getStream(readRequest.Pid)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get video stream for pid %d", readRequest.Pid)
 		fuseFile.logger.Error(message, err)
 		return err
 	}
 
-	_, err = videoStream.Seek(uint64(readRequest.Offset), io.SeekStart)
-	if err != nil {
-		message := fmt.Sprintf("Failed to seek video stream for pid %d", readRequest.Pid)
-		fuseFile.logger.Error(message, err)
-		return err
-	}
-
+	// TODO buffer pool
 	buffer := make([]byte, readRequest.Size)
 
-	bytesRead, err := videoStream.Read(buffer)
+	bytesRead, err := videoStream.ReadAt(buffer, uint64(readRequest.Offset))
 	if err != nil {
 		message := fmt.Sprintf("Failed to read video stream for pid %d", readRequest.Pid)
 		fuseFile.logger.Error(message, err)
@@ -112,20 +105,22 @@ func (fuseFile *File) Flush(ctx context.Context, flushRequest *fuse.FlushRequest
 	fuseFile.mu.Lock()
 	defer fuseFile.mu.Unlock()
 
-	videoStream, ok := fuseFile.videoStreams.Load(flushRequest.Pid)
+	videoStream, ok := fuseFile.streams.Load(flushRequest.Pid)
 	if ok {
-		videoStream.(*stream.Stream).Close()
+		videoStream.Close()
 	}
 
 	return nil
 }
 
-// --- Helpers
-
-func (fuseFile *File) getVideoStream(pid uint32) (*stream.Stream, error) {
-	videoStream, ok := fuseFile.videoStreams.Load(pid)
+func (fuseFile *File) getStream(pid uint32) (*stream.Stream, error) {
+	existingStream, ok := fuseFile.streams.Load(pid)
 	if ok {
-		return videoStream.(*stream.Stream), nil
+		if !existingStream.IsClosed() {
+			return existingStream, nil
+		}
+
+		fuseFile.streams.Delete(pid)
 	}
 
 	response, err := fuseFile.client.GetVideoUrl(context.Background(), &vfs_api.GetVideoUrlRequest{
@@ -138,9 +133,9 @@ func (fuseFile *File) getVideoStream(pid uint32) (*stream.Stream, error) {
 		return nil, err
 	}
 
-	newVideoStream := stream.NewStream(response.Url, fuseFile.size)
+	newStream := stream.NewStream(response.Url, fuseFile.size)
 
-	fuseFile.videoStreams.Store(pid, newVideoStream)
+	fuseFile.streams.Store(pid, newStream)
 
-	return newVideoStream, nil
+	return newStream, nil
 }
