@@ -69,7 +69,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 			MaxIdleConnsPerHost: 1,
 			Proxy:               http.ProxyFromEnvironment,
 		},
-		Timeout: 6 * time.Hour,
+		Timeout: 4 * time.Hour,
 	}
 
 	response, err := client.Do(request)

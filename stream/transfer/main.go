@@ -30,7 +30,7 @@ type Transfer struct {
 	wg *sync.WaitGroup
 }
 
-var normalDelay time.Duration = 100 * time.Microsecond
+var normalDelay time.Duration = 1 * time.Microsecond
 var errorDelay time.Duration = 1 * time.Second
 var waitDelay time.Duration = 1 * time.Millisecond
 var buf = make([]byte, 1024*1024*4)
@@ -54,6 +54,8 @@ func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *conn
 }
 
 func (transfer *Transfer) start() {
+	transfer.wg.Add(1)
+
 	defer func() {
 		if transfer.connection != nil && !transfer.connection.IsClosed() {
 			transfer.connection.Close()
@@ -64,8 +66,6 @@ func (transfer *Transfer) start() {
 
 	var retryDelay time.Duration = normalDelay
 
-	transfer.wg.Add(1)
-
 	for {
 		select {
 		case <-transfer.context.Done():
@@ -73,11 +73,12 @@ func (transfer *Transfer) start() {
 		case <-time.After(retryDelay):
 		}
 
-		if transfer.connection.IsClosed() {
-			return
+		if transfer.connection == nil {
+			retryDelay = errorDelay
+			continue
 		}
 
-		if transfer.connection == nil {
+		if transfer.connection.IsClosed() {
 			retryDelay = errorDelay
 			continue
 		}
@@ -93,17 +94,16 @@ func (transfer *Transfer) start() {
 		n, err := io.CopyN(transfer.buffer, transfer.connection, int64(chunkSizeToRead))
 
 		switch {
-		case err == io.ErrUnexpectedEOF:
-			fmt.Println("Unexpected EOF")
-			return
 		case err == context.Canceled:
 			fmt.Println("Context Canceled")
 			retryDelay = errorDelay
 			break
+		case err == io.ErrUnexpectedEOF:
+			fmt.Println("Unexpected EOF")
+			return
 		case err == io.EOF:
 			fmt.Println("EOF")
-			retryDelay = errorDelay
-			break
+			return
 		case err != nil:
 			fmt.Println("Error:", err)
 			return

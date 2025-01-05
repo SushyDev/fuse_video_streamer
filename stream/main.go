@@ -14,7 +14,7 @@ import (
 const (
 	maxBufferSize  = int64(1024 * 1024 * 1024) // 1GB
 	minBufferSize  = int64(100 * 1024 * 1024)  // 100MB
-	maxPreloadSize = float64(25 * 1024 * 1024) // 25MB
+	maxPreloadSize = int64(25 * 1024 * 1024) // 25MB
 	minPreloadSize = int64(10 * 1024 * 1024)   // 10MB
 )
 
@@ -33,16 +33,16 @@ type Stream struct {
 	mu sync.Mutex
 }
 
-// Buffer size is 10% of buffer size, capped at 1GB or at least 100 mb or max buffer size
+// Buffer size is 10% of buffer size, capped at 1GB or at least 100 mb unless file size is less than 100 mb then its the file size
 func calculateBufferSize(fileSize int64) int64 {
 	bufferSize := int64(float64(fileSize) * 0.1)
-	return min(maxBufferSize, max(minBufferSize, bufferSize))
+	return min(maxBufferSize, min(bufferSize, fileSize))
 }
 
-// Preload size is half the buffer size, capped at 200 MB or at least 10 mb or max buffer size
+// Preload size is half the buffer size, capped at 200 MB or at least 10 mb unless the buffer size is less than 10 mb then its the buffer size
 func calculatePreloadSize(bufferSize int64) int64 {
 	preloadSize := int64(float64(bufferSize) * 0.5)
-	return min(int64(maxPreloadSize), max(minPreloadSize, preloadSize))
+	return min(maxPreloadSize, min(preloadSize, bufferSize))
 }
 
 func NewStream(url string, size uint64) *Stream {
@@ -65,36 +65,35 @@ func NewStream(url string, size uint64) *Stream {
 	return manager
 }
 
-func (manager *Stream) newTransfer(startPosition uint64, requestedBytes uint64) error {
+func (manager *Stream) newTransfer(startPosition uint64) error {
 	if manager.transfer != nil {
 		manager.transfer.Close()
 	}
 
-	preloadSizeBefore := calculatePreloadSize(int64(manager.buffer.Size()))
+	preloadSize := calculatePreloadSize(int64(manager.buffer.Size()))
 
-	bufferStartPosition := uint64(max(0, int64(startPosition)-preloadSizeBefore))
+	streamStartPosition := uint64(max(0, int64(startPosition)-preloadSize))
 
-	connection, err := connection.NewConnection(manager.url, bufferStartPosition)
+	connection, err := connection.NewConnection(manager.url, streamStartPosition)
 	if err != nil {
 		return err
 	}
 
-	manager.buffer.ResetToPosition(bufferStartPosition)
+	manager.buffer.ResetToPosition(streamStartPosition)
 	transfer := transfer.NewTransfer(manager.buffer, connection)
 	manager.transfer = transfer
-
-	preloadSizeAhead := min(int64(manager.size), preloadSizeBefore)
-
-	if startPosition == 0 {
-		// If we're just starting we don't need to preload that far ahead just the requested bytes
-		requestedPosition := int64(min(startPosition+requestedBytes, manager.size))
-		preloadSizeAhead = min(requestedPosition, preloadSizeAhead)
-	}
 
 	ctx, cancel := context.WithTimeout(manager.context, 10*time.Second)
 	defer cancel()
 
-	ok := manager.buffer.WaitForPosition(ctx, min(manager.size, bufferStartPosition+uint64(preloadSizeAhead)))
+	streamWaitPosition := uint64(int64(startPosition)+preloadSize)
+
+	if streamWaitPosition > manager.size {
+		fmt.Println("Stream wait position is greater than the file size. Setting it to the end of the file.")
+		streamWaitPosition = manager.size - 1
+	}
+
+	ok := manager.buffer.WaitForPosition(ctx, streamWaitPosition)
 	if !ok {
 		return fmt.Errorf("Timeout waiting for the buffer to fill")
 	}
@@ -115,17 +114,15 @@ func (manager *Stream) ReadAt(p []byte, seekPosition uint64) (int, error) {
 	if !manager.buffer.IsPositionAvailable(seekPosition) {
 		fmt.Println("Seek position is not available in the buffer. Starting a new connection...")
 
-		if err := manager.newTransfer(seekPosition, requestedBytes); err != nil {
+		if err := manager.newTransfer(seekPosition); err != nil {
 			return 0, err
 		}
-
-		return manager.buffer.ReadAt(p, seekPosition)
 	}
 
 	requestedPosition := min(seekPosition+requestedBytes, manager.size)
 
 	if !manager.buffer.IsPositionAvailable(requestedPosition) {
-		ctx, cancel := context.WithTimeout(manager.context, 10*time.Second)
+		ctx, cancel := context.WithTimeout(manager.context, 5*time.Second)
 		defer cancel()
 
 		ok := manager.buffer.WaitForPosition(ctx, requestedPosition)
@@ -134,7 +131,7 @@ func (manager *Stream) ReadAt(p []byte, seekPosition uint64) (int, error) {
 		}
 	}
 
-	return manager.buffer.ReadAt(p, uint64(seekPosition))
+	return manager.buffer.ReadAt(p, seekPosition)
 }
 
 func (manager *Stream) IsClosed() bool {
