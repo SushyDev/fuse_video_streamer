@@ -28,6 +28,7 @@ func New(mountpoint string, volumeName string) *Fuse {
 		fuse.Subtype(volumeName),
 		fuse.FSName(volumeName),
 
+		fuse.LocalVolume(),
 		fuse.AllowOther(),
 		fuse.AllowSUID(),
 

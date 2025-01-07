@@ -86,7 +86,7 @@ func (manager *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	requestedPosition := min(seekPosition+requestedBytes, manager.size)
 
 	if !manager.buffer.IsPositionAvailable(requestedPosition) {
-		ctx, cancel := context.WithTimeout(manager.context, 100*time.Second)
+		ctx, cancel := context.WithTimeout(manager.context, 30*time.Second)
 		defer cancel()
 
 		ok := manager.buffer.WaitForPosition(ctx, requestedPosition)
@@ -158,7 +158,7 @@ func (manager *Stream) newTransfer(startPosition int64) error {
 	transfer := transfer.NewTransfer(manager.buffer, connection)
 	manager.transfer = transfer
 
-	ctx, cancel := context.WithTimeout(manager.context, 100*time.Second)
+	ctx, cancel := context.WithTimeout(manager.context, 30*time.Second)
 	defer cancel()
 
 	streamWaitPosition := startPosition+preloadSize
