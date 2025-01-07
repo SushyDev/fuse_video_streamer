@@ -13,7 +13,7 @@ var _ io.ReadCloser = &Connection{}
 
 type Connection struct {
 	url           string
-	startPosition uint64
+	startPosition int64
 
 	context context.Context
 	cancel  context.CancelFunc
@@ -23,7 +23,7 @@ type Connection struct {
 	mu sync.RWMutex
 }
 
-func NewConnection(url string, startPosition uint64) (*Connection, error) {
+func NewConnection(url string, startPosition int64) (*Connection, error) {
 	if startPosition < 0 {
 		return nil, fmt.Errorf("Invalid seek position: %d", startPosition)
 	}
@@ -44,7 +44,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	connection.mu.Lock()
 	defer connection.mu.Unlock()
 
-	if connection.IsClosed() {
+	if connection.isClosed() {
 		return 0, context.Canceled
 	}
 
@@ -59,8 +59,6 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	rangeHeader := fmt.Sprintf("bytes=%d-", connection.startPosition)
 	request.Header.Set("Range", rangeHeader)
-
-	fmt.Println("Requesting", rangeHeader)
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -86,30 +84,33 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	return response.Body.Read(buf)
 }
 
-func (connection *Connection) IsClosed() bool {
-	select {
-	case <-connection.context.Done():
-		return true
-	default:
-		return false
-	}
-}
-
 func (connection *Connection) Close() error {
 	connection.mu.Lock()
 	defer connection.mu.Unlock()
 
-	if connection.IsClosed() {
+	if connection.isClosed() {
 		return nil
 	}
 
 	connection.cancel()
 
 	if connection.body != nil {
-		connection.body.Close()
+		err := connection.body.Close()
+		if err != nil {
+			return fmt.Errorf("Error closing body: %v", err)
+		}
+
+		connection.body = nil
 	}
 
-	connection.body = nil
-
 	return nil
+}
+
+func (connection *Connection) isClosed() bool {
+	select {
+	case <-connection.context.Done():
+		return true
+	default:
+		return false
+	}
 }

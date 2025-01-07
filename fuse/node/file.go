@@ -47,9 +47,6 @@ func NewFile(client vfs_api.FileSystemServiceClient, identifier uint64, size uin
 var _ fs.Node = &File{}
 
 func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
-	fuseFile.mu.RLock()
-	defer fuseFile.mu.RUnlock()
-
 	attr.Inode = fuseFile.identifier
 	attr.Mode = os.ModePerm | 0o777
 	attr.Size = fuseFile.size
@@ -60,16 +57,16 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
-var _ fs.NodeOpener = &File{}
-
-func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	fuseFile.mu.RLock()
-	defer fuseFile.mu.RUnlock()
-
-	openResponse.Flags |= fuse.OpenKeepCache
-
-	return fuseFile, nil
-}
+// var _ fs.NodeOpener = &File{}
+//
+// func (fuseFile *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+// 	fuseFile.mu.RLock()
+// 	defer fuseFile.mu.RUnlock()
+//
+// 	// openResponse.Flags |= fuse.OpenKeepCache
+//
+// 	return fuseFile, nil
+// }
 
 var _ fs.HandleReader = &File{}
 
@@ -87,7 +84,7 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	// TODO buffer pool
 	buffer := make([]byte, readRequest.Size)
 
-	bytesRead, err := videoStream.ReadAt(buffer, uint64(readRequest.Offset))
+	bytesRead, err := videoStream.ReadAt(buffer, readRequest.Offset)
 	if err != nil {
 		message := fmt.Sprintf("Failed to read video stream for pid %d", readRequest.Pid)
 		fuseFile.logger.Error(message, err)
@@ -133,7 +130,7 @@ func (fuseFile *File) getStream(pid uint32) (*stream.Stream, error) {
 		return nil, err
 	}
 
-	newStream := stream.NewStream(response.Url, fuseFile.size)
+	newStream := stream.NewStream(response.Url, int64(fuseFile.size))
 
 	fuseFile.streams.Store(pid, newStream)
 
