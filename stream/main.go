@@ -13,9 +13,7 @@ import (
 
 const (
 	maxBufferSize  = int64(1024 * 1024 * 1024) // 1GB
-	minBufferSize  = int64(100 * 1024 * 1024)  // 100MB
-	maxPreloadSize = int64(25 * 1024 * 1024) // 25MB
-	minPreloadSize = int64(10 * 1024 * 1024)   // 10MB
+	maxPreloadSize = int64(16 * 1024 * 1024) // 16MB
 )
 
 type Stream struct {
@@ -33,13 +31,13 @@ type Stream struct {
 	mu sync.Mutex
 }
 
-// Buffer size is 10% of buffer size, capped at 1GB or at least 100 mb unless file size is less than 100 mb then its the file size
+// Buffer size is 10% of buffer size, capped at 1GB or fileSize
 func calculateBufferSize(fileSize int64) int64 {
 	bufferSize := int64(float64(fileSize) * 0.1)
 	return min(maxBufferSize, bufferSize, fileSize)
 }
 
-// Preload size is half the buffer size, capped at 200 MB or at least 10 mb unless the buffer size is less than 10 mb then its the buffer size
+// Preload size is half the buffer size, capped at 16 MB or buffer size
 func calculatePreloadSize(bufferSize int64) int64 {
 	preloadSize := int64(float64(bufferSize) * 0.5)
 	return min(maxPreloadSize, preloadSize, bufferSize)
@@ -79,8 +77,6 @@ func (manager *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 		if err := manager.newTransfer(seekPosition); err != nil {
 			return 0, err
 		}
-
-		return manager.buffer.ReadAt(p, seekPosition)
 	}
 
 	requestedPosition := min(seekPosition+requestedBytes, manager.size)
@@ -157,20 +153,6 @@ func (manager *Stream) newTransfer(startPosition int64) error {
 	manager.buffer.ResetToPosition(streamStartPosition)
 	transfer := transfer.NewTransfer(manager.buffer, connection)
 	manager.transfer = transfer
-
-	ctx, cancel := context.WithTimeout(manager.context, 30*time.Second)
-	defer cancel()
-
-	streamWaitPosition := startPosition+preloadSize
-
-	if streamWaitPosition > manager.size {
-		streamWaitPosition = manager.size
-	}
-
-	ok := manager.buffer.WaitForPosition(ctx, streamWaitPosition)
-	if !ok {
-		return fmt.Errorf("Timeout waiting for the buffer to fill while starting a new transfer")
-	}
 
 	return nil
 }
