@@ -43,13 +43,15 @@ func (transfer *Transfer) start() {
 	defer transfer.wg.Done()
 
 	_, err := io.Copy(transfer.buffer, transfer.connection)
-	if err != nil {
-		if err == context.Canceled {
-			return
-		}
-
-		fmt.Println("Error copying to buffer:", err)
+	switch err {
+	case nil:
+	case context.Canceled:
+		return
+	default:
+		fmt.Println("Error copying from connection:", err)
 	}
+
+	transfer.buffer.Write(ring_buffer.EOFMarker)
 }
 
 func (transfer *Transfer) Close() error {

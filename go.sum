@@ -49,6 +49,8 @@ github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsT
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/sushydev/ring_buffer_go v0.1.5 h1:maQ5B4VdPudON+iFDi+42GgtiT8pCHM/tXIMMk7hYTw=
 github.com/sushydev/ring_buffer_go v0.1.5/go.mod h1:BEce5YqSc/+vdIR0sLXp2pcGSpwUvOrSjG96VormGZg=
+github.com/sushydev/ring_buffer_go v0.1.6 h1:4fhodGaQ349q+bL1k6IT111T2gfe+ubqKSohr7IUoTU=
+github.com/sushydev/ring_buffer_go v0.1.6/go.mod h1:BEce5YqSc/+vdIR0sLXp2pcGSpwUvOrSjG96VormGZg=
 github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c h1:u6SKchux2yDvFQnDHS3lPnIRmfVJ5Sxy3ao2SIdysLQ=
 github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c/go.mod h1:hzIxponao9Kjc7aWznkXaL4U4TWaDSs8zcsY4Ka08nM=
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=

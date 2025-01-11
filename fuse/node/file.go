@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 
@@ -85,15 +86,20 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	buffer := make([]byte, readRequest.Size)
 
 	bytesRead, err := videoStream.ReadAt(buffer, readRequest.Offset)
-	if err != nil {
+	switch err {
+	case nil:
+		readResponse.Data = buffer[:bytesRead]
+		return nil
+
+	case io.EOF:
+		readResponse.Data = buffer[:bytesRead]
+		return nil
+
+	default:
 		message := fmt.Sprintf("Failed to read video stream for pid %d", readRequest.Pid)
 		fuseFile.logger.Error(message, err)
 		return err
 	}
-
-	readResponse.Data = buffer[:bytesRead]
-
-	return nil
 }
 
 var _ fs.HandleFlusher = &File{}
