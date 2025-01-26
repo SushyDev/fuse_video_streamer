@@ -15,6 +15,7 @@ import (
 	"github.com/anacrolix/fuse/fs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -30,18 +31,25 @@ type Root struct {
 func NewRoot() *Root {
 	fuseLogger, _ := logger.NewLogger("Root Node")
 
-	backoffConfig := backoff.DefaultConfig
-	insecureCredentials := insecure.NewCredentials()
 	connectParams := grpc.ConnectParams{
-		Backoff: backoffConfig,
+		Backoff: backoff.DefaultConfig,
 	}
+
+	keepAliveParams := keepalive.ClientParameters{
+		Time:                10,
+		Timeout:             10,
+		PermitWithoutStream: true,
+	}
+
+	insecureCredentials := insecure.NewCredentials()
 
 	fileServers := config.GetFileServers()
 	for _, fileServer := range fileServers {
 		connection, err := grpc.NewClient(
 			fileServer,
-			grpc.WithTransportCredentials(insecureCredentials),
 			grpc.WithConnectParams(connectParams),
+			grpc.WithKeepaliveParams(keepAliveParams),
+			grpc.WithTransportCredentials(insecureCredentials),
 		)
 
 		if err != nil {
