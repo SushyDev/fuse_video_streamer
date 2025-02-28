@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 	"syscall"
+	"time"
 
 	"fuse_video_steamer/logger"
 	"fuse_video_steamer/vfs_api"
@@ -69,7 +70,10 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 	fuseDirectory.mu.RLock()
 	defer fuseDirectory.mu.RUnlock()
 
-	response, err := fuseDirectory.client.Lookup(ctx, &vfs_api.LookupRequest{
+	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
+	defer cancel()
+
+	response, err := fuseDirectory.client.Lookup(clientContext, &vfs_api.LookupRequest{
 		Identifier: fuseDirectory.identifier,
 		Name:       lookupRequest.Name,
 	})
@@ -116,7 +120,10 @@ func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, 
 	fuseDirectory.mu.RLock()
 	defer fuseDirectory.mu.RUnlock()
 
-	response, err := fuseDirectory.client.ReadDirAll(ctx, &vfs_api.ReadDirAllRequest{
+	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
+	defer cancel()
+
+	response, err := fuseDirectory.client.ReadDirAll(clientContext, &vfs_api.ReadDirAllRequest{
 		Identifier: fuseDirectory.identifier,
 	})
 
@@ -159,7 +166,10 @@ func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-	_, err := fuseDirectory.client.Remove(ctx, &vfs_api.RemoveRequest{
+	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
+	defer cancel()
+
+	_, err := fuseDirectory.client.Remove(clientContext, &vfs_api.RemoveRequest{
 		Identifier: fuseDirectory.identifier,
 		Name:       removeRequest.Name,
 	})
@@ -179,11 +189,20 @@ func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.Rename
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-	_, err := fuseDirectory.client.Rename(ctx, &vfs_api.RenameRequest{
+	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
+	defer cancel()
+
+	newDirectory, ok := newDir.(*Directory)
+	if !ok {
+		return syscall.ENOSYS
+	}
+
+
+	_, err := fuseDirectory.client.Rename(clientContext, &vfs_api.RenameRequest{
 		ParentIdentifier:    fuseDirectory.identifier,
 		Name:                request.OldName,
 		NewName:             request.NewName,
-		NewParentIdentifier: newDir.(*Directory).identifier,
+		NewParentIdentifier: newDirectory.identifier,
 	})
 
 	if err != nil {
@@ -201,6 +220,9 @@ func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.Create
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
+	// Disabled for now
+	return nil, nil, syscall.ENOSYS
+
 	fuseDirectory.logger.Info(fmt.Sprintf("Create: %s", request.Name))
 
 	tempFile := NewTempFile(request.Name, 0)
@@ -216,7 +238,10 @@ func (fuseDirectory *Directory) Mkdir(ctx context.Context, request *fuse.MkdirRe
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
-	response, err := fuseDirectory.client.Mkdir(ctx, &vfs_api.MkdirRequest{
+	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
+	defer cancel()
+
+	response, err := fuseDirectory.client.Mkdir(clientContext, &vfs_api.MkdirRequest{
 		ParentIdentifier: fuseDirectory.identifier,
 		Name:             request.Name,
 	})
@@ -236,9 +261,12 @@ func (fuseDirectory *Directory) Link(ctx context.Context, request *fuse.LinkRequ
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
 
+	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
+	defer cancel()
+
 	oldFile := oldNode.(*File)
 
-	_, err := fuseDirectory.client.Link(ctx, &vfs_api.LinkRequest{
+	_, err := fuseDirectory.client.Link(clientContext, &vfs_api.LinkRequest{
 		Identifier:       oldFile.identifier,
 		ParentIdentifier: fuseDirectory.identifier,
 		Name:             request.NewName,
