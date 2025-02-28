@@ -96,8 +96,11 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		return nil
 
 	default:
-		message := fmt.Sprintf("Failed to read video stream for pid %d", readRequest.Pid)
+		message := fmt.Sprintf("Failed to read video stream for pid %d, closing video stream", readRequest.Pid)
 		fuseFile.logger.Error(message, err)
+
+		videoStream.Close()
+
 		return err
 	}
 }
