@@ -1,6 +1,9 @@
 package stream
 
-import "sync"
+import (
+	"sync"
+	"fuse_video_steamer/grafana_logger"
+)
 
 type Map sync.Map
 
@@ -15,8 +18,10 @@ func (m *Map) Load(key uint32) (*Stream, bool) {
 
 func (m *Map) Store(key uint32, value *Stream) {
 	(*sync.Map)(m).Store(key, value)
+	go grafana_logger.AddActiveStream()
 }
 
 func (m *Map) Delete(key uint32) {
 	(*sync.Map)(m).Delete(key)
+	go grafana_logger.SubActiveStreams()
 }

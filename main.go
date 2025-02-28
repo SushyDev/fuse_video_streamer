@@ -4,6 +4,7 @@ import (
 	"context"
 	"fuse_video_steamer/config"
 	"fuse_video_steamer/fuse"
+	"fuse_video_steamer/grafana_logger"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +17,8 @@ func main() {
 	defer cancel()
 
 	go captureExitSignals(cancel)
+
+	go grafana_logger.Record()
 
 	mountpoint := config.GetMountPoint()
 	volumeName := config.GetVolumeName()
