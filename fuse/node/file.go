@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"fuse_video_steamer/logger"
-	"fuse_video_steamer/stream"
+	"fuse_video_steamer/stream/manager"
 	"fuse_video_steamer/vfs_api"
 
 	"github.com/anacrolix/fuse"
@@ -18,10 +18,10 @@ import (
 var _ fs.Handle = &File{}
 
 type File struct {
+	stream_manager *stream_manager.Manager
 	client     vfs_api.FileSystemServiceClient
 	identifier uint64
 
-	streams stream.Map
 	size    uint64
 
 	logger *logger.Logger
@@ -35,7 +35,10 @@ func NewFile(client vfs_api.FileSystemServiceClient, identifier uint64, size uin
 		panic(err)
 	}
 
+	stream_manager := stream_manager.NewManager(client, identifier, size)
+
 	return &File{
+		stream_manager: stream_manager,
 		client:     client,
 		identifier: identifier,
 
@@ -75,11 +78,11 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	fuseFile.mu.RLock()
 	defer fuseFile.mu.RUnlock()
 
-	videoStream, err := fuseFile.getStream(readRequest.Pid)
+	videoStream, err := fuseFile.stream_manager.GetOrCreateStream(readRequest.Pid)
 	if err != nil {
-		message := fmt.Sprintf("Failed to get video stream for pid %d", readRequest.Pid)
+		message := "Failed to get or create video stream"
 		fuseFile.logger.Error(message, err)
-		return err
+		return fmt.Errorf(message)
 	}
 
 	// TODO buffer pool
@@ -99,7 +102,7 @@ func (fuseFile *File) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		message := fmt.Sprintf("Failed to read video stream for pid %d, closing video stream", readRequest.Pid)
 		fuseFile.logger.Error(message, err)
 
-		videoStream.Close()
+		fuseFile.stream_manager.DeleteStream(readRequest.Pid)
 
 		return err
 	}
@@ -111,37 +114,7 @@ func (fuseFile *File) Flush(ctx context.Context, flushRequest *fuse.FlushRequest
 	fuseFile.mu.Lock()
 	defer fuseFile.mu.Unlock()
 
-	videoStream, ok := fuseFile.streams.Load(flushRequest.Pid)
-	if ok {
-		videoStream.Close()
-	}
+	fuseFile.stream_manager.DeleteStream(flushRequest.Pid)
 
 	return nil
-}
-
-func (fuseFile *File) getStream(pid uint32) (*stream.Stream, error) {
-	existingStream, ok := fuseFile.streams.Load(pid)
-	if ok {
-		if !existingStream.IsClosed() {
-			return existingStream, nil
-		}
-
-		fuseFile.streams.Delete(pid)
-	}
-
-	response, err := fuseFile.client.GetVideoUrl(context.Background(), &vfs_api.GetVideoUrlRequest{
-		Identifier: fuseFile.identifier,
-	})
-
-	if err != nil {
-		message := fmt.Sprintf("Failed to get video url for pid %d", pid)
-		fuseFile.logger.Error(message, err)
-		return nil, err
-	}
-
-	newStream := stream.NewStream(response.Url, int64(fuseFile.size))
-
-	fuseFile.streams.Store(pid, newStream)
-
-	return newStream, nil
 }

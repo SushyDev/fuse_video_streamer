@@ -17,6 +17,7 @@ const (
 )
 
 type Stream struct {
+	id  string
 	url  string
 	size int64
 
@@ -44,6 +45,8 @@ func calculatePreloadSize(bufferSize int64) int64 {
 }
 
 func NewStream(url string, size int64) *Stream {
+	id := fmt.Sprintf("%d", time.Now().UnixNano())
+
 	bufferSize := calculateBufferSize(int64(size))
 
 	buffer := ring_buffer.NewLockingRingBuffer(bufferSize, 0)
@@ -51,6 +54,8 @@ func NewStream(url string, size int64) *Stream {
 	context, cancel := context.WithCancel(context.Background())
 
 	manager := &Stream{
+		id: id,
+
 		size: size,
 		url:  url,
 
