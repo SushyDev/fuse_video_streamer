@@ -1,124 +1,49 @@
 package service
 
 import (
-	"context"
-	"fmt"
-	"sync"
-
-	"fuse_video_steamer/api_clients"
-	"fuse_video_steamer/fuse/interfaces"
-	"fuse_video_steamer/fuse/node"
-	"fuse_video_steamer/fuse/registry"
 	"fuse_video_steamer/logger"
-	"fuse_video_steamer/stream/factory"
-	"fuse_video_steamer/stream/manager"
-	"fuse_video_steamer/vfs_api"
+	fvs_fuse "fuse_video_steamer/fuse"
+	fvs_fuse_filesystem "fuse_video_steamer/fuse/filesystem"
+	filesystem_interfaces "fuse_video_steamer/filesystem/interfaces"
+
+	"github.com/anacrolix/fuse"
 )
 
-type Service struct {
-	stream_manager *manager.Manager
-	registry *registry.Registry
+type FuseService struct {}
 
-	mu sync.RWMutex
+var _ filesystem_interfaces.FileSystemService = &FuseService{}
 
-	ctx context.Context
-	cancel context.CancelFunc
+func New() *FuseService {
+	return &FuseService{}
 }
 
-var _ interfaces.NodeService = &Service{}
-
-var clients = []vfs_api.FileSystemServiceClient{}
-
-func NewService() *Service {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	return &Service{
-		stream_manager: manager.GetInstance(),
-		registry: registry.GetInstance(),
-
-		ctx: ctx,
-		cancel: cancel,
-	}
-}
-
-func (service *Service) NewRoot() (interfaces.Root, error) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	if service.IsClosed() {
-		return nil, fmt.Errorf("Service is closed")
-	}
-
-	logger, err := logger.NewLogger("Root Node")
+func (service *FuseService) New(mountpoint string, volumeName string) filesystem_interfaces.FileSystem {
+	logger, err := logger.NewLogger("Fuse")
 	if err != nil {
 		panic(err)
 	}
 
-	clients := api_clients.GetClients()
+	connection, err := fuse.Mount(
+		mountpoint,
+		fuse.VolumeName(volumeName),
+		fuse.Subtype(volumeName),
+		fuse.FSName(volumeName),
 
-	root := node.NewRoot(service, logger, clients)
+		fuse.LocalVolume(),
+		fuse.AllowOther(),
+		fuse.AllowSUID(),
 
-	return root, nil
-}
+		fuse.NoAppleDouble(),
+		fuse.NoBrowse(),
+	)
 
-func (service *Service) NewDirectory(client vfs_api.FileSystemServiceClient, identifier uint64) (interfaces.Directory, error) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	if service.IsClosed() {
-		return nil, fmt.Errorf("Service is closed")
-	}
-
-	logger, err := logger.NewLogger("Directory Node")
 	if err != nil {
-		panic(err)
+		logger.Fatal("Failed to mount filesystem", err)
 	}
 
-	directory := node.NewDirectory(service, client, logger, identifier)
+	logger.Info("Successfully created connection")
 
-	service.registry.AddDirectory(identifier, directory)
+	fileSystem := fvs_fuse_filesystem.New()
 
-	return directory, nil
+	return fvs_fuse.New(mountpoint, connection, fileSystem, logger)
 }
-
-func (service *Service) NewFile(client vfs_api.FileSystemServiceClient, identifier uint64, size uint64) (interfaces.File, error) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	if service.IsClosed() {
-		return nil, fmt.Errorf("Service is closed")
-	}
-
-	logger, err := logger.NewLogger("File Node")
-	if err != nil {
-		panic(err)
-	}
-
-	streamFactory := factory.NewFactory(client, identifier, size)
-
-	service.stream_manager.AddFactory(identifier, streamFactory)
-
-	file := node.NewFile(client, logger, streamFactory, identifier, size)
-
-	service.registry.AddFile(identifier, file)
-
-	return file, nil
-}
-
-
-func (service *Service) Close() {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
-	service.cancel()
-}
-
-func (service *Service) IsClosed() bool {
-	select {
-	case <-service.ctx.Done():
-		return true
-	default:
-		return false
-	}
-}
-

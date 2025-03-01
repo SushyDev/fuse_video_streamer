@@ -1,37 +1,36 @@
 package filesystem
 
 import (
-	"fuse_video_steamer/fuse/registry"
-	"fuse_video_steamer/fuse/service"
+	fuse_interfaces "fuse_video_steamer/fuse/interfaces"
+	fvs_fuse_node_service "fuse_video_steamer/fuse/node/service"
 	"fuse_video_steamer/logger"
 
 	"github.com/anacrolix/fuse/fs"
 )
 
-type FileSystem struct {
-	service *service.Service
+type FuseFileSystem struct {
+	nodeService fuse_interfaces.NodeService
 	logger  *logger.Logger
 }
 
-func New() *FileSystem {
+var _ fuse_interfaces.FuseFileSystem = &FuseFileSystem{}
+
+func New() fuse_interfaces.FuseFileSystem {
 	logger, err := logger.NewLogger("Filesystem")
 	if err != nil {
 		panic(err)
 	}
 
-	service := service.NewService()
+	nodeService := fvs_fuse_node_service.New()
 
-	return &FileSystem{
-		service: service,
+	return &FuseFileSystem{
+		nodeService: nodeService,
 		logger: logger,
 	}
-
 }
 
-var _ fs.FS = &FileSystem{}
-
-func (fileSystem *FileSystem) Root() (fs.Node, error) {
-	root, err := fileSystem.service.NewRoot()
+func (fileSystem *FuseFileSystem) Root() (fs.Node, error) {
+	root, err := fileSystem.nodeService.NewRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -39,19 +38,16 @@ func (fileSystem *FileSystem) Root() (fs.Node, error) {
 	return root, nil
 }
 
-// var _ fs.FSDestroyer = &FileSystem{}
-//
 // func (fileSystem *FileSystem) Destroy() {
 // 	fmt.Println("\nDestroying filesystem\n")
 // }
 
-func (fileSystem *FileSystem) Close() {
+func (fileSystem *FuseFileSystem) Close() error {
 	fileSystem.logger.Info("Closing filesystem")
 
-	fileSystem.service.Close()
-
-	registry := registry.GetInstance()
-	registry.CloseNodes()
+	fileSystem.nodeService.Close()
 
 	fileSystem.logger.Info("Closed filesystem")
+
+	return nil
 }

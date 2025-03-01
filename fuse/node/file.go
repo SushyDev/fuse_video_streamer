@@ -30,7 +30,7 @@ type File struct {
 
 	mu sync.RWMutex
 
-	context context.Context
+	ctx context.Context
 	cancel context.CancelFunc
 }
 
@@ -48,7 +48,7 @@ func NewFile(client vfs_api.FileSystemServiceClient, logger *logger.Logger, stre
 
 		mu: sync.RWMutex{},
 
-		context: context,
+		ctx: context,
 		cancel: cancel,
 	}
 }
@@ -154,7 +154,7 @@ func (fuseFile *File) Close() error {
 
 func (fuseFile *File) IsClosed() bool {
 	select {
-	case <-fuseFile.context.Done():
+	case <-fuseFile.ctx.Done():
 		return true
 	default:
 		return false

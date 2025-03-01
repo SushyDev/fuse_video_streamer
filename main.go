@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"fuse_video_steamer/config"
-	"fuse_video_steamer/fuse"
+	fuse_service "fuse_video_steamer/fuse/service"
+	"fuse_video_steamer/filesystem"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,20 +16,20 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go captureExitSignals(cancel)
+	go waitForExit(cancel)
 
 	mountpoint := config.GetMountPoint()
 	volumeName := config.GetVolumeName()
 
-	fuseInstance := fuse.New(mountpoint, volumeName)
+	fileSystem := filesystem.New(fuse_service.New(), mountpoint, volumeName)
 
-	fuseInstance.Serve(ctx)
+	fileSystem.Serve(ctx)
 }
 
-func captureExitSignals(cancel context.CancelFunc) {
+func waitForExit(cancel context.CancelFunc) {
 	signals := make(chan os.Signal, 1)
 
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	<-signals
 

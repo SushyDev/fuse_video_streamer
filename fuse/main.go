@@ -7,7 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"fuse_video_steamer/fuse/filesystem"
+	filesystem_interfaces "fuse_video_steamer/filesystem/interfaces"
+	fuse_interfaces "fuse_video_steamer/fuse/interfaces"
 	"fuse_video_steamer/logger"
 
 	"github.com/anacrolix/fuse"
@@ -17,40 +18,18 @@ import (
 type Fuse struct {
 	mountpoint string
 	connection *fuse.Conn
-	logger     *logger.Logger
+	fileSystem fuse_interfaces.FuseFileSystem
 
-	fileSystem *filesystem.FileSystem
+	logger     *logger.Logger
 }
 
-func New(mountpoint string, volumeName string) *Fuse {
-	logger, err := logger.NewLogger("Fuse")
-	if err != nil {
-		panic(err)
-	}
+var _ filesystem_interfaces.FileSystem = &Fuse{}
 
-	connection, err := fuse.Mount(
-		mountpoint,
-		fuse.VolumeName(volumeName),
-		fuse.Subtype(volumeName),
-		fuse.FSName(volumeName),
-
-		fuse.LocalVolume(),
-		fuse.AllowOther(),
-		fuse.AllowSUID(),
-
-		fuse.NoAppleDouble(),
-		fuse.NoBrowse(),
-	)
-
-	if err != nil {
-		logger.Fatal("Failed to mount filesystem", err)
-	}
-
-	logger.Info("Successfully created connection")
-
+func New(mountpoint string, connection *fuse.Conn, fileSystem fuse_interfaces.FuseFileSystem, logger *logger.Logger) *Fuse {
 	return &Fuse{
 		mountpoint: mountpoint,
 		connection: connection,
+		fileSystem: fileSystem,
 		logger:     logger,
 	}
 }
@@ -65,14 +44,11 @@ func (instance *Fuse) Serve(ctx context.Context) {
 		wg.Done()
 	}()
 
-	fileSystem := filesystem.New()
 	server := fs.New(instance.connection, nil)
 
 	instance.logger.Info("Serving filesystem")
 
-	instance.fileSystem = fileSystem
-
-	err := server.Serve(fileSystem)
+	err := server.Serve(instance.fileSystem)
 	if err != nil {
 		instance.logger.Fatal("Failed to serve filesystem", err)
 	}
@@ -84,6 +60,8 @@ func (instance *Fuse) Serve(ctx context.Context) {
 
 func (instance *Fuse) Close() error {
 	instance.logger.Info("Shutting down filesystem")
+
+	instance.fileSystem.Close()
 
 	err := instance.unmount()
 	if err != nil {
@@ -109,8 +87,6 @@ func (instance *Fuse) Close() error {
 }
 
 func (instance *Fuse) unmount() error {
-	instance.fileSystem.Close()
-
 	var unmounted bool
 	var err error
 
