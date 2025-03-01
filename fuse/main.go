@@ -2,9 +2,13 @@ package fuse
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"fuse_video_steamer/fuse/filesystem"
 	"fuse_video_steamer/logger"
-	"sync"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -14,6 +18,8 @@ type Fuse struct {
 	mountpoint string
 	connection *fuse.Conn
 	logger     *logger.Logger
+
+	fileSystem *filesystem.FileSystem
 }
 
 func New(mountpoint string, volumeName string) *Fuse {
@@ -64,6 +70,8 @@ func (instance *Fuse) Serve(ctx context.Context) {
 
 	instance.logger.Info("Serving filesystem")
 
+	instance.fileSystem = fileSystem
+
 	err := server.Serve(fileSystem)
 	if err != nil {
 		instance.logger.Fatal("Failed to serve filesystem", err)
@@ -77,7 +85,7 @@ func (instance *Fuse) Serve(ctx context.Context) {
 func (instance *Fuse) Close() error {
 	instance.logger.Info("Shutting down filesystem")
 
-	err := fuse.Unmount(instance.mountpoint)
+	err := instance.unmount()
 	if err != nil {
 		instance.logger.Error("Failed to unmount filesystem", err)
 	} else {
@@ -96,6 +104,37 @@ func (instance *Fuse) Close() error {
 	}
 
 	instance.logger.Info("Fuse closed")
+
+	return nil
+}
+
+func (instance *Fuse) unmount() error {
+	instance.fileSystem.Close()
+
+	var unmounted bool
+	var err error
+
+	for tries := 0; tries < 10; tries++ {
+		err = fuse.Unmount(instance.mountpoint)
+		if err == nil {
+			unmounted = true
+			break
+		}
+
+		if strings.HasSuffix(err.Error(), "resource busy") {
+			instance.logger.Info("Waiting for filesystem to unmount")
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		instance.logger.Error("Failed to unmount filesystem", err)
+
+		break
+	}
+
+	if !unmounted {
+		return fmt.Errorf("Reached max tries to unmount filesystem. Last error: %v", err)
+	}
 
 	return nil
 }

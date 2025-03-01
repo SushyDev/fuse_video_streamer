@@ -69,6 +69,7 @@ func (transfer *Transfer) Close() error {
 	}
 
 	transfer.cancel()
+
 	transfer.wg.Wait()
 
 	return nil

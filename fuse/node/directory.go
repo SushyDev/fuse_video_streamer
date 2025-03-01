@@ -9,15 +9,15 @@ import (
 	"time"
 
 	"fuse_video_steamer/logger"
+	"fuse_video_steamer/fuse/interfaces"
 	"fuse_video_steamer/vfs_api"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 )
 
-var _ fs.Handle = &Directory{}
-
 type Directory struct {
+	nodeService interfaces.NodeService
 	client     vfs_api.FileSystemServiceClient
 	identifier uint64
 
@@ -26,24 +26,35 @@ type Directory struct {
 	logger *logger.Logger
 
 	mu sync.RWMutex
+
+	ctx context.Context
+	cancel context.CancelFunc
 }
 
-func NewDirectory(client vfs_api.FileSystemServiceClient, identifier uint64) *Directory {
-	logger, err := logger.NewLogger("Directory Node")
-	if err != nil {
-		panic(err)
-	}
+var _ interfaces.Directory = &Directory{}
+
+func NewDirectory(nodeService interfaces.NodeService, client vfs_api.FileSystemServiceClient, logger *logger.Logger, identifier uint64) *Directory {
+	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Directory{
+		nodeService: nodeService,
 		client:     client,
 		identifier: identifier,
+
 		logger:     logger,
+
+		mu:        sync.RWMutex{},
+
+		ctx: ctx,
+		cancel: cancel,
 	}
 }
 
-var _ fs.Node = &Directory{}
-
 func (fuseDirectory *Directory) Attr(ctx context.Context, attr *fuse.Attr) error {
+	if fuseDirectory.IsClosed() {
+		return syscall.ENOENT
+	}
+
 	fuseDirectory.mu.RLock()
 	defer fuseDirectory.mu.RUnlock()
 
@@ -55,20 +66,24 @@ func (fuseDirectory *Directory) Attr(ctx context.Context, attr *fuse.Attr) error
 	return nil
 }
 
-var _ fs.NodeOpener = &Directory{}
-
 func (fuseDirectory *Directory) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
 	fuseDirectory.mu.RLock()
 	defer fuseDirectory.mu.RUnlock()
 
+	if fuseDirectory.IsClosed() {
+		return nil, syscall.ENOENT
+	}
+
 	return fuseDirectory, nil
 }
-
-var _ fs.NodeRequestLookuper = &Directory{}
 
 func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
 	fuseDirectory.mu.RLock()
 	defer fuseDirectory.mu.RUnlock()
+
+	if fuseDirectory.IsClosed() {
+		return nil, syscall.ENOENT
+	}
 
 	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
 	defer cancel()
@@ -100,9 +115,9 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 			return nil, syscall.ENOENT
 		}
 
-		return NewFile(fuseDirectory.client, response.Node.Identifier, sizeResponse.Size), nil
+		return fuseDirectory.nodeService.NewFile(fuseDirectory.client, response.Node.Identifier, sizeResponse.Size)
 	case vfs_api.NodeType_DIRECTORY:
-		return NewDirectory(fuseDirectory.client, response.Node.Identifier), nil
+		return fuseDirectory.nodeService.NewDirectory(fuseDirectory.client, response.Node.Identifier)
 	}
 
 	for _, tempFile := range fuseDirectory.tempFiles {
@@ -114,11 +129,13 @@ func (fuseDirectory *Directory) Lookup(ctx context.Context, lookupRequest *fuse.
 	return nil, syscall.ENOENT
 }
 
-var _ fs.HandleReadDirAller = &Directory{}
-
 func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	fuseDirectory.mu.RLock()
 	defer fuseDirectory.mu.RUnlock()
+
+	if fuseDirectory.IsClosed() {
+		return nil, syscall.ENOENT
+	}
 
 	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
 	defer cancel()
@@ -160,11 +177,13 @@ func (fuseDirectory *Directory) ReadDirAll(ctx context.Context) ([]fuse.Dirent, 
 	return entries, nil
 }
 
-var _ fs.NodeRemover = &Directory{}
-
 func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
+
+	if fuseDirectory.IsClosed() {
+		return syscall.ENOENT
+	}
 
 	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
 	defer cancel()
@@ -183,11 +202,13 @@ func (fuseDirectory *Directory) Remove(ctx context.Context, removeRequest *fuse.
 	return nil
 }
 
-var _ fs.NodeRenamer = &Directory{}
-
 func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.RenameRequest, newDir fs.Node) error {
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
+
+	if fuseDirectory.IsClosed() {
+		return syscall.ENOENT
+	}
 
 	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
 	defer cancel()
@@ -214,11 +235,13 @@ func (fuseDirectory *Directory) Rename(ctx context.Context, request *fuse.Rename
 	return nil
 }
 
-var _ fs.NodeCreater = &Directory{}
-
 func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.CreateRequest, response *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
+
+	if fuseDirectory.IsClosed() {
+		return nil, nil, syscall.ENOENT
+	}
 
 	// Disabled for now
 	return nil, nil, syscall.ENOSYS
@@ -232,11 +255,13 @@ func (fuseDirectory *Directory) Create(ctx context.Context, request *fuse.Create
 	return tempFile, tempFile, nil
 }
 
-var _ fs.NodeMkdirer = &Directory{}
-
 func (fuseDirectory *Directory) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Node, error) {
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
+
+	if fuseDirectory.IsClosed() {
+		return nil, syscall.ENOENT
+	}
 
 	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
 	defer cancel()
@@ -252,14 +277,16 @@ func (fuseDirectory *Directory) Mkdir(ctx context.Context, request *fuse.MkdirRe
 		return nil, err
 	}
 
-	return NewDirectory(fuseDirectory.client, response.Node.Identifier), nil
+	return fuseDirectory.nodeService.NewDirectory(fuseDirectory.client, response.Node.Identifier)
 }
-
-var _ fs.NodeLinker = &Directory{}
 
 func (fuseDirectory *Directory) Link(ctx context.Context, request *fuse.LinkRequest, oldNode fs.Node) (fs.Node, error) {
 	fuseDirectory.mu.Lock()
 	defer fuseDirectory.mu.Unlock()
+
+	if fuseDirectory.IsClosed() {
+		return nil, syscall.ENOENT
+	}
 
 	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
 	defer cancel()
@@ -279,4 +306,33 @@ func (fuseDirectory *Directory) Link(ctx context.Context, request *fuse.LinkRequ
 	}
 
 	return oldFile, nil
+}
+
+func (fuseDirectory *Directory) Close() error {
+	fuseDirectory.mu.Lock()
+	defer fuseDirectory.mu.Unlock()
+
+	if fuseDirectory.IsClosed() {
+		return nil
+	}
+
+	fuseDirectory.cancel()
+
+	// for _, tempFile := range fuseDirectory.tempFiles {
+	// 	err := tempFile.Close()
+	// 	if err != nil {
+	// 		fuseDirectory.logger.Error("Failed to close temp file", err)
+	// 	}
+	// }
+
+	return nil
+}
+
+func (fuseDirectory *Directory) IsClosed() bool {
+	select {
+	case <-fuseDirectory.ctx.Done():
+		return true
+	default:
+		return false
+	}
 }

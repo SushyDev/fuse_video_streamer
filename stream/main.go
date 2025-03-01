@@ -17,6 +17,7 @@ const (
 )
 
 type Stream struct {
+	pid  uint32
 	id  string
 	url  string
 	size int64
@@ -44,7 +45,7 @@ func calculatePreloadSize(bufferSize int64) int64 {
 	return min(maxPreloadSize, preloadSize, bufferSize)
 }
 
-func NewStream(url string, size int64) *Stream {
+func NewStream(pid uint32, url string, size int64) *Stream {
 	id := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	bufferSize := calculateBufferSize(int64(size))
@@ -53,7 +54,8 @@ func NewStream(url string, size int64) *Stream {
 
 	context, cancel := context.WithCancel(context.Background())
 
-	manager := &Stream{
+	stream := &Stream{
+		pid: pid,
 		id: id,
 
 		size: size,
@@ -65,99 +67,99 @@ func NewStream(url string, size int64) *Stream {
 		cancel:  cancel,
 	}
 
-	return manager
+	return stream
 }
 
-func (manager *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
-	manager.mu.Lock()
-	defer manager.mu.Unlock()
+func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
 
-	if manager.IsClosed() {
-		return 0, fmt.Errorf("manager is closed")
+	if stream.IsClosed() {
+		return 0, fmt.Errorf("stream is closed")
 	}
 
 	requestedBytes := int64(len(p))
 
-	if !manager.buffer.IsPositionAvailable(seekPosition) {
-		if err := manager.newTransfer(seekPosition); err != nil {
+	if !stream.buffer.IsPositionAvailable(seekPosition) {
+		if err := stream.newTransfer(seekPosition); err != nil {
 			return 0, err
 		}
 	}
 
-	requestedPosition := min(seekPosition+requestedBytes, manager.size)
+	requestedPosition := min(seekPosition+requestedBytes, stream.size)
 
-	if !manager.buffer.IsPositionAvailable(requestedPosition) {
-		ctx, cancel := context.WithTimeout(manager.context, 30*time.Second)
+	if !stream.buffer.IsPositionAvailable(requestedPosition) {
+		ctx, cancel := context.WithTimeout(stream.context, 30*time.Second)
 		defer cancel()
 
-		ok := manager.buffer.WaitForPosition(ctx, requestedPosition)
+		ok := stream.buffer.WaitForPosition(ctx, requestedPosition)
 		if !ok {
 			return 0, fmt.Errorf("Timeout waiting for the buffer to fill")
 		}
 	}
 
-	return manager.buffer.ReadAt(p, seekPosition)
+	return stream.buffer.ReadAt(p, seekPosition)
 }
 
-func (manager *Stream) Close() error {
-	manager.mu.Lock()
-	defer manager.mu.Unlock()
+func (stream *Stream) Close() error {
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
 
-	if manager.IsClosed() {
+	if stream.IsClosed() {
 		return nil
 	}
 
-	if manager.transfer != nil {
-		err := manager.transfer.Close()
-		if err != nil {
-			fmt.Println("Error closing transfer:", err)
-		}
+	stream.cancel()
 
-		manager.transfer = nil
-	}
-
-	if manager.buffer != nil {
-		err := manager.buffer.Close()
+	if stream.buffer != nil {
+		err := stream.buffer.Close()
 		if err != nil {
 			return fmt.Errorf("Error closing buffer: %v", err)
 		}
 
-		manager.buffer = nil
+		stream.buffer = nil
 	}
 
-	manager.cancel()
+	if stream.transfer != nil {
+		err := stream.transfer.Close()
+		if err != nil {
+			fmt.Println("Error closing transfer:", err)
+		}
+
+		stream.transfer = nil
+	}
 
 	return nil
 }
 
-func (manager *Stream) IsClosed() bool {
+func (stream *Stream) IsClosed() bool {
 	select {
-	case <-manager.context.Done():
+	case <-stream.context.Done():
 		return true
 	default:
 		return false
 	}
 }
 
-func (manager *Stream) newTransfer(startPosition int64) error {
-	if manager.transfer != nil {
-		manager.transfer.Close()
-		manager.transfer = nil
+func (stream *Stream) newTransfer(startPosition int64) error {
+	if stream.transfer != nil {
+		stream.transfer.Close()
+		stream.transfer = nil
 	}
 
-	bufferSize := calculateBufferSize(manager.size)
+	bufferSize := calculateBufferSize(stream.size)
 	preloadSize := calculatePreloadSize(bufferSize)
 
 	streamStartPosition := max(0, startPosition-preloadSize)
 
-	connection, err := connection.NewConnection(manager.url, streamStartPosition)
+	connection, err := connection.NewConnection(stream.url, streamStartPosition)
 	if err != nil {
 		return err
 	}
 
-	manager.buffer.ResetToPosition(streamStartPosition)
-	transfer := transfer.NewTransfer(manager.buffer, connection)
-	manager.transfer = transfer
+	stream.buffer.ResetToPosition(streamStartPosition)
+	transfer := transfer.NewTransfer(stream.buffer, connection)
+	stream.transfer = transfer
 
 	return nil
 }

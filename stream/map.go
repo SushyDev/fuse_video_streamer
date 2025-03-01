@@ -20,3 +20,9 @@ func (m *Map) Store(key uint32, value *Stream) {
 func (m *Map) Delete(key uint32) {
 	(*sync.Map)(m).Delete(key)
 }
+
+func (m *Map) Range(f func(key uint32, value *Stream) bool) {
+	(*sync.Map)(m).Range(func(key, value interface{}) bool {
+		return f(key.(uint32), value.(*Stream))
+	})
+}
