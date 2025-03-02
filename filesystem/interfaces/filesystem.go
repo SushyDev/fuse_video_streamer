@@ -2,7 +2,6 @@ package interfaces
 
 import (
 	"io"
-	"context"
 )
 
 type FileSystemServerService interface {
@@ -10,6 +9,6 @@ type FileSystemServerService interface {
 }
 
 type FileSystemServer interface {
-	Serve(context.Context)
+	Serve()
 	io.Closer
 }

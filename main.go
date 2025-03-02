@@ -4,8 +4,8 @@ import (
 	"context"
 	"fuse_video_steamer/config"
 	"fuse_video_steamer/filesystem/interfaces"
-	filesystem_server_service "fuse_video_steamer/filesystem/server"
-	fuse_service "fuse_video_steamer/filesystem/server/providers/fuse/service"
+	filesystem_server_service "fuse_video_steamer/filesystem/server/service"
+	filesystem_server_provider_fuse_service "fuse_video_steamer/filesystem/server/providers/fuse/service"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,21 +14,24 @@ import (
 func main() {
 	config.Validate()
 
+	mountpoint := config.GetMountPoint()
+	volumeName := config.GetVolumeName()
+
+	var fileSystemProvider interfaces.FileSystemServerService
+	fileSystemProvider = filesystem_server_provider_fuse_service.New()
+
+	fileSystem := filesystem_server_service.New(mountpoint, volumeName, fileSystemProvider)
+
+	go fileSystem.Serve()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go waitForExit(cancel)
 
-	mountpoint := config.GetMountPoint()
-	volumeName := config.GetVolumeName()
+	<-ctx.Done()
 
-	var fileSystemProvider interfaces.FileSystemServerService
-	fileSystemProvider = fuse_service.New()
-
-
-	fileSystem := filesystem_server_service.New(mountpoint, volumeName, fileSystemProvider)
-
-	fileSystem.Serve(ctx)
+	fileSystem.Close()
 }
 
 func waitForExit(cancel context.CancelFunc) {

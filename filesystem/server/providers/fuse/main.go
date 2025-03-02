@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	filesystem_interfaces "fuse_video_steamer/filesystem/interfaces"
@@ -21,45 +20,44 @@ type Server struct {
 	fileSystem interfaces.FuseFileSystem
 
 	logger     *logger.Logger
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 var _ filesystem_interfaces.FileSystemServer = &Server{}
 
 func New(mountpoint string, connection *fuse.Conn, fileSystem interfaces.FuseFileSystem, logger *logger.Logger) *Server {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &Server{
 		mountpoint: mountpoint,
 		connection: connection,
 		fileSystem: fileSystem,
 		logger:     logger,
+
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
-func (instance *Server) Serve(ctx context.Context) {
-	var wg sync.WaitGroup
-	wg.Add(1)
+func (server *Server) Serve() {
+	fileSystemServer := fs.New(server.connection, nil)
 
-	go func() {
-		<-ctx.Done()
-		instance.Close()
-		wg.Done()
-	}()
+	server.logger.Info("Serving filesystem")
 
-	server := fs.New(instance.connection, nil)
-
-	instance.logger.Info("Serving filesystem")
-
-	err := server.Serve(instance.fileSystem)
+	err := fileSystemServer.Serve(server.fileSystem)
 	if err != nil {
-		instance.logger.Fatal("Failed to serve filesystem", err)
+		server.logger.Fatal("Failed to serve filesystem", err)
 	}
 
-	wg.Wait()
-
-	instance.logger.Info("Filesystem shutdown")
+	server.logger.Info("Filesystem shutdown")
 }
 
 func (instance *Server) Close() error {
 	instance.logger.Info("Shutting down filesystem")
+
+	instance.cancel()
 
 	instance.fileSystem.Close()
 

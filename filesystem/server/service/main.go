@@ -1,4 +1,4 @@
-package filesystem
+package service
 
 import "fuse_video_steamer/filesystem/interfaces"
 
