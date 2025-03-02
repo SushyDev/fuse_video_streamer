@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	directory_node_service_factory "fuse_video_steamer/filesystem/server/providers/fuse/filesystem/directory/node/service/factory"
 
-	"fuse_video_steamer/filesystem/server/providers/fuse/interfaces"
 	"fuse_video_steamer/api_clients"
+	"fuse_video_steamer/filesystem/server/providers/fuse/interfaces"
 	"fuse_video_steamer/logger"
 	"fuse_video_steamer/vfs_api"
 
@@ -83,7 +84,10 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	client := node.clients[lookupRequest.Node-1]
 
-	response, err := client.Root(ctx, &vfs_api.RootRequest{})
+	clientContext, cancel := context.WithTimeout(node.ctx, 30 * time.Second)
+	defer cancel()
+
+	response, err := client.Root(clientContext, &vfs_api.RootRequest{})
 	if err != nil {
 		message := fmt.Sprintf("Failed to lookup %s", lookupRequest.Name)
 		node.logger.Error(message, err)
@@ -98,20 +102,24 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	return directoryNodeService.New(response.Root.Identifier)
 }
 
-func (fuseRoot *Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
-	fuseRoot.mu.RLock()
-	defer fuseRoot.mu.RUnlock()
+func (node *Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
-	if fuseRoot.isClosed() {
+	if node.isClosed() {
 		return nil, nil
 	}
 
+	clientContext, cancel := context.WithTimeout(node.ctx, 30 * time.Second)
+	defer cancel()
+
 	var entries []fuse.Dirent
-	for index, client := range fuseRoot.clients {
-		response, err := client.Root(ctx, &vfs_api.RootRequest{})
+	for index, client := range node.clients {
+
+		response, err := client.Root(clientContext, &vfs_api.RootRequest{})
 		if err != nil {
 			message := fmt.Sprintf("Failed to get root for client %d", index)
-			fuseRoot.logger.Error(message, err)
+			node.logger.Error(message, err)
 			return nil, err
 		}
 
@@ -124,22 +132,21 @@ func (fuseRoot *Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	return entries, nil
 }
 
-func (fuseRoot *Node) Close() error {
-	fuseRoot.mu.Lock()
-	defer fuseRoot.mu.Unlock()
+func (node *Node) Close() error {
+	// node.mu.Lock()
+	// defer node.mu.Unlock()
 
-	fuseRoot.cancel()
+	node.cancel()
 
-	fuseRoot.directoryNodeService.Close()
-
-	fmt.Println("Root node closed")
+	node.directoryNodeService.Close()
+	node.directoryNodeService = nil
 
 	return nil
 }
 
-func (fuseRoot *Node) isClosed() bool {
+func (node *Node) isClosed() bool {
 	select {
-	case <-fuseRoot.ctx.Done():
+	case <-node.ctx.Done():
 		return true
 	default:
 		return false

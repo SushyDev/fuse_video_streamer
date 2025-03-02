@@ -7,9 +7,9 @@ import (
 	"sync"
 	"syscall"
 
+	"fuse_video_steamer/cache"
 	"fuse_video_steamer/filesystem/server/providers/fuse/interfaces"
 	"fuse_video_steamer/filesystem/server/providers/fuse/pool"
-	"fuse_video_steamer/cache"
 	"fuse_video_steamer/logger"
 
 	"github.com/anacrolix/fuse"
@@ -21,7 +21,7 @@ type Handle struct {
 	fs.HandleReader
 	fs.HandleReleaser
 
-	id  uint64
+	id uint64
 
 	cache *cache.Cache
 
@@ -29,7 +29,7 @@ type Handle struct {
 
 	mu sync.RWMutex
 
-	ctx context.Context
+	ctx    context.Context
 	cancel context.CancelFunc
 }
 
@@ -49,7 +49,7 @@ func New(cache *cache.Cache, logger *logger.Logger) *Handle {
 
 		logger: logger,
 
-		ctx: ctx,
+		ctx:    ctx,
 		cancel: cancel,
 	}
 }
@@ -62,7 +62,16 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
-	if handle.IsClosed() {
+	if handle.isClosed() {
+		return syscall.ENOENT
+	}
+	
+	if handle.cache == nil {
+		message := fmt.Sprintf("Failed to read video stream for handle %d, closing video stream", handle.id)
+		handle.logger.Error(message, nil)
+
+		handle.Close()
+
 		return syscall.ENOENT
 	}
 
@@ -80,10 +89,11 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		return nil
 
 	default:
-		message := fmt.Sprintf("Failed to read video stream for handl %d, closing video stream", handle.id)
+		message := fmt.Sprintf("Failed to read video stream for handle %d, closing video stream", handle.id)
 		handle.logger.Error(message, err)
 
 		handle.cache.Close()
+		handle.cache = nil
 
 		return err
 	}
@@ -93,30 +103,37 @@ func (handle *Handle) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 	handle.mu.Lock()
 	defer handle.mu.Unlock()
 
-	handle.cache.Close()
-	handle.cache = nil
+	if handle.isClosed() {
+		return syscall.ENOENT
+	}
+
+	if handle.cache != nil {
+		handle.cache.Close()
+		handle.cache = nil
+	}
 
 	return nil
 }
 
-
 func (handle *Handle) Close() error {
-	handle.mu.Lock()
-	defer handle.mu.Unlock()
+	// handle.mu.Lock()
+	// defer handle.mu.Unlock()
 
-	if handle.IsClosed() {
+	if handle.isClosed() {
 		return nil
 	}
 
 	handle.cancel()
 
-	handle.cache.Close()
-	handle.cache = nil
+	if handle.cache != nil {
+		handle.cache.Close()
+		handle.cache = nil
+	}
 
 	return nil
 }
 
-func (handle *Handle) IsClosed() bool {
+func (handle *Handle) isClosed() bool {
 	select {
 	case <-handle.ctx.Done():
 		return true

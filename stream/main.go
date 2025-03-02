@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxBufferSize  = int64(16 * 1024 * 1024) // 4MB
+	maxBufferSize  = int64(256 * 1024 * 1024) // 4MB
 	maxPreloadSize = int64(4 * 1024 * 1024) // 1MB
 )
 
@@ -80,10 +80,15 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 		return 0, fmt.Errorf("stream is closed")
 	}
 
+	if stream.buffer == nil {
+		return 0, fmt.Errorf("Buffer is closed")
+	}
+
 	requestedBytes := int64(len(p))
 
 	if !stream.buffer.IsPositionAvailable(seekPosition) {
-		if err := stream.newTransfer(seekPosition); err != nil {
+		err := stream.newTransfer(seekPosition)
+		if err != nil {
 			return 0, err
 		}
 	}
@@ -91,7 +96,7 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	requestedPosition := min(seekPosition+requestedBytes, stream.size)
 
 	if !stream.buffer.IsPositionAvailable(requestedPosition) {
-		ctx, cancel := context.WithTimeout(stream.context, 30*time.Second)
+		ctx, cancel := context.WithTimeout(stream.context, 10*time.Second)
 		defer cancel()
 
 		ok := stream.buffer.WaitForPosition(ctx, requestedPosition)
@@ -104,8 +109,8 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 }
 
 func (stream *Stream) Close() error {
-	stream.mu.Lock()
-	defer stream.mu.Unlock()
+	// stream.mu.Lock()
+	// defer stream.mu.Unlock()
 
 	if stream.isClosed() {
 		return nil
@@ -144,6 +149,14 @@ func (stream *Stream) isClosed() bool {
 }
 
 func (stream *Stream) newTransfer(startPosition int64) error {
+	if stream.isClosed() {
+		return fmt.Errorf("Stream is closed")
+	}
+
+	if stream.buffer == nil {
+		return fmt.Errorf("Buffer is closed")
+	}
+
 	if stream.transfer != nil {
 		stream.transfer.Close()
 		stream.transfer = nil

@@ -6,6 +6,13 @@ import (
 	"github.com/anacrolix/fuse/fs"
 )
 
+// --- Generic
+
+type Node interface {
+	fs.Node
+	Close() error
+}
+
 // --- Root
 
 type RootNodeServiceFactory interface {
@@ -18,11 +25,10 @@ type RootNodeService interface {
 }
 
 type RootNode interface {
-	fs.Node
+	Node
+
 	fs.NodeOpener
 	fs.NodeRequestLookuper
-
-	Close() error
 }
 
 // --- Directory
@@ -37,7 +43,8 @@ type DirectoryNodeService interface {
 }
 
 type DirectoryNode interface {
-	fs.Node
+	Node
+
 	fs.NodeOpener
 	fs.NodeRequestLookuper
 	fs.NodeRemover
@@ -47,7 +54,6 @@ type DirectoryNode interface {
 	fs.NodeLinker
 
 	GetIdentifier() uint64
-	Close() error
 }
 
 // --- File
@@ -62,10 +68,9 @@ type FileNodeService interface {
 }
 
 type FileNode interface {
-	fs.Node
+	Node
 
 	GetIdentifier() uint64
 	GetSize() uint64
-	Close() error
 }
 

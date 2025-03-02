@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"fuse_video_steamer/filesystem/server/providers/fuse/interfaces"
+	"fuse_video_steamer/filesystem/server/providers/fuse/registry"
 	"fuse_video_steamer/logger"
 
 	"github.com/anacrolix/fuse/fs"
@@ -9,6 +10,8 @@ import (
 
 type FileSystem struct {
 	rootNodeService interfaces.RootNodeService
+
+	registry *registry.Registry
 
 	logger  *logger.Logger
 }
@@ -24,6 +27,8 @@ func New(rootNodeService interfaces.RootNodeService) interfaces.FuseFileSystem {
 	return &FileSystem{
 		rootNodeService: rootNodeService,
 
+		registry: registry.GetInstance(),
+
 		logger: logger,
 	}
 }
@@ -37,11 +42,15 @@ func (fileSystem *FileSystem) Root() (fs.Node, error) {
 // }
 
 func (fileSystem *FileSystem) Close() error {
-	fileSystem.logger.Info("Closing filesystem")
+	fileSystem.logger.Info("Closing")
 
 	fileSystem.rootNodeService.Close()
+	fileSystem.rootNodeService = nil
 
-	fileSystem.logger.Info("Closed filesystem")
+	fileSystem.registry.CloseNodes()
+	fileSystem.registry = nil
+
+	fileSystem.logger.Info("Closed")
 
 	return nil
 }

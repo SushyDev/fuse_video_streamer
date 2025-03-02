@@ -3,7 +3,6 @@ package factory
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"fuse_video_steamer/stream"
@@ -16,7 +15,7 @@ type Factory struct {
 
 	client  vfs_api.FileSystemServiceClient
 
-	mu sync.RWMutex
+	streams []*stream.Stream
 
 	context context.Context
 	cancel  context.CancelFunc
@@ -37,12 +36,9 @@ func NewFactory(client vfs_api.FileSystemServiceClient, nodeIdentifier uint64, s
 }
 
 func (factory *Factory) NewStream() (*stream.Stream, error) {
-	factory.mu.Lock()
-	defer factory.mu.Unlock()
-
-	// if factory.IsClosed() {
-	// 	return nil, fmt.Errorf("Factory is closed")
-	// }
+	if factory.isClosed() {
+		return nil, fmt.Errorf("Factory is closed")
+	}
 
 	clientContext, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -57,5 +53,27 @@ func (factory *Factory) NewStream() (*stream.Stream, error) {
 
 	newStream := stream.NewStream(response.Url, int64(factory.size))
 
+	factory.streams = append(factory.streams, newStream)
+
 	return newStream, nil
 }
+
+func (factory *Factory) Close() {
+	factory.cancel()
+
+	for _, stream := range factory.streams {
+		stream.Close()
+		stream = nil
+	}
+}
+
+func (factory *Factory) isClosed() bool {
+	select {
+	case <-factory.context.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// TODO - Wont be needed probably

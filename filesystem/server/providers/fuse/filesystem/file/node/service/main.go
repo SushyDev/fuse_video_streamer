@@ -15,7 +15,7 @@ import (
 type Service struct {
 	client vfs_api.FileSystemServiceClient
 
-	registry *registry.NodeRegistry
+	registry *registry.Registry
 
 	mu sync.RWMutex
 
@@ -45,7 +45,7 @@ func (service *Service) New(identifier uint64, size uint64) (interfaces.FileNode
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
-	if service.IsClosed() {
+	if service.isClosed() {
 		return nil, fmt.Errorf("Service is closed")
 	}
 
@@ -54,14 +54,18 @@ func (service *Service) New(identifier uint64, size uint64) (interfaces.FileNode
 		panic(err)
 	}
 
-	return node.New(service.client, logger, identifier, size), nil
+	newNode := node.New(service.client, logger, identifier, size)
+
+	service.registry.Add(newNode)
+
+	return newNode, nil
 }
 
 func (service *Service) Close() error {
 	return nil
 }
 
-func (service *Service) IsClosed() bool {
+func (service *Service) isClosed() bool {
 	select {
 	case <-service.ctx.Done():
 		return true

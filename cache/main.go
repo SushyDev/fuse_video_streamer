@@ -155,15 +155,19 @@ func (c *Cache) ReadAt(p []byte, off int64) (int, error) {
 
 // Close closes the underlying stream
 func (cache *Cache) Close() error {
-	err := cache.stream.Close()
-	if  err != nil {
-		return err
+	if cache.stream != nil {
+		err := cache.stream.Close()
+		if  err != nil {
+			return err
+		}
+
+		cache.stream = nil
 	}
 
-	cache.stream = nil
-
-	cache.lruCache.Purge()
-	cache.lruCache = nil
+	if cache.lruCache != nil {
+		cache.lruCache.Purge()
+		cache.lruCache = nil
+	}
 
 	if *flags.GetIsDebug() {
 		debug.FreeOSMemory()

@@ -7,49 +7,45 @@ import (
 	"fuse_video_steamer/filesystem/server/providers/fuse/interfaces"
 )
 
-type NodeRegistry struct {
-	files       map[uint64]*interfaces.FileNode
-	directories map[uint64]*interfaces.DirectoryNode
+type Registry struct {
+	nodes []interfaces.Node
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-func GetInstance() *NodeRegistry {
-	return &NodeRegistry{
-		files:       make(map[uint64]*interfaces.FileNode),
-		directories: make(map[uint64]*interfaces.DirectoryNode),
+var instance *Registry
+
+func GetInstance() *Registry {
+	if instance != nil {
+		return instance
 	}
+
+	instance = &Registry{
+		nodes: []interfaces.Node{},
+	}
+
+	return instance
 }
 
-func (registry *NodeRegistry) AddFile(identifier uint64, file *interfaces.FileNode) {
-	registry.files[identifier] = file
+func (registry *Registry) Add(node interfaces.Node) {
+	registry.nodes = append(registry.nodes, node)
 }
 
-func (registry *NodeRegistry) AddDirectory(identifier uint64, directory *interfaces.DirectoryNode) {
-	registry.directories[identifier] = directory
-}
-
-func (registry *NodeRegistry) CloseNodes() {
+func (registry *Registry) CloseNodes() {
 	var wg sync.WaitGroup
 
-	// for _, file := range registry.files {
-	// 	wg.Add(1)
-	//
-	// 	go func() {
-	// 		defer wg.Done()
-	// 		file.Close()
-	// 	}()
-	// }
-	//
-	// for _, directory := range registry.directories {
-	// 	wg.Add(1)
-	//
-	// 	go func() {
-	// 		defer wg.Done()
-	// 		directory.Close()
-	// 	}()
-	// }
+	for _, node := range registry.nodes {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			node.Close()
+			node = nil
+		}()
+	}
+
+	registry.nodes = nil
 
 	wg.Wait()
 }

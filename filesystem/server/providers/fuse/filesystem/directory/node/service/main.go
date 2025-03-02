@@ -18,7 +18,7 @@ type Service struct {
 	directoryNodeServiceFactory interfaces.DirectoryNodeServiceFactory
 	fileNodeServiceFactory interfaces.FileNodeServiceFactory
 
-	registry *registry.NodeRegistry
+	registry *registry.Registry
 
 	mu sync.RWMutex
 
@@ -71,12 +71,16 @@ func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error)
 		return nil, err
 	}
 
-	return node.New(directoryNodeService, fileNodeService, service.client, logger, identifier), nil
+	newNode := node.New(directoryNodeService, fileNodeService, service.client, logger, identifier)
+
+	service.registry.Add(newNode)
+
+	return newNode, nil
 }
 
 func (service *Service) Close() error {
-	service.mu.Lock()
-	defer service.mu.Unlock()
+	// service.mu.Lock()
+	// defer service.mu.Unlock()
 
 	if service.isClosed() {
 		return nil

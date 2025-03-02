@@ -26,7 +26,7 @@ type Node struct {
 	identifier             uint64
 
 	// tempFiles []*TempFile
-	handles map[uint64]interfaces.DirectoryHandle
+	handles []interfaces.DirectoryHandle
 
 	logger *logger.Logger
 
@@ -53,8 +53,6 @@ func New(
 
 		client:     client,
 		identifier: identifier,
-
-		handles: make(map[uint64]interfaces.DirectoryHandle),
 
 		logger: logger,
 
@@ -109,7 +107,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		return nil, err
 	}
 
-	node.handles[handle.GetIdentifier()] = handle
+	node.handles = append(node.handles, handle)
 
 	return handle, nil
 }
@@ -122,7 +120,7 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
 	defer cancel()
 
 	response, err := node.client.Lookup(clientContext, &vfs_api.LookupRequest{
@@ -142,7 +140,10 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	switch response.Node.Type {
 	case vfs_api.NodeType_FILE:
-		sizeResponse, err := node.client.GetVideoSize(ctx, &vfs_api.GetVideoSizeRequest{
+		clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
+		defer cancel()
+
+		sizeResponse, err := node.client.GetVideoSize(clientContext, &vfs_api.GetVideoSizeRequest{
 			Identifier: response.Node.Identifier,
 		})
 
@@ -157,12 +158,6 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return node.directoryNodeService.New(response.Node.Identifier)
 	}
 
-	// for _, tempFile := range fuseDirectory.tempFiles {
-	// 	if tempFile.name == lookupRequest.Name {
-	// 		return tempFile, nil
-	// 	}
-	// }
-
 	return nil, syscall.ENOENT
 }
 
@@ -174,7 +169,7 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 		return syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
 	defer cancel()
 
 	_, err := node.client.Remove(clientContext, &vfs_api.RemoveRequest{
@@ -199,7 +194,7 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 		return syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
 	defer cancel()
 
 	newDirectory, ok := newDir.(*Node)
@@ -251,7 +246,7 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 		return nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
 	defer cancel()
 
 	response, err := node.client.Mkdir(clientContext, &vfs_api.MkdirRequest{
@@ -276,7 +271,7 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 		return nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
 	defer cancel()
 
 	oldFile := oldNode.(interfaces.FileNode)
@@ -297,8 +292,8 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 }
 
 func (node *Node) Close() error {
-	node.mu.Lock()
-	defer node.mu.Unlock()
+	// node.mu.Lock()
+	// defer node.mu.Unlock()
 
 	if node.isClosed() {
 		return nil
@@ -306,10 +301,9 @@ func (node *Node) Close() error {
 
 	node.cancel()
 
-	for identifier, handle := range node.handles {
+	for _, handle := range node.handles {
 		handle.Close()
-
-		delete(node.handles, identifier)
+		handle = nil
 	}
 
 	return nil

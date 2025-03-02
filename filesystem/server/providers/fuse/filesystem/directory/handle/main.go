@@ -61,11 +61,11 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
-	if handle.IsClosed() {
+	if handle.isClosed() {
 		return nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
+	clientContext, cancel := context.WithTimeout(handle.ctx, 30 * time.Second)
 	defer cancel()
 
 	response, err := handle.client.ReadDirAll(clientContext, &vfs_api.ReadDirAllRequest{
@@ -95,21 +95,14 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 		}
 	}
 
-	// for _, tempFile := range handle.directory.tempFiles {
-	// 	entries = append(entries, fuse.Dirent{
-	// 		Name: tempFile.name,
-	// 		Type: fuse.DT_File,
-	// 	})
-	// }
-
 	return entries, nil
 }
 
 func (handle *Handle) Close() error {
-	handle.mu.Lock()
-	defer handle.mu.Unlock()
+	// handle.mu.Lock()
+	// defer handle.mu.Unlock()
 
-	if handle.IsClosed() {
+	if handle.isClosed() {
 		return nil
 	}
 
@@ -118,7 +111,7 @@ func (handle *Handle) Close() error {
 	return nil
 }
 
-func (handle *Handle) IsClosed() bool {
+func (handle *Handle) isClosed() bool {
 	select {
 	case <-handle.ctx.Done():
 		return true

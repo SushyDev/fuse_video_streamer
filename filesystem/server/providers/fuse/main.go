@@ -46,26 +46,21 @@ func (server *Server) Serve() {
 }
 
 func (instance *Server) Close() error {
-	instance.logger.Info("Shutting down filesystem")
-
 	instance.fileSystem.Close()
+	instance.fileSystem = nil
 
 	err := instance.unmount()
 	if err != nil {
 		instance.logger.Error("Failed to unmount filesystem", err)
-	} else {
-		instance.logger.Info("Unmounted filesystem")
 	}
 
 	if instance.connection != nil {
-		err = instance.connection.Close()
+		err := instance.connection.Close()
 		if err != nil {
 			instance.logger.Error("Failed to close connection", err)
-		} else {
-			instance.logger.Info("Closed connection")
 		}
-	} else {
-		instance.logger.Info("Connection already closed")
+
+		instance.connection = nil
 	}
 
 	instance.logger.Info("Fuse closed")

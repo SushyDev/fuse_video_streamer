@@ -3,8 +3,10 @@ package transfer
 import (
 	"context"
 	"fmt"
+	"fuse_video_steamer/logger"
 	"fuse_video_steamer/stream/connection"
 	"io"
+	"strings"
 	"sync"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
@@ -19,18 +21,29 @@ type Transfer struct {
 	context context.Context
 	cancel  context.CancelFunc
 
+	logger *logger.Logger
+
 	wg *sync.WaitGroup
 }
 
 func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection) *Transfer {
+	logger, err := logger.NewLogger("Transfer")
+	if err != nil {
+		panic(err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	transfer := &Transfer{
 		buffer:     buffer,
 		connection: connection,
-		context:    ctx,
-		cancel:     cancel,
-		wg:         &sync.WaitGroup{},
+
+		context: ctx,
+		cancel:  cancel,
+
+		wg: &sync.WaitGroup{},
+
+		logger: logger,
 	}
 
 	go transfer.start()
@@ -53,13 +66,18 @@ func (transfer *Transfer) start() {
 	case <-transfer.context.Done():
 		if transfer.connection != nil {
 			transfer.connection.Close()
+			transfer.connection = nil
 		}
 	case err := <-done:
 		switch err {
 		case context.Canceled:
 		case nil:
 		default:
-			fmt.Println("Error copying from connection:", err)
+			if strings.HasPrefix(err.Error(), "Buffer is closed") {
+				break
+			}
+
+			transfer.logger.Error("Error copying from connection", err)
 		}
 	}
 

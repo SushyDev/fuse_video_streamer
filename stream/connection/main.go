@@ -85,8 +85,8 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 }
 
 func (connection *Connection) Close() error {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
+	// connection.mu.Lock()
+	// defer connection.mu.Unlock()
 
 	if connection.isClosed() {
 		return nil

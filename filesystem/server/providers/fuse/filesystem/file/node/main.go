@@ -33,8 +33,10 @@ type Node struct {
 	ctx context.Context
 	cancel context.CancelFunc
 
-	handles map[uint64]interfaces.FileHandle
+	handles []interfaces.FileHandle
 }
+
+var _ interfaces.FileNode = &Node{}
 
 func New(client vfs_api.FileSystemServiceClient, logger *logger.Logger, identifier uint64, size uint64) *Node {
 	context, cancel := context.WithCancel(context.Background())
@@ -56,8 +58,6 @@ func New(client vfs_api.FileSystemServiceClient, logger *logger.Logger, identifi
 
 		ctx: context,
 		cancel: cancel,
-
-		handles: make(map[uint64]interfaces.FileHandle),
 	}
 
 	fileHandleService, err := fileHandleServiceFactory.New(node, client)
@@ -101,8 +101,6 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		return nil, syscall.ENOENT
 	}
 
-	openResponse.Flags |= fuse.OpenDirectIO
-
 	handle, err := node.fileHandleService.New()
 	if err != nil {
 		message := "Failed to create file handle"
@@ -110,14 +108,14 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		return nil, err
 	}
 
-	node.handles[handle.GetIdentifier()] = handle
+	node.handles = append(node.handles, handle)
 
 	return handle, nil
 }
 
 func (node *Node) Close() error {
-	node.mu.Lock()
-	defer node.mu.Unlock()
+	// node.mu.Lock()
+	// defer node.mu.Unlock()
 
 	if node.isClosed() {
 		return nil
@@ -125,11 +123,25 @@ func (node *Node) Close() error {
 
 	node.cancel()
 
-	for identifier, handle := range node.handles {
-		handle.Close()
+	node.fileHandleService.Close()
+	node.fileHandleService = nil
 
-		delete(node.handles, identifier)
+	node.streamFactory.Close()
+	node.streamFactory = nil
+
+	var wg sync.WaitGroup
+
+	for _, handle := range node.handles {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			handle.Close()
+			handle = nil
+		}()
 	}
+
+	wg.Wait()
 
 	node.handles = nil
 
