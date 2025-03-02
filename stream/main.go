@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	maxBufferSize  = int64(1024 * 1024 * 1024) // 1GB
-	maxPreloadSize = int64(16 * 1024 * 1024) // 16MB
+	maxBufferSize  = int64(16 * 1024 * 1024) // 4MB
+	maxPreloadSize = int64(4 * 1024 * 1024) // 1MB
 )
 
 type Stream struct {
@@ -34,12 +34,16 @@ type Stream struct {
 
 // Buffer size is 10% of buffer size, capped at 1GB or fileSize
 func calculateBufferSize(fileSize int64) int64 {
+	return maxBufferSize
+
 	bufferSize := int64(float64(fileSize) * 0.1)
 	return min(maxBufferSize, bufferSize, fileSize)
 }
 
 // Preload size is half the buffer size, capped at 16 MB or buffer size
 func calculatePreloadSize(bufferSize int64) int64 {
+	return maxPreloadSize
+
 	preloadSize := int64(float64(bufferSize) * 0.5)
 	return min(maxPreloadSize, preloadSize, bufferSize)
 }
@@ -72,7 +76,7 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
 
-	if stream.IsClosed() {
+	if stream.isClosed() {
 		return 0, fmt.Errorf("stream is closed")
 	}
 
@@ -103,7 +107,7 @@ func (stream *Stream) Close() error {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
 
-	if stream.IsClosed() {
+	if stream.isClosed() {
 		return nil
 	}
 
@@ -130,7 +134,7 @@ func (stream *Stream) Close() error {
 	return nil
 }
 
-func (stream *Stream) IsClosed() bool {
+func (stream *Stream) isClosed() bool {
 	select {
 	case <-stream.context.Done():
 		return true
