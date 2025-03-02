@@ -2,7 +2,6 @@ package interfaces
 
 import (
 	"fuse_video_steamer/vfs_api"
-	"io"
 
 	"github.com/anacrolix/fuse/fs"
 )
@@ -15,12 +14,14 @@ type RootHandleServiceFactory interface {
 
 type RootHandleService interface {
 	New() (RootHandle, error)
+	Close() error
 }
 
 type RootHandle interface {
 	fs.Handle
 	fs.HandleReadDirAller
-	io.Closer
+
+	Close() error
 }
 
 // --- Directory
@@ -31,12 +32,15 @@ type DirectoryHandleServiceFactory interface {
 
 type DirectoryHandleService interface {
 	New() (DirectoryHandle, error)
+	Close() error
 }
 
 type DirectoryHandle interface {
 	fs.Handle
 	fs.HandleReadDirAller
-	io.Closer
+
+	GetIdentifier() uint64
+	Close() error
 }
 
 // --- File
@@ -47,13 +51,14 @@ type FileHandleServiceFactory interface {
 
 type FileHandleService interface {
 	New() (FileHandle, error)
+	Close() error
 }
 
 type FileHandle interface {
 	fs.Handle
 	fs.HandleReader
 	fs.HandleReleaser
-	io.Closer
 
 	GetIdentifier() uint64
+	Close() error
 }

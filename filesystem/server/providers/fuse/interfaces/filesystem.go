@@ -1,8 +1,6 @@
 package interfaces
 
 import (
-	"io"
-
 	"github.com/anacrolix/fuse/fs"
 )
 
@@ -13,5 +11,6 @@ type FuseFileSystemService interface {
 type FuseFileSystem interface {
 	fs.FS
 	// fs.FSDestroyer
-	io.Closer
+
+	Close() error
 }

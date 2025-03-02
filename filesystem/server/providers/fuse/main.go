@@ -1,7 +1,6 @@
 package fuse
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -20,24 +19,16 @@ type Server struct {
 	fileSystem interfaces.FuseFileSystem
 
 	logger     *logger.Logger
-
-	ctx    context.Context
-	cancel context.CancelFunc
 }
 
 var _ filesystem_interfaces.FileSystemServer = &Server{}
 
 func New(mountpoint string, connection *fuse.Conn, fileSystem interfaces.FuseFileSystem, logger *logger.Logger) *Server {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Server{
 		mountpoint: mountpoint,
 		connection: connection,
 		fileSystem: fileSystem,
 		logger:     logger,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}
 }
 
@@ -56,8 +47,6 @@ func (server *Server) Serve() {
 
 func (instance *Server) Close() error {
 	instance.logger.Info("Shutting down filesystem")
-
-	instance.cancel()
 
 	instance.fileSystem.Close()
 

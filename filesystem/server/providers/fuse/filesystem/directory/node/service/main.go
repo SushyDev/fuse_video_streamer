@@ -52,7 +52,7 @@ func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error)
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
-	if service.IsClosed() {
+	if service.isClosed() {
 		return nil, fmt.Errorf("Service is closed")
 	}
 
@@ -75,10 +75,21 @@ func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error)
 }
 
 func (service *Service) Close() error {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+
+	if service.isClosed() {
+		return nil
+	}
+
+	service.cancel()
+
+	fmt.Println("Directory node service closed")
+
 	return nil
 }
 
-func (service *Service) IsClosed() bool {
+func (service *Service) isClosed() bool {
 	select {
 	case <-service.ctx.Done():
 		return true
@@ -86,69 +97,3 @@ func (service *Service) IsClosed() bool {
 		return false
 	}
 }
-
-// func (service *Service) NewDirectory(client vfs_api.FileSystemServiceClient, identifier uint64) (interfaces.DirectoryNode, error) {
-// 	service.mu.Lock()
-// 	defer service.mu.Unlock()
-//
-// 	if service.IsClosed() {
-// 		return nil, fmt.Errorf("Service is closed")
-// 	}
-//
-// 	logger, err := logger.NewLogger("Directory Node")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-//
-// 	handleService := fuse_handle_service.New(client)
-//
-// 	directory := node.NewDirectory(service, handleService, client, logger, identifier)
-//
-// 	service.registry.AddDirectory(identifier, directory)
-//
-// 	return directory, nil
-// }
-//
-// func (service *Service) NewFile(client vfs_api.FileSystemServiceClient, identifier uint64, size uint64) (interfaces.FileNode, error) {
-// 	service.mu.Lock()
-// 	defer service.mu.Unlock()
-//
-// 	if service.IsClosed() {
-// 		return nil, fmt.Errorf("Service is closed")
-// 	}
-//
-// 	logger, err := logger.NewLogger("File Node")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-//
-// 	handleService := fuse_handle_service.New(client)
-//
-// 	file := node.NewFile(handleService, client, logger, identifier, size)
-//
-// 	service.registry.AddFile(identifier, file)
-//
-// 	return file, nil
-// }
-//
-//
-// func (service *Service) Close() error {
-// 	service.mu.Lock()
-// 	defer service.mu.Unlock()
-//
-// 	service.cancel()
-//
-// 	service.registry.CloseNodes()
-//
-// 	return nil
-// }
-//
-// func (service *Service) IsClosed() bool {
-// 	select {
-// 	case <-service.ctx.Done():
-// 		return true
-// 	default:
-// 		return false
-// 	}
-// }
-//

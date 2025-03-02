@@ -23,13 +23,19 @@ type Node struct {
 	directoryNodeService         interfaces.DirectoryNodeService
 
 	logger *logger.Logger
-	mu     sync.RWMutex
 	clients []vfs_api.FileSystemServiceClient
+
+	mu     sync.RWMutex
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 var _ interfaces.RootNode = &Node{}
 
 func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Logger) (*Node, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	clients := api_clients.GetClients()
 
 	return &Node{
@@ -38,6 +44,9 @@ func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Lo
 
 		logger: logger,
 		clients: clients,
+
+		ctx: ctx,
+		cancel: cancel,
 	}, nil
 }
 
@@ -57,12 +66,20 @@ func (fuseRoot *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, o
 	fuseRoot.mu.RLock()
 	defer fuseRoot.mu.RUnlock()
 
+	if fuseRoot.isClosed() {
+		return nil, nil
+	}
+
 	return fuseRoot, nil
 }
 
 func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
+	
+	if node.isClosed() {
+		return nil, nil
+	}
 
 	client := node.clients[lookupRequest.Node-1]
 
@@ -85,6 +102,10 @@ func (fuseRoot *Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	fuseRoot.mu.RLock()
 	defer fuseRoot.mu.RUnlock()
 
+	if fuseRoot.isClosed() {
+		return nil, nil
+	}
+
 	var entries []fuse.Dirent
 	for index, client := range fuseRoot.clients {
 		response, err := client.Root(ctx, &vfs_api.RootRequest{})
@@ -101,4 +122,26 @@ func (fuseRoot *Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	}
 
 	return entries, nil
+}
+
+func (fuseRoot *Node) Close() error {
+	fuseRoot.mu.Lock()
+	defer fuseRoot.mu.Unlock()
+
+	fuseRoot.cancel()
+
+	fuseRoot.directoryNodeService.Close()
+
+	fmt.Println("Root node closed")
+
+	return nil
+}
+
+func (fuseRoot *Node) isClosed() bool {
+	select {
+	case <-fuseRoot.ctx.Done():
+		return true
+	default:
+		return false
+	}
 }

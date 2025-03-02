@@ -1,8 +1,6 @@
 package interfaces
 
 import (
-	"io"
-
 	"fuse_video_steamer/vfs_api"
 
 	"github.com/anacrolix/fuse/fs"
@@ -16,13 +14,15 @@ type RootNodeServiceFactory interface {
 
 type RootNodeService interface {
 	New() (RootNode, error)
-	io.Closer
+	Close() error
 }
 
 type RootNode interface {
 	fs.Node
 	fs.NodeOpener
 	fs.NodeRequestLookuper
+
+	Close() error
 }
 
 // --- Directory
@@ -33,7 +33,7 @@ type DirectoryNodeServiceFactory interface {
 
 type DirectoryNodeService interface {
 	New(identifier uint64) (DirectoryNode, error)
-	io.Closer
+	Close() error
 }
 
 type DirectoryNode interface {
@@ -45,9 +45,9 @@ type DirectoryNode interface {
 	fs.NodeCreater
 	fs.NodeMkdirer
 	fs.NodeLinker
-	io.Closer
 
 	GetIdentifier() uint64
+	Close() error
 }
 
 // --- File
@@ -58,14 +58,14 @@ type FileNodeServiceFactory interface {
 
 type FileNodeService interface {
 	New(identifier uint64, size uint64) (FileNode, error)
-	io.Closer
+	Close() error
 }
 
 type FileNode interface {
 	fs.Node
-	io.Closer
 
 	GetIdentifier() uint64
 	GetSize() uint64
+	Close() error
 }
 

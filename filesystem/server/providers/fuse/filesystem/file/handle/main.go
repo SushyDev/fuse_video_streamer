@@ -38,9 +38,10 @@ var _ interfaces.FileHandle = &Handle{}
 var incrementId uint64
 
 func New(cache *cache.Cache, logger *logger.Logger) *Handle {
+	incrementId++
+
 	ctx, cancel := context.WithCancel(context.Background())
 
-	incrementId++
 	return &Handle{
 		id: incrementId,
 

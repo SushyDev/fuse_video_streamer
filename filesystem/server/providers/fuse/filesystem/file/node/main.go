@@ -16,7 +16,7 @@ import (
 	"github.com/anacrolix/fuse/fs"
 )
 
-type File struct {
+type Node struct {
 	streamFactory *factory.Factory
 	fileHandleService interfaces.FileHandleService
 	client     vfs_api.FileSystemServiceClient
@@ -36,14 +36,14 @@ type File struct {
 	handles map[uint64]interfaces.FileHandle
 }
 
-func New(client vfs_api.FileSystemServiceClient, logger *logger.Logger, identifier uint64, size uint64) *File {
+func New(client vfs_api.FileSystemServiceClient, logger *logger.Logger, identifier uint64, size uint64) *Node {
 	context, cancel := context.WithCancel(context.Background())
 
 	stream_factory := factory.NewFactory(client, identifier, size)
 
 	fileHandleServiceFactory := file_handle_service_factory.New()
 
-	node := &File{
+	node := &Node{
 		streamFactory: stream_factory,
 		client:     client,
 		identifier: identifier,
@@ -70,22 +70,22 @@ func New(client vfs_api.FileSystemServiceClient, logger *logger.Logger, identifi
 	return node
 }
 
-func (fuseFile *File) GetIdentifier() uint64 {
-	return fuseFile.identifier
+func (node *Node) GetIdentifier() uint64 {
+	return node.identifier
 }
 
-func (fuseFile *File) GetSize() uint64 {
-	return fuseFile.size
+func (node *Node) GetSize() uint64 {
+	return node.size
 }
 
-func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
-	if fuseFile.IsClosed() {
+func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
+	if node.isClosed() {
 		return syscall.ENOENT
 	}
 
-	attr.Inode = fuseFile.identifier
+	attr.Inode = node.identifier
 	attr.Mode = os.ModePerm | 0o777
-	attr.Size = fuseFile.size
+	attr.Size = node.size
 
 	attr.Gid = uint32(os.Getgid())
 	attr.Uid = uint32(os.Getuid())
@@ -93,51 +93,52 @@ func (fuseFile *File) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
-var _ fs.NodeOpener = &File{}
+func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
-func (file *File) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	file.mu.RLock()
-	defer file.mu.RUnlock()
-
-	if file.IsClosed() {
+	if node.isClosed() {
 		return nil, syscall.ENOENT
 	}
 
-	// todo since using direct io to prevent caching handles i should also implement some LRU cache in front of the stream
 	openResponse.Flags |= fuse.OpenDirectIO
 
-	handle, err := file.fileHandleService.New()
+	handle, err := node.fileHandleService.New()
 	if err != nil {
+		message := "Failed to create file handle"
+		node.logger.Error(message, err)
 		return nil, err
 	}
 
-	file.handles[handle.GetIdentifier()] = handle
+	node.handles[handle.GetIdentifier()] = handle
 
 	return handle, nil
 }
 
-func (fuseFile *File) Close() error {
-	fuseFile.mu.Lock()
-	defer fuseFile.mu.Unlock()
+func (node *Node) Close() error {
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
-	if fuseFile.IsClosed() {
+	if node.isClosed() {
 		return nil
 	}
 
-	fuseFile.cancel()
+	node.cancel()
 
-	for _, handle := range fuseFile.handles {
+	for identifier, handle := range node.handles {
 		handle.Close()
 
-		delete(fuseFile.handles, handle.GetIdentifier())
+		delete(node.handles, identifier)
 	}
+
+	node.handles = nil
 
 	return nil
 }
 
-func (fuseFile *File) IsClosed() bool {
+func (node *Node) isClosed() bool {
 	select {
-	case <-fuseFile.ctx.Done():
+	case <-node.ctx.Done():
 		return true
 	default:
 		return false

@@ -20,7 +20,6 @@ var _ interfaces.FileSystemServerService = &FuseService{}
 func New() *FuseService {
 	rootNodeServiceFactory := filesystem_server_provider_fuse_root_node_service_factory.New()
 
-
 	return &FuseService{
 		rootNodeServiceFactory: rootNodeServiceFactory,
 	}

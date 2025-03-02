@@ -18,6 +18,8 @@ import (
 type Handle struct {
 	fs.Handle
 
+	id uint64
+
 	client vfs_api.FileSystemServiceClient
 	directory interfaces.DirectoryNode
 
@@ -31,10 +33,16 @@ type Handle struct {
 
 var _ interfaces.DirectoryHandle = &Handle{}
 
+var incrementId uint64
+
 func New(client vfs_api.FileSystemServiceClient, directory interfaces.DirectoryNode, logger *logger.Logger) *Handle {
+	incrementId++
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Handle{
+		id : incrementId,
+
 		client: client,
 		directory: directory,
 
@@ -43,6 +51,10 @@ func New(client vfs_api.FileSystemServiceClient, directory interfaces.DirectoryN
 		ctx: ctx,
 		cancel: cancel,
 	}
+}
+
+func (handle *Handle) GetIdentifier() uint64 {
+	return handle.id
 }
 
 func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {

@@ -23,7 +23,3 @@ func New() *ServiceFactory {
 func (factory *ServiceFactory) New() (interfaces.RootNodeService, error) {
 	return service.New(factory.directoryNodeServiceFactory), nil
 }
-
-func (factory *ServiceFactory) Close() error {
-	return nil
-}
