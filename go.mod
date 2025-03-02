@@ -3,6 +3,7 @@ module fuse_video_steamer
 go 1.24.0
 
 require (
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/anacrolix/fuse v0.3.1
 	github.com/sushydev/ring_buffer_go v0.1.8
 	go.uber.org/zap v1.27.0

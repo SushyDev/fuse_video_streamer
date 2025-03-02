@@ -45,7 +45,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	defer connection.mu.Unlock()
 
 	if connection.isClosed() {
-		return 0, context.Canceled
+		return 0, fmt.Errorf("Connection is closed")
 	}
 
 	if connection.body != nil {

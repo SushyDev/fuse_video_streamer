@@ -1,14 +1,15 @@
 package interfaces
 
 import (
+	"io"
 	"context"
 )
 
-type FileSystemService interface {
-	New(mountpoint string, volumeName string) FileSystem
+type FileSystemServerService interface {
+	New(mountpoint string, volumeName string) FileSystemServer
 }
 
-type FileSystem interface {
+type FileSystemServer interface {
 	Serve(context.Context)
-	Close() error
+	io.Closer
 }

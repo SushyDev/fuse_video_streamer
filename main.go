@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fuse_video_steamer/config"
-	fuse_service "fuse_video_steamer/fuse/service"
-	"fuse_video_steamer/filesystem"
+	"fuse_video_steamer/filesystem/interfaces"
+	filesystem_server_service "fuse_video_steamer/filesystem/server"
+	fuse_service "fuse_video_steamer/filesystem/server/providers/fuse/service"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,7 +22,11 @@ func main() {
 	mountpoint := config.GetMountPoint()
 	volumeName := config.GetVolumeName()
 
-	fileSystem := filesystem.New(fuse_service.New(), mountpoint, volumeName)
+	var fileSystemProvider interfaces.FileSystemServerService
+	fileSystemProvider = fuse_service.New()
+
+
+	fileSystem := filesystem_server_service.New(mountpoint, volumeName, fileSystemProvider)
 
 	fileSystem.Serve(ctx)
 }

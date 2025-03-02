@@ -42,13 +42,25 @@ func (transfer *Transfer) start() {
 	transfer.wg.Add(1)
 	defer transfer.wg.Done()
 
-	_, err := io.Copy(transfer.buffer, transfer.connection)
-	switch err {
-	case nil:
-	case context.Canceled:
-		return
-	default:
-		fmt.Println("Error copying from connection:", err)
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := io.Copy(transfer.buffer, transfer.connection)
+		done <- err
+	}()
+
+	select {
+	case <-transfer.context.Done():
+		if transfer.connection != nil {
+			transfer.connection.Close()
+		}
+	case err := <-done:
+		switch err {
+		case context.Canceled:
+		case nil:
+		default:
+			fmt.Println("Error copying from connection:", err)
+		}
 	}
 
 	transfer.buffer.Write(ring_buffer.EOFMarker)

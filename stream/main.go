@@ -17,7 +17,6 @@ const (
 )
 
 type Stream struct {
-	pid  uint32
 	id  string
 	url  string
 	size int64
@@ -45,7 +44,7 @@ func calculatePreloadSize(bufferSize int64) int64 {
 	return min(maxPreloadSize, preloadSize, bufferSize)
 }
 
-func NewStream(pid uint32, url string, size int64) *Stream {
+func NewStream(url string, size int64) *Stream {
 	id := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	bufferSize := calculateBufferSize(int64(size))
@@ -55,7 +54,6 @@ func NewStream(pid uint32, url string, size int64) *Stream {
 	context, cancel := context.WithCancel(context.Background())
 
 	stream := &Stream{
-		pid: pid,
 		id: id,
 
 		size: size,
