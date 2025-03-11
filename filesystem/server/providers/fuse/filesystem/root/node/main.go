@@ -1,10 +1,17 @@
 package node
 
+// terrible, root node needs to be rewritten
+// thinking about wrapping the clients wrap to associate some local ID
+
+// VFS should also decide the root directory name for each filesystem provider along side with their host
+// this way we can prevent multiple providers having the same directory name
+
 import (
 	"context"
 	"fmt"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	directory_node_service_factory "fuse_video_steamer/filesystem/server/providers/fuse/filesystem/directory/node/service/factory"
@@ -19,20 +26,22 @@ import (
 )
 
 type Node struct {
-	directoryNodeServiceFactory interfaces.DirectoryNodeServiceFactory
+	directoryNodeServiceFactory   interfaces.DirectoryNodeServiceFactory
 	directoryHandleServiceFactory interfaces.DirectoryHandleServiceFactory
-	directoryNodeService         interfaces.DirectoryNodeService
+	directoryNodeService          interfaces.DirectoryNodeService
 
-	logger *logger.Logger
+	logger  *logger.Logger
 	clients []vfs_api.FileSystemServiceClient
 
-	mu     sync.RWMutex
+	mu sync.RWMutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
 var _ interfaces.RootNode = &Node{}
+
+var clientMap = map[string]vfs_api.FileSystemServiceClient{}
 
 func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Logger) (*Node, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -41,12 +50,12 @@ func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Lo
 
 	return &Node{
 		directoryNodeServiceFactory: directory_node_service_factory.New(),
-		directoryNodeService: directoryNodeService,
+		directoryNodeService:        directoryNodeService,
 
-		logger: logger,
+		logger:  logger,
 		clients: clients,
 
-		ctx: ctx,
+		ctx:    ctx,
 		cancel: cancel,
 	}, nil
 }
@@ -77,19 +86,19 @@ func (fuseRoot *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, o
 func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
-	
+
 	if node.isClosed() {
-		return nil, nil
+		return nil, syscall.ENOENT
 	}
 
-	client := node.clients[lookupRequest.Node-1]
+	client, ok := clientMap[lookupRequest.Name]
+	if !ok {
+		return nil, syscall.ENOENT
+	}
 
-	clientContext, cancel := context.WithTimeout(node.ctx, 30 * time.Second)
-	defer cancel()
-
-	response, err := client.Root(clientContext, &vfs_api.RootRequest{})
+	rootResponse, err := client.Root(node.ctx, &vfs_api.RootRequest{})
 	if err != nil {
-		message := fmt.Sprintf("Failed to lookup %s", lookupRequest.Name)
+		message := fmt.Sprintf("Failed to get root for client %s", lookupRequest.Name)
 		node.logger.Error(message, err)
 		return nil, err
 	}
@@ -99,7 +108,7 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return nil, err
 	}
 
-	return directoryNodeService.New(response.Root.Identifier)
+	return directoryNodeService.New(rootResponse.Root.Identifier)
 }
 
 func (node *Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
@@ -110,18 +119,19 @@ func (node *Node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 		return nil, nil
 	}
 
-	clientContext, cancel := context.WithTimeout(node.ctx, 30 * time.Second)
+	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
 	defer cancel()
 
 	var entries []fuse.Dirent
 	for index, client := range node.clients {
-
 		response, err := client.Root(clientContext, &vfs_api.RootRequest{})
 		if err != nil {
 			message := fmt.Sprintf("Failed to get root for client %d", index)
 			node.logger.Error(message, err)
 			return nil, err
 		}
+
+		clientMap[response.Root.Name] = client
 
 		entries = append(entries, fuse.Dirent{
 			Name: response.Root.Name,

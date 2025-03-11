@@ -17,20 +17,18 @@ import (
 )
 
 type Node struct {
-	streamFactory *factory.Factory
+	streamFactory     *factory.Factory
 	fileHandleService interfaces.FileHandleService
-	client     vfs_api.FileSystemServiceClient
-	identifier uint64
 
-	size    uint64
-
-	id string
+	client            vfs_api.FileSystemServiceClient
+	identifier        uint64
+	size uint64
 
 	logger *logger.Logger
 
 	mu sync.RWMutex
 
-	ctx context.Context
+	ctx    context.Context
 	cancel context.CancelFunc
 
 	handles []interfaces.FileHandle
@@ -47,16 +45,16 @@ func New(client vfs_api.FileSystemServiceClient, logger *logger.Logger, identifi
 
 	node := &Node{
 		streamFactory: stream_factory,
-		client:     client,
-		identifier: identifier,
-	
+		client:        client,
+		identifier:    identifier,
+
 		size: size,
 
 		logger: logger,
 
 		mu: sync.RWMutex{},
 
-		ctx: context,
+		ctx:    context,
 		cancel: cancel,
 	}
 

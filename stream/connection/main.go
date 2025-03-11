@@ -75,7 +75,8 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 		return 0, fmt.Errorf("Failed to do request: %v", err)
 	}
 
-	if response.StatusCode != http.StatusPartialContent {
+	// Some systems like zurg use 200 status code for partial content
+	if response.StatusCode != http.StatusPartialContent && response.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("Failed to get partial content: %d", response.StatusCode)
 	}
 

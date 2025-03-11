@@ -19,11 +19,11 @@ import (
 
 type Node struct {
 	directoryHandleService interfaces.DirectoryHandleService
-	directoryNodeService interfaces.DirectoryNodeService
-	fileNodeService      interfaces.FileNodeService
+	directoryNodeService   interfaces.DirectoryNodeService
+	fileNodeService        interfaces.FileNodeService
 
-	client                 vfs_api.FileSystemServiceClient
-	identifier             uint64
+	client     vfs_api.FileSystemServiceClient
+	identifier uint64
 
 	// tempFiles []*TempFile
 	handles []interfaces.DirectoryHandle
@@ -48,8 +48,8 @@ func New(
 	ctx, cancel := context.WithCancel(context.Background())
 
 	node := &Node{
-		directoryNodeService:   directoryNodeService,
-		fileNodeService: fileNodeService,
+		directoryNodeService: directoryNodeService,
+		fileNodeService:      fileNodeService,
 
 		client:     client,
 		identifier: identifier,
@@ -125,7 +125,8 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	response, err := node.client.Lookup(clientContext, &vfs_api.LookupRequest{
 		Identifier: node.identifier,
-		Name:       lookupRequest.Name,
+		// Todo lookup by ID
+		Name: lookupRequest.Name,
 	})
 
 	if err != nil {

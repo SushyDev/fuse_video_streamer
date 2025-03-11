@@ -30,7 +30,7 @@ var clients = []vfs_api.FileSystemServiceClient{}
 func New(client vfs_api.FileSystemServiceClient) (interfaces.FileNodeService, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	registry := registry.GetInstance()
+	registry := registry.GetInstance(client)
 
 	return &Service{
 		client: client,

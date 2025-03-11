@@ -11,8 +11,6 @@ import (
 type FileSystem struct {
 	rootNodeService interfaces.RootNodeService
 
-	registry *registry.Registry
-
 	logger  *logger.Logger
 }
 
@@ -26,8 +24,6 @@ func New(rootNodeService interfaces.RootNodeService) interfaces.FuseFileSystem {
 
 	return &FileSystem{
 		rootNodeService: rootNodeService,
-
-		registry: registry.GetInstance(),
 
 		logger: logger,
 	}
@@ -47,8 +43,7 @@ func (fileSystem *FileSystem) Close() error {
 	fileSystem.rootNodeService.Close()
 	fileSystem.rootNodeService = nil
 
-	fileSystem.registry.CloseNodes()
-	fileSystem.registry = nil
+	registry.Close()
 
 	fileSystem.logger.Info("Closed")
 
