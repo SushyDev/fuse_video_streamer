@@ -71,7 +71,8 @@ Example `config.yml`.
 mount_point: "/mnt/fvs"
 volume_name: "fvs"
 file_servers:
-  - "localhost:xxxx"
+  - name: debrid_drive
+    target: "localhost:xxxx"
 ```
 
 #### Done

@@ -2,7 +2,6 @@ package symlink
 
 import (
 	"context"
-	"fmt"
 	"fuse_video_steamer/config"
 	"os"
 	"path/filepath"
@@ -18,8 +17,6 @@ type Symlink struct {
 }
 
 func New(client filesystem_client_interfaces.Client, identifier uint64) *Symlink {
-	fmt.Println("symlink")
-
 	return &Symlink{
 		client:     client,
 		identifier: identifier,
@@ -44,12 +41,10 @@ func (symlink *Symlink) Readlink(ctx context.Context, req *fuse.ReadlinkRequest)
 
 	mountPath := config.GetMountPoint()
 
-	path, err := filepath.Abs(filepath.Join(mountPath, "root", linkPath))
+	path, err := filepath.Abs(filepath.Join(mountPath, symlink.client.GetName(), linkPath))
 	if err != nil {
 		return "", err
 	}
-
-	fmt.Println("symlink path", path)
 
 	return path, nil
 }

@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	maxBufferSize  = int64(256 * 1024 * 1024) // 4MB
-	maxPreloadSize = int64(4 * 1024 * 1024) // 1MB
+	maxBufferSize  = int64(256 * 1024 * 1024) // 256MB
+	maxPreloadSize = int64(16 * 1024 * 1024) // 16MB
 )
 
 type Stream struct {

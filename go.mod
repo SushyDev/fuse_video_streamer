@@ -2,12 +2,10 @@ module fuse_video_steamer
 
 go 1.24.0
 
-replace github.com/sushydev/stream_mount_api => ../stream_mount_api
-
 require (
 	github.com/anacrolix/fuse v0.3.1
 	github.com/sushydev/ring_buffer_go v0.1.8
-	github.com/sushydev/stream_mount_api v0.0.0-20250314214840-50d899a6e4fd
+	github.com/sushydev/stream_mount_api v1.0.0
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.71.0
 	gopkg.in/yaml.v3 v3.0.1
