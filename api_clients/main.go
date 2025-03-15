@@ -5,7 +5,8 @@ import (
 
 	"fuse_video_steamer/logger"
 	"fuse_video_steamer/config"
-	"fuse_video_steamer/vfs_api"
+
+	api "github.com/sushydev/stream_mount_api"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -13,7 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func GetClients() (clients []vfs_api.FileSystemServiceClient) {
+func GetClients() (clients []api.FileSystemServiceClient) {
 	logger, err := logger.NewLogger("API Clients")
 	if err != nil {
 		panic(err)
@@ -46,7 +47,7 @@ func GetClients() (clients []vfs_api.FileSystemServiceClient) {
 			continue
 		}
 
-		client := vfs_api.NewFileSystemServiceClient(connection)
+		client := api.NewFileSystemServiceClient(connection)
 
 		logger.Info(fmt.Sprintf("Connected to %s", fileServer))
 

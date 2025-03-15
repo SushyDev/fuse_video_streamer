@@ -5,7 +5,7 @@ import (
 	"fuse_video_steamer/config"
 	"fuse_video_steamer/filesystem/interfaces"
 	filesystem_server_service "fuse_video_steamer/filesystem/server/service"
-	filesystem_server_provider_fuse_service "fuse_video_steamer/filesystem/server/providers/fuse/service"
+	filesystem_server_provider_fuse_service "fuse_video_steamer/filesystem/server/provider/fuse/service"
 	"os"
 	"os/signal"
 	"syscall"

@@ -72,6 +72,10 @@ func NewStream(url string, size int64) *Stream {
 	return stream
 }
 
+func (stream *Stream) Id() string {
+	return stream.id
+}
+
 func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
@@ -149,6 +153,8 @@ func (stream *Stream) isClosed() bool {
 }
 
 func (stream *Stream) newTransfer(startPosition int64) error {
+	fmt.Println("New transfer at", stream.id)
+
 	if stream.isClosed() {
 		return fmt.Errorf("Stream is closed")
 	}

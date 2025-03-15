@@ -1,0 +1,99 @@
+package interfaces
+
+import (
+	api "github.com/sushydev/stream_mount_api"
+
+	"github.com/anacrolix/fuse/fs"
+)
+
+// --- Generic
+
+type Node interface {
+	fs.Node
+	Close() error
+}
+
+// --- Root
+
+type RootNodeServiceFactory interface {
+	New() (RootNodeService, error)
+}
+
+type RootNodeService interface {
+	New() (RootNode, error)
+	Close() error
+}
+
+type RootNode interface {
+	Node
+
+	fs.NodeOpener
+	fs.NodeRequestLookuper
+}
+
+// --- Directory
+
+type DirectoryNodeServiceFactory interface {
+	New(client api.FileSystemServiceClient) (DirectoryNodeService, error)
+}
+
+type DirectoryNodeService interface {
+	New(identifier uint64) (DirectoryNode, error)
+	Close() error
+}
+
+type DirectoryNode interface {
+	Node
+
+	fs.NodeOpener
+	fs.NodeRequestLookuper
+	fs.NodeRemover
+	fs.NodeRenamer
+	fs.NodeCreater
+	fs.NodeMkdirer
+	fs.NodeLinker
+
+	GetIdentifier() uint64
+}
+
+// --- Streamable
+
+type StreamableNodeServiceFactory interface {
+	New(client api.FileSystemServiceClient) (StreamableNodeService, error)
+}
+
+type StreamableNodeService interface {
+	New(identifier uint64) (StreamableNode, error)
+	Close() error
+}
+
+type StreamableNode interface {
+	Node
+
+	fs.NodeOpener
+
+	GetIdentifier() uint64
+	GetSize() uint64
+	GetClient() api.FileSystemServiceClient
+}
+
+// --- File
+
+type FileNodeServiceFactory interface {
+	New(client api.FileSystemServiceClient) (FileNodeService, error)
+}
+
+type FileNodeService interface {
+	New(identifier uint64) (FileNode, error)
+}
+
+type FileNode interface {
+	Node
+
+	fs.NodeOpener
+
+	GetIdentifier() uint64
+	GetSize() uint64
+	GetClient() api.FileSystemServiceClient
+}
+	

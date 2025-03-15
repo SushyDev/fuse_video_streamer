@@ -6,14 +6,15 @@ import (
 	"time"
 
 	"fuse_video_steamer/stream"
-	"fuse_video_steamer/vfs_api"
+
+	api "github.com/sushydev/stream_mount_api"
 )
 
 type Factory struct {
 	nodeIdentifier uint64
 	size           uint64
 
-	client  vfs_api.FileSystemServiceClient
+	client  api.FileSystemServiceClient
 
 	streams []*stream.Stream
 
@@ -21,7 +22,7 @@ type Factory struct {
 	cancel  context.CancelFunc
 }
 
-func NewFactory(client vfs_api.FileSystemServiceClient, nodeIdentifier uint64, size uint64) *Factory {
+func NewFactory(client api.FileSystemServiceClient, nodeIdentifier uint64, size uint64) *Factory {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Factory{
@@ -43,8 +44,8 @@ func (factory *Factory) NewStream() (*stream.Stream, error) {
 	clientContext, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err := factory.client.GetVideoUrl(clientContext, &vfs_api.GetVideoUrlRequest{
-		Identifier: factory.nodeIdentifier,
+	response, err := factory.client.GetStreamUrl(clientContext, &api.GetStreamUrlRequest{
+		NodeId: factory.nodeIdentifier,
 	})
 
 	if err != nil {
