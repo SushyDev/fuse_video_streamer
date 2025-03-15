@@ -20,12 +20,12 @@ func createLogger(fileName string) (*zap.SugaredLogger, error) {
 
 	// Create the log directory if it doesn't exist
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, err
 	}
 
 	// Open the log file
-	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		return nil, err
 	}
