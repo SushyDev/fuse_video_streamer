@@ -3,18 +3,16 @@ package factory
 import (
 	"context"
 	"fmt"
-	"time"
 
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	"fuse_video_steamer/stream"
-
-	api "github.com/sushydev/stream_mount_api"
 )
 
 type Factory struct {
 	nodeIdentifier uint64
 	size           uint64
 
-	client  api.FileSystemServiceClient
+	client filesystem_client_interfaces.Client
 
 	streams []*stream.Stream
 
@@ -22,7 +20,7 @@ type Factory struct {
 	cancel  context.CancelFunc
 }
 
-func NewFactory(client api.FileSystemServiceClient, nodeIdentifier uint64, size uint64) *Factory {
+func NewFactory(client filesystem_client_interfaces.Client, nodeIdentifier uint64, size uint64) *Factory {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Factory{
@@ -41,18 +39,14 @@ func (factory *Factory) NewStream() (*stream.Stream, error) {
 		return nil, fmt.Errorf("Factory is closed")
 	}
 
-	clientContext, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	fileSystem := factory.client.GetFileSystem()
 
-	response, err := factory.client.GetStreamUrl(clientContext, &api.GetStreamUrlRequest{
-		NodeId: factory.nodeIdentifier,
-	})
-
+	url, err := fileSystem.GetStreamUrl(factory.nodeIdentifier)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get video url for node with id %d", factory.nodeIdentifier)
 	}
 
-	newStream := stream.NewStream(response.Url, int64(factory.size))
+	newStream := stream.NewStream(url, int64(factory.size))
 
 	factory.streams = append(factory.streams, newStream)
 

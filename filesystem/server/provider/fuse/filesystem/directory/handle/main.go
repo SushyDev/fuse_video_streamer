@@ -6,12 +6,10 @@ import (
 	io_fs "io/fs"
 	"sync"
 	"syscall"
-	"time"
 
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/logger"
-
-	api "github.com/sushydev/stream_mount_api"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -22,7 +20,7 @@ type Handle struct {
 
 	id uint64
 
-	client    api.FileSystemServiceClient
+	client    filesystem_client_interfaces.Client
 	directory interfaces.DirectoryNode
 
 	mu sync.RWMutex
@@ -37,7 +35,7 @@ var _ interfaces.DirectoryHandle = &Handle{}
 
 var incrementId uint64
 
-func New(client api.FileSystemServiceClient, directory interfaces.DirectoryNode, logger *logger.Logger) *Handle {
+func New(client filesystem_client_interfaces.Client, directory interfaces.DirectoryNode, logger *logger.Logger) *Handle {
 	incrementId++
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -67,12 +65,9 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 		return nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(handle.ctx, 30*time.Second)
-	defer cancel()
+	fileSystem := handle.client.GetFileSystem()
 
-	response, err := handle.client.ReadDirAll(clientContext, &api.ReadDirAllRequest{
-		NodeId: handle.directory.GetIdentifier(),
-	})
+	nodes, err := fileSystem.ReadDirAll(handle.directory.GetIdentifier())
 
 	if err != nil {
 		message := fmt.Sprintf("Failed to read directory %d", handle.directory.GetIdentifier())
@@ -82,19 +77,28 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 
 	var entries []fuse.Dirent
 
-	for _, entry := range response.Nodes {
+	for _, entry := range nodes {
 		switch entry.GetMode() {
-		case uint32(0):
+		case io_fs.ModeSymlink:
 			entries = append(entries, fuse.Dirent{
-				Name: entry.Name,
+				Name: entry.GetName(),
+				Type: fuse.DT_Link,
+			})
+		case io_fs.FileMode(0):
+			entries = append(entries, fuse.Dirent{
+				Name: entry.GetName(),
 				Type: fuse.DT_File,
 			})
-		case uint32(io_fs.ModeDir):
+		case io_fs.ModeDir:
 			entries = append(entries, fuse.Dirent{
-				Name: entry.Name,
+				Name: entry.GetName(),
 				Type: fuse.DT_Dir,
 			})
+		default:
+			message := fmt.Sprintf("Unknown file mode %s", entry.GetName())
+			handle.logger.Error(message, nil)
 		}
+
 	}
 
 	return entries, nil

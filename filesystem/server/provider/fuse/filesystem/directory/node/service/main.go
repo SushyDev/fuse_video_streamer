@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"sync"
 
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/node"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/filesystem/server/provider/fuse/registry"
 	"fuse_video_steamer/logger"
-
-	api "github.com/sushydev/stream_mount_api"
 )
 
 type Service struct {
-	client api.FileSystemServiceClient
+	client filesystem_client_interfaces.Client
 
 	directoryNodeServiceFactory  interfaces.DirectoryNodeServiceFactory
 	streamableNodeServiceFactory interfaces.StreamableNodeServiceFactory
@@ -30,10 +29,8 @@ type Service struct {
 
 var _ interfaces.DirectoryNodeService = &Service{}
 
-var clients = []api.FileSystemServiceClient{}
-
 func New(
-	client api.FileSystemServiceClient,
+	client filesystem_client_interfaces.Client,
 	directoryNodeServiceFactory interfaces.DirectoryNodeServiceFactory,
 	streamableNodeServiceFactory interfaces.StreamableNodeServiceFactory,
 	fileNodeServiceFactory interfaces.FileNodeServiceFactory,

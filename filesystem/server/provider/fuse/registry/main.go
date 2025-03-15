@@ -1,12 +1,13 @@
 package registry
 
+// Todo registry for client instead of this?
+
 import (
 	"context"
 	"sync"
 
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-
-	api "github.com/sushydev/stream_mount_api"
+	client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 )
 
 type Registry struct {
@@ -18,17 +19,19 @@ type Registry struct {
 
 var instances = map[string]*Registry{}
 
-func GetInstance(client api.FileSystemServiceClient) *Registry {
+func GetInstance(client client_interfaces.Client) *Registry {
 	if client == nil {
 		return nil
 	}
 
-	response, err := client.Root(context.Background(), &api.RootRequest{})
+	fileSystem := client.GetFileSystem()
+
+	root, err := fileSystem.Root(client.GetName())
 	if err != nil {
 		panic(err)
 	}
 
-	if instance, ok := instances[response.Root.Name]; ok {
+	if instance, ok := instances[root.GetName()]; ok {
 		return instance
 	}
 
@@ -40,7 +43,7 @@ func GetInstance(client api.FileSystemServiceClient) *Registry {
 		cancel: cancel,
 	}
 
-	instances[response.Root.Name] = instance
+	instances[root.GetName()] = instance
 
 	return instance
 }

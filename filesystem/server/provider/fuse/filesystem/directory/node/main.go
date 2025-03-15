@@ -3,20 +3,19 @@ package node
 import (
 	"context"
 	"fmt"
-	"io/fs"
+	io_fs "io/fs"
 	"os"
 	"sync"
 	"syscall"
-	"time"
 
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	directory_handle_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/handle/service/factory"
+	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/symlink"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/logger"
 
-	api "github.com/sushydev/stream_mount_api"
-
 	"github.com/anacrolix/fuse"
-	fuse_fs "github.com/anacrolix/fuse/fs"
+	"github.com/anacrolix/fuse/fs"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -25,11 +24,11 @@ import (
 type Node struct {
 	directoryHandleService interfaces.DirectoryHandleService
 
-	directoryNodeService   interfaces.DirectoryNodeService
+	directoryNodeService  interfaces.DirectoryNodeService
 	streamableNodeService interfaces.StreamableNodeService
-	fileNodeService        interfaces.FileNodeService
+	fileNodeService       interfaces.FileNodeService
 
-	client     api.FileSystemServiceClient
+	client     filesystem_client_interfaces.Client
 	identifier uint64
 
 	// tempFiles []*TempFile
@@ -49,16 +48,16 @@ func New(
 	directoryNodeService interfaces.DirectoryNodeService,
 	streamableNodeService interfaces.StreamableNodeService,
 	fileNodeService interfaces.FileNodeService,
-	client api.FileSystemServiceClient,
+	client filesystem_client_interfaces.Client,
 	logger *logger.Logger,
 	identifier uint64,
 ) *Node {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	node := &Node{
-		directoryNodeService: directoryNodeService,
+		directoryNodeService:  directoryNodeService,
 		streamableNodeService: streamableNodeService,
-		fileNodeService:      fileNodeService,
+		fileNodeService:       fileNodeService,
 
 		client:     client,
 		identifier: identifier,
@@ -101,7 +100,7 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
-func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fuse_fs.Handle, error) {
+func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
@@ -121,7 +120,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	return handle, nil
 }
 
-func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fuse_fs.Node, error) {
+func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
@@ -129,13 +128,9 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
-	defer cancel()
+	fileSystem := node.client.GetFileSystem()
 
-	response, err := node.client.Lookup(clientContext, &api.LookupRequest{
-		NodeId: node.identifier,
-		Name:   lookupRequest.Name,
-	})
+	foundNode, err := fileSystem.Lookup(node.identifier, lookupRequest.Name)
 
 	if err != nil {
 		status, ok := status.FromError(err)
@@ -148,20 +143,24 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return nil, err
 	}
 
-	if response.Node == nil {
+	if foundNode == nil {
 		return nil, syscall.ENOENT
 	}
 
-	switch response.Node.GetMode() {
-	case uint32(fs.ModeDir):
-		return node.directoryNodeService.New(response.Node.GetId())
-	case uint32(0):
-		if response.Node.GetStreamable() {
-			return node.streamableNodeService.New(response.Node.GetId())
+	switch foundNode.GetMode() {
+	case io_fs.ModeDir:
+		return node.directoryNodeService.New(foundNode.GetId())
+	case io_fs.FileMode(0):
+		if foundNode.GetStreamable() {
+			return node.streamableNodeService.New(foundNode.GetId())
 		} else {
-			return node.fileNodeService.New(response.Node.GetId())
+			return node.fileNodeService.New(foundNode.GetId())
 		}
+	case io_fs.ModeSymlink:
+		return symlink.New(node.client, foundNode.GetId()), nil
 	default:
+		message := fmt.Sprintf("Unknown file mode: %s", foundNode.GetName())
+		node.logger.Error(message, nil)
 		return nil, syscall.ENOENT
 	}
 }
@@ -174,14 +173,9 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 		return syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
-	defer cancel()
+	fileSystem := node.client.GetFileSystem()
 
-	_, err := node.client.Remove(clientContext, &api.RemoveRequest{
-		ParentNodeId: node.identifier,
-		Name:         removeRequest.Name,
-	})
-
+	err := fileSystem.Remove(node.identifier, removeRequest.Name)
 	if err != nil {
 		message := fmt.Sprintf("Failed to remove %s", removeRequest.Name)
 		node.logger.Error(message, err)
@@ -191,7 +185,7 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 	return nil
 }
 
-func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDir fuse_fs.Node) error {
+func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDir fs.Node) error {
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
@@ -199,20 +193,14 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 		return syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
-	defer cancel()
-
 	newDirectory, ok := newDir.(*Node)
 	if !ok {
 		return syscall.ENOSYS
 	}
 
-	_, err := node.client.Rename(clientContext, &api.RenameRequest{
-		NodeId:       node.identifier,
-		ParentNodeId: newDirectory.identifier,
-		Name:         request.OldName,
-	})
+	fileSystem := node.client.GetFileSystem()
 
+	err := fileSystem.Rename(node.GetIdentifier(), request.OldName, newDirectory.GetIdentifier(), request.NewName)
 	if err != nil {
 		message := fmt.Sprintf("Failed to rename %s to %s", request.OldName, request.NewName)
 		node.logger.Error(message, err)
@@ -222,7 +210,7 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 	return nil
 }
 
-func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, response *fuse.CreateResponse) (fuse_fs.Node, fuse_fs.Handle, error) {
+func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, response *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
@@ -230,43 +218,33 @@ func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, respo
 		return nil, nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
-	defer cancel()
+	fileSystem := node.client.GetFileSystem()
 
-	_, err := node.client.Create(clientContext, &api.CreateRequest{
-		ParentNodeId: node.identifier,
-		Name:         request.Name,
-		Mode:         uint32(0),
-	})
-
+	err := fileSystem.Create(node.GetIdentifier(), request.Name, io_fs.FileMode(request.Mode))
 	if err != nil {
 		message := fmt.Sprintf("Failed to create %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, nil, err
 	}
 
-	lookupResponse, err := node.client.Lookup(clientContext, &api.LookupRequest{
-		NodeId: node.identifier,
-		Name:   request.Name,
-	})
-
+	foundNode, err := fileSystem.Lookup(node.GetIdentifier(), request.Name)
 	if err != nil {
 		message := fmt.Sprintf("Failed to lookup %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, nil, err
 	}
 
-	streamableNode, err := node.streamableNodeService.New(lookupResponse.Node.GetId())
+	streamableNode, err := node.streamableNodeService.New(foundNode.GetId())
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var handle fuse_fs.Handle
+	var handle fs.Handle
 
 	return streamableNode, handle, nil
 }
 
-func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fuse_fs.Node, error) {
+func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Node, error) {
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
@@ -274,13 +252,9 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fuse_f
 		return nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
-	defer cancel()
+	fileSystem := node.client.GetFileSystem()
 
-	response, err := node.client.Mkdir(clientContext, &api.MkdirRequest{
-		ParentNodeId: node.identifier,
-		Name:         request.Name,
-	})
+	newDir, err := fileSystem.MkDir(node.GetIdentifier(), request.Name)
 
 	if err != nil {
 		message := fmt.Sprintf("Failed to mkdir %s", request.Name)
@@ -288,10 +262,10 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fuse_f
 		return nil, err
 	}
 
-	return node.directoryNodeService.New(response.Node.GetId())
+	return node.directoryNodeService.New(newDir.GetId())
 }
 
-func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode fuse_fs.Node) (fuse_fs.Node, error) {
+func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode fs.Node) (fs.Node, error) {
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
@@ -299,16 +273,16 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 		return nil, syscall.ENOENT
 	}
 
-	clientContext, cancel := context.WithTimeout(node.ctx, 30*time.Second)
-	defer cancel()
+	oldFile, ok := oldNode.(interfaces.StreamableNode)
+	if !ok {
+		message := fmt.Sprintf("Not a streamable node: %s", oldNode)
+		node.logger.Error(message, nil)
+		return nil, syscall.ENOSYS
+	}
 
-	oldFile := oldNode.(interfaces.StreamableNode)
+	fileSystem := node.client.GetFileSystem()
 
-	_, err := node.client.Link(clientContext, &api.LinkRequest{
-		NodeId:       oldFile.GetIdentifier(),
-		ParentNodeId: node.identifier,
-		Name:         request.NewName,
-	})
+	err := fileSystem.Link(node.GetIdentifier(), request.NewName, oldFile.GetIdentifier())
 
 	if err != nil {
 		message := fmt.Sprintf("Failed to link %s", request.NewName)

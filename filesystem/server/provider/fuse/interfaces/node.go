@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	api "github.com/sushydev/stream_mount_api"
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 
 	"github.com/anacrolix/fuse/fs"
 )
@@ -10,6 +10,8 @@ import (
 
 type Node interface {
 	fs.Node
+
+	GetIdentifier() uint64
 	Close() error
 }
 
@@ -34,7 +36,7 @@ type RootNode interface {
 // --- Directory
 
 type DirectoryNodeServiceFactory interface {
-	New(client api.FileSystemServiceClient) (DirectoryNodeService, error)
+	New(filesystem_client_interfaces.Client) (DirectoryNodeService, error)
 }
 
 type DirectoryNodeService interface {
@@ -52,14 +54,12 @@ type DirectoryNode interface {
 	fs.NodeCreater
 	fs.NodeMkdirer
 	fs.NodeLinker
-
-	GetIdentifier() uint64
 }
 
 // --- Streamable
 
 type StreamableNodeServiceFactory interface {
-	New(client api.FileSystemServiceClient) (StreamableNodeService, error)
+	New(filesystem_client_interfaces.Client) (StreamableNodeService, error)
 }
 
 type StreamableNodeService interface {
@@ -72,15 +72,14 @@ type StreamableNode interface {
 
 	fs.NodeOpener
 
-	GetIdentifier() uint64
 	GetSize() uint64
-	GetClient() api.FileSystemServiceClient
+	GetClient() filesystem_client_interfaces.Client
 }
 
 // --- File
 
 type FileNodeServiceFactory interface {
-	New(client api.FileSystemServiceClient) (FileNodeService, error)
+	New(filesystem_client_interfaces.Client) (FileNodeService, error)
 }
 
 type FileNodeService interface {
@@ -92,8 +91,7 @@ type FileNode interface {
 
 	fs.NodeOpener
 
-	GetIdentifier() uint64
 	GetSize() uint64
-	GetClient() api.FileSystemServiceClient
+	GetClient() filesystem_client_interfaces.Client
 }
 	

@@ -1,14 +1,13 @@
 package handle
 
 import (
+	"fmt"
 	"context"
 	"sync"
 	"syscall"
 
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/logger"
-
-	api "github.com/sushydev/stream_mount_api"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -60,46 +59,43 @@ func (handle *Handle) ReadAll(ctx context.Context) ([]byte, error) {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
+	fmt.Println("ReadAll")
+
 	if handle.isClosed() {
 		return nil, syscall.ENOENT
 	}
 
 	client := handle.node.GetClient()
+	fileSystem := client.GetFileSystem()
 
-	response, err := client.ReadFile(ctx, &api.ReadFileRequest{
-		NodeId: handle.node.GetIdentifier(),
-		Offset: 0,
-		Size:   handle.node.GetSize(),
-	})
+	data, err := fileSystem.ReadFile(handle.node.GetIdentifier(), 0, handle.node.GetSize())
 
 	if err != nil {
 		return nil, err
 	}
 
-	return response.Data, nil
+	return data, nil
 }
 
 func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
+	fmt.Println("Read")
+
 	if handle.isClosed() {
 		return syscall.ENOENT
 	}
 
 	client := handle.node.GetClient()
+	fileSystem := client.GetFileSystem()
 
-	response, err := client.ReadFile(ctx, &api.ReadFileRequest{
-		NodeId: handle.node.GetIdentifier(),
-		Offset: uint64(readRequest.Offset),
-		Size:   uint64(readRequest.Size),
-	})
-
+	data, err := fileSystem.ReadFile(handle.node.GetIdentifier(), uint64(readRequest.Offset), uint64(readRequest.Size))
 	if err != nil {
 		return err
 	}
 
-	readResponse.Data = response.Data
+	readResponse.Data = data
 
 	return nil
 }
@@ -107,29 +103,49 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 func (handle *Handle) Write(ctx context.Context, writeRequest *fuse.WriteRequest, writeResponse *fuse.WriteResponse) error {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
+	
+	fmt.Println("Write")
 
 	if handle.isClosed() {
 		return syscall.ENOENT
 	}
 
 	client := handle.node.GetClient()
+	fileSystem := client.GetFileSystem()
 
-	response, err := client.WriteFile(ctx, &api.WriteFileRequest{
-		NodeId: handle.node.GetIdentifier(),
-		Offset: uint64(writeRequest.Offset),
-		Data:   writeRequest.Data,
-	})
-
+	bytesWritten, err := fileSystem.WriteFile(handle.node.GetIdentifier(), uint64(writeRequest.Offset), writeRequest.Data)
 	if err != nil {
 		return err
 	}
 
-	writeResponse.Size = int(response.BytesWritten)
+	writeResponse.Size = int(bytesWritten)
 
 	return nil
 }
 
 func (handle *Handle) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
+
+	if handle.isClosed() {
+		return syscall.ENOENT
+	}
+
+	return nil
+}
+
+func (handle *Handle) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) error {
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
+
+	if handle.isClosed() {
+		return syscall.ENOENT
+	}
+
+	return nil
+}
+
+func (handle *Handle) Fsync(ctx context.Context, fsyncRequest *fuse.FsyncRequest) error {
 	handle.mu.Lock()
 	defer handle.mu.Unlock()
 

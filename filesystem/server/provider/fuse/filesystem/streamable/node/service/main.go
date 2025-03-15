@@ -4,18 +4,16 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/streamable/node"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/filesystem/server/provider/fuse/registry"
 	"fuse_video_steamer/logger"
-
-	api "github.com/sushydev/stream_mount_api"
 )
 
 type Service struct {
-	client   api.FileSystemServiceClient
+	client   filesystem_client_interfaces.Client
 	logger   *logger.Logger
 	registry *registry.Registry
 
@@ -27,9 +25,7 @@ type Service struct {
 
 var _ interfaces.StreamableNodeService = &Service{}
 
-var clients = []api.FileSystemServiceClient{}
-
-func New(client api.FileSystemServiceClient, logger *logger.Logger) (interfaces.StreamableNodeService, error) {
+func New(client filesystem_client_interfaces.Client, logger *logger.Logger) (interfaces.StreamableNodeService, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	registry := registry.GetInstance(client)
@@ -57,12 +53,9 @@ func (service *Service) New(identifier uint64) (interfaces.StreamableNode, error
 		panic(err)
 	}
 
-	clientContext, cancel := context.WithTimeout(service.ctx, 30*time.Second)
-	defer cancel()
+	fileSystem := service.client.GetFileSystem()
 
-	sizeResponse, err := service.client.GetFileInfo(clientContext, &api.GetFileInfoRequest{
-		NodeId: identifier,
-	})
+	size, err := fileSystem.GetFileInfo(identifier)
 
 	if err != nil {
 		message := fmt.Sprintf("Failed to get video size for %d", identifier)
@@ -70,7 +63,7 @@ func (service *Service) New(identifier uint64) (interfaces.StreamableNode, error
 		return nil, err
 	}
 
-	newNode := node.New(service.client, logger, identifier, sizeResponse.Size)
+	newNode := node.New(service.client, logger, identifier, size)
 
 	service.registry.Add(newNode)
 

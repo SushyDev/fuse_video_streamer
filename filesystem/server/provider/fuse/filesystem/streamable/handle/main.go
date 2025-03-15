@@ -17,7 +17,7 @@ import (
 )
 
 type Handle struct {
-	node interfaces.FileNode
+	node interfaces.StreamableNode
 
 	fs.Handle
 	fs.HandleReader
@@ -39,7 +39,7 @@ var _ interfaces.StreamableHandle = &Handle{}
 
 var incrementId uint64
 
-func New(node interfaces.FileNode, stream *stream.Stream, logger *logger.Logger) *Handle {
+func New(node interfaces.StreamableNode, stream *stream.Stream, logger *logger.Logger) *Handle {
 	incrementId++
 
 	ctx, cancel := context.WithCancel(context.Background())

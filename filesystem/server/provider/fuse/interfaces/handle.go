@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	api "github.com/sushydev/stream_mount_api"
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 
 	"github.com/anacrolix/fuse/fs"
 )
@@ -27,7 +27,7 @@ type RootHandle interface {
 // --- Directory
 
 type DirectoryHandleServiceFactory interface {
-	New(DirectoryNode, api.FileSystemServiceClient) (DirectoryHandleService, error)
+	New(DirectoryNode, filesystem_client_interfaces.Client) (DirectoryHandleService, error)
 }
 
 type DirectoryHandleService interface {
@@ -46,7 +46,7 @@ type DirectoryHandle interface {
 // --- Streamable
 
 type StreamableHandleServiceFactory interface {
-	New(StreamableNode, api.FileSystemServiceClient) (StreamableHandleService, error)
+	New(StreamableNode, filesystem_client_interfaces.Client) (StreamableHandleService, error)
 }
 
 type StreamableHandleService interface {
@@ -66,7 +66,7 @@ type StreamableHandle interface {
 // --- File
 
 type FileHandleServiceFactory interface {
-	New(FileNode, api.FileSystemServiceClient) (FileHandleService, error)
+	New(FileNode, filesystem_client_interfaces.Client) (FileHandleService, error)
 }
 
 type FileHandleService interface {
@@ -80,6 +80,9 @@ type FileHandle interface {
 	fs.HandleReader
 	fs.HandleWriter
 	fs.HandleReleaser
+	fs.HandleFlusher
+
+	fs.NodeFsyncer
 
 	GetIdentifier() uint64
 	Close() error

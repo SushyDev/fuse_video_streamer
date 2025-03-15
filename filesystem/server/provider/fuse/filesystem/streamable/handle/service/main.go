@@ -3,17 +3,16 @@ package service
 import (
 	"context"
 
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/streamable/handle"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/stream/factory"
 	"fuse_video_steamer/logger"
-
-	api "github.com/sushydev/stream_mount_api"
+	"fuse_video_steamer/stream/factory"
 )
 
 type Service struct {
-	node      interfaces.FileNode
-	apiClient api.FileSystemServiceClient
+	node   interfaces.StreamableNode
+	client filesystem_client_interfaces.Client
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -21,14 +20,14 @@ type Service struct {
 
 var _ interfaces.StreamableHandleService = &Service{}
 
-func New(node interfaces.StreamableNode, apiClient api.FileSystemServiceClient) *Service {
+func New(node interfaces.StreamableNode, client filesystem_client_interfaces.Client) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Service{
-		node: node,
-		apiClient: apiClient,
+		node:   node,
+		client: client,
 
-		ctx: ctx,
+		ctx:    ctx,
 		cancel: cancel,
 	}
 }
@@ -43,8 +42,7 @@ func (service *Service) New() (interfaces.StreamableHandle, error) {
 		return nil, err
 	}
 
-
-	streamFactory := factory.NewFactory(service.apiClient, service.node.GetIdentifier(), service.node.GetSize())
+	streamFactory := factory.NewFactory(service.client, service.node.GetIdentifier(), service.node.GetSize())
 
 	stream, err := streamFactory.NewStream()
 	if err != nil {

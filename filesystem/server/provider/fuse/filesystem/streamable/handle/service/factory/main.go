@@ -1,10 +1,9 @@
 package factory
 
 import (
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/streamable/handle/service"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-
-	api "github.com/sushydev/stream_mount_api"
 )
 
 type Factory struct {}
@@ -15,8 +14,8 @@ func New() *Factory {
 	return &Factory{}
 }
 
-func (factory *Factory) New(node interfaces.StreamableNode, apiClient api.FileSystemServiceClient) (interfaces.StreamableHandleService, error) {
-	service := service.New(node, apiClient)
+func (factory *Factory) New(node interfaces.StreamableNode, client filesystem_client_interfaces.Client) (interfaces.StreamableHandleService, error) {
+	service := service.New(node, client)
 
 	return service, nil
 }

@@ -1,17 +1,15 @@
 package node
 
 import (
-	"fmt"
 	"context"
 	"os"
 	"sync"
 	"syscall"
 
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	file_handle_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/file/handle/service/factory"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/logger"
-
-	api "github.com/sushydev/stream_mount_api"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -20,7 +18,7 @@ import (
 type Node struct {
 	handleService interfaces.FileHandleService
 
-	client     api.FileSystemServiceClient
+	client     filesystem_client_interfaces.Client
 	identifier uint64
 	size       uint64
 
@@ -36,9 +34,7 @@ type Node struct {
 
 var _ interfaces.FileNode = &Node{}
 
-func New(client api.FileSystemServiceClient, logger *logger.Logger, identifier uint64, size uint64) *Node {
-	fmt.Println("Creating new file node")
-
+func New(client filesystem_client_interfaces.Client, logger *logger.Logger, identifier uint64, size uint64) *Node {
 	context, cancel := context.WithCancel(context.Background())
 
 	node := &Node{
@@ -74,7 +70,7 @@ func (node *Node) GetSize() uint64 {
 	return node.size
 }
 
-func (node *Node) GetClient() api.FileSystemServiceClient {
+func (node *Node) GetClient() filesystem_client_interfaces.Client {
 	return node.client
 }
 

@@ -6,13 +6,10 @@ import (
 	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/root/node"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/logger"
-
-	api "github.com/sushydev/stream_mount_api"
 )
 
 type Service struct {
 	directoryNodeServiceFactory interfaces.DirectoryNodeServiceFactory
-	apiClient     api.FileSystemServiceClient
 
 	ctx context.Context
 	cancel context.CancelFunc

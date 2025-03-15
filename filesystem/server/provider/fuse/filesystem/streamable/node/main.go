@@ -6,12 +6,11 @@ import (
 	"sync"
 	"syscall"
 
+	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	streamable_handle_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/streamable/handle/service/factory"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/logger"
 	"fuse_video_steamer/stream/factory"
-
-	api "github.com/sushydev/stream_mount_api"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -21,7 +20,7 @@ type Node struct {
 	streamFactory *factory.Factory
 	handleService interfaces.StreamableHandleService
 
-	client     api.FileSystemServiceClient
+	client     filesystem_client_interfaces.Client
 	identifier uint64
 	size       uint64
 
@@ -37,7 +36,7 @@ type Node struct {
 
 var _ interfaces.StreamableNode = &Node{}
 
-func New(client api.FileSystemServiceClient, logger *logger.Logger, identifier uint64, size uint64) *Node {
+func New(client filesystem_client_interfaces.Client, logger *logger.Logger, identifier uint64, size uint64) *Node {
 	context, cancel := context.WithCancel(context.Background())
 
 	stream_factory := factory.NewFactory(client, identifier, size)
@@ -76,7 +75,7 @@ func (node *Node) GetSize() uint64 {
 	return node.size
 }
 
-func (node *Node) GetClient() api.FileSystemServiceClient {
+func (node *Node) GetClient() filesystem_client_interfaces.Client {
 	return node.client
 }
 
