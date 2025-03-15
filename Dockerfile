@@ -35,6 +35,10 @@ COPY --from=builder /app/main /app/main
 
 RUN adduser -D app
 
+RUN chown app /app/main
+
+RUN mkdir -p /mnt/fuse && chown app /mnt/fuse
+
 USER app
 
 ENTRYPOINT ["/app/main"]
