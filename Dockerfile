@@ -37,7 +37,7 @@ RUN adduser -D app
 
 RUN chown app /app/main
 
-RUN mkdir -p /mnt/fuse && chown app /mnt/fuse
+RUN mkdir -p /mnt/fvs && chown app /mnt/fvs
 
 USER app
 

@@ -38,7 +38,6 @@ func (service *FuseService) New(mountpoint string, volumeName string) interfaces
 		fuse.FSName(volumeName),
 
 		fuse.AllowOther(),
-		fuse.DefaultPermissions(),
 		fuse.LocalVolume(),
 
 		fuse.NoAppleDouble(),
