@@ -33,4 +33,8 @@ RUN apk add --no-cache fuse
 
 COPY --from=builder /app/main /app/main
 
+RUN adduser -D app
+
+USER app
+
 ENTRYPOINT ["/app/main"]
