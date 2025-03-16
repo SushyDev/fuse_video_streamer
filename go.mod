@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/anacrolix/fuse v0.3.1
 	github.com/sushydev/ring_buffer_go v0.1.8
-	github.com/sushydev/stream_mount_api v1.0.0
+	github.com/sushydev/stream_mount_api v1.1.0
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.71.0
 	gopkg.in/yaml.v3 v3.0.1

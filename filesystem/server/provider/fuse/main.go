@@ -33,7 +33,9 @@ func New(mountpoint string, connection *fuse.Conn, fileSystem interfaces.FuseFil
 }
 
 func (server *Server) Serve() {
-	fileSystemServer := fs.New(server.connection, nil)
+	config := &fs.Config{}
+
+	fileSystemServer := fs.New(server.connection, config)
 
 	server.logger.Info("Serving filesystem")
 

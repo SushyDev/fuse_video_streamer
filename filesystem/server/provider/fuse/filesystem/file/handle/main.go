@@ -1,7 +1,6 @@
 package handle
 
 import (
-	"fmt"
 	"context"
 	"sync"
 	"syscall"
@@ -59,8 +58,6 @@ func (handle *Handle) ReadAll(ctx context.Context) ([]byte, error) {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
-	fmt.Println("ReadAll")
-
 	if handle.isClosed() {
 		return nil, syscall.ENOENT
 	}
@@ -80,8 +77,6 @@ func (handle *Handle) ReadAll(ctx context.Context) ([]byte, error) {
 func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
-
-	fmt.Println("Read")
 
 	if handle.isClosed() {
 		return syscall.ENOENT
@@ -104,8 +99,6 @@ func (handle *Handle) Write(ctx context.Context, writeRequest *fuse.WriteRequest
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 	
-	fmt.Println("Write")
-
 	if handle.isClosed() {
 		return syscall.ENOENT
 	}

@@ -16,9 +16,6 @@ import (
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type Node struct {
@@ -31,7 +28,6 @@ type Node struct {
 	client     filesystem_client_interfaces.Client
 	identifier uint64
 
-	// tempFiles []*TempFile
 	handles []interfaces.DirectoryHandle
 
 	logger *logger.Logger
@@ -130,16 +126,8 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	fileSystem := node.client.GetFileSystem()
 
-	foundNode, err := fileSystem.Lookup(node.identifier, lookupRequest.Name)
-
+	foundNode, err := fileSystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
 	if err != nil {
-		status, ok := status.FromError(err)
-		if ok && status.Code() == codes.NotFound {
-			return nil, syscall.ENOENT
-		}
-
-		message := fmt.Sprintf("abc Failed to lookup %s", lookupRequest.Name)
-		node.logger.Error(message, err)
 		return nil, err
 	}
 
@@ -255,7 +243,6 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 	fileSystem := node.client.GetFileSystem()
 
 	newDir, err := fileSystem.MkDir(node.GetIdentifier(), request.Name)
-
 	if err != nil {
 		message := fmt.Sprintf("Failed to mkdir %s", request.Name)
 		node.logger.Error(message, err)
@@ -283,7 +270,6 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 	fileSystem := node.client.GetFileSystem()
 
 	err := fileSystem.Link(node.GetIdentifier(), request.NewName, oldFile.GetIdentifier())
-
 	if err != nil {
 		message := fmt.Sprintf("Failed to link %s", request.NewName)
 		node.logger.Error(message, err)

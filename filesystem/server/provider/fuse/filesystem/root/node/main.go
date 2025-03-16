@@ -63,7 +63,11 @@ func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	attr.Mode = os.ModeDir
+	if node.isClosed() {
+		return syscall.ENOENT
+	}
+
+	attr.Mode = os.ModeDir | 0o777
 
 	attr.Gid = uint32(os.Getgid())
 	attr.Uid = uint32(os.Getuid())
@@ -76,7 +80,7 @@ func (node *node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	defer node.mu.RUnlock()
 
 	if node.isClosed() {
-		return nil, nil
+		return nil, syscall.ENOENT
 	}
 
 	return node, nil

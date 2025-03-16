@@ -74,9 +74,8 @@ func (fs *filesystem) Root(name string) (interfaces.Node, error) {
 	defer cancel()
 
 	response, err := fs.api.Root(requestCtx, &api.RootRequest{})
-
 	if err != nil {
-		return nil, err
+		return nil, api.FromResponseError(err)
 	}
 
 	root := response.GetRoot()
@@ -98,7 +97,7 @@ func (fs *filesystem) ReadDirAll(nodeId uint64) ([]interfaces.Node, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, api.FromResponseError(err)
 	}
 
 	var nodes []interfaces.Node
@@ -127,7 +126,7 @@ func (fs *filesystem) Lookup(parentNodeId uint64, name string) (interfaces.Node,
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, api.FromResponseError(err)
 	}
 
 	foundNode := response.GetNode()
@@ -149,7 +148,7 @@ func (fs *filesystem) Remove(parentNodeId uint64, name string) error {
 		Name:         name,
 	})
 
-	return err
+	return api.FromResponseError(err)
 }
 
 func (fs *filesystem) Rename(oldParentNodeId uint64, oldName string, newParentNodeId uint64, newName string) error {
@@ -163,7 +162,7 @@ func (fs *filesystem) Rename(oldParentNodeId uint64, oldName string, newParentNo
 		NewName:         newName,
 	})
 
-	return err
+	return api.FromResponseError(err)
 }
 
 func (fs *filesystem) Create(parentNodeId uint64, name string, mode io_fs.FileMode) error {
@@ -176,11 +175,7 @@ func (fs *filesystem) Create(parentNodeId uint64, name string, mode io_fs.FileMo
 		Mode:         uint32(mode),
 	})
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return api.FromResponseError(err)
 }
 
 func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces.Node, error) {
@@ -193,7 +188,7 @@ func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces.Node, 
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, api.FromResponseError(err)
 	}
 
 	return newNode(
@@ -215,7 +210,7 @@ func (fs *filesystem) Link(parentNodeId uint64, name string, targetNodeId uint64
 		Name:         name,
 	})
 
-	return err
+	return api.FromResponseError(err)
 }
 
 func (fs *filesystem) ReadLink(nodeId uint64) (string, error) {
@@ -227,7 +222,7 @@ func (fs *filesystem) ReadLink(nodeId uint64) (string, error) {
 	})
 
 	if err != nil {
-		return "", err
+		return "", api.FromResponseError(err)
 	}
 
 	return response.GetPath(), nil
@@ -242,7 +237,7 @@ func (fs *filesystem) GetFileInfo(nodeId uint64) (uint64, error) {
 	})
 
 	if err != nil {
-		return 0, err
+		return 0, api.FromResponseError(err)
 	}
 
 	return response.GetSize(), nil
@@ -257,7 +252,7 @@ func (fs *filesystem) GetStreamUrl(nodeId uint64) (string, error) {
 	})
 
 	if err != nil {
-		return "", err
+		return "", api.FromResponseError(err)
 	}
 
 	return response.GetUrl(), nil
@@ -274,7 +269,7 @@ func (fs *filesystem) ReadFile(nodeId uint64, offset uint64, size uint64) ([]byt
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, api.FromResponseError(err)
 	}
 
 	return response.GetData(), nil
@@ -291,7 +286,7 @@ func (fs *filesystem) WriteFile(nodeId uint64, offset uint64, data []byte) (uint
 	})
 
 	if err != nil {
-		return 0, err
+		return 0, api.FromResponseError(err)
 	}
 
 	return response.GetBytesWritten(), nil

@@ -57,10 +57,8 @@ github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsT
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/sushydev/ring_buffer_go v0.1.8 h1:RKlZgL2Ccq7CRUL8MgkiTybjs0um2ZTSDNN1gPwfsyo=
 github.com/sushydev/ring_buffer_go v0.1.8/go.mod h1:BEce5YqSc/+vdIR0sLXp2pcGSpwUvOrSjG96VormGZg=
-github.com/sushydev/stream_mount_api v0.0.0-20250314214840-50d899a6e4fd h1:lMY1KX7JEFsf3T2FN2mrkiKHnJuFNmW+eaWbcYU6Hgo=
-github.com/sushydev/stream_mount_api v0.0.0-20250314214840-50d899a6e4fd/go.mod h1:VF1RsSWB3ZlK4ip0cHnByGU8Br9CHqIKEPXtRg/PnGk=
-github.com/sushydev/stream_mount_api v1.0.0 h1:XLKeIh4U2w9+3jus7fgpG98NLLHL0Bdchq3BgZbft6g=
-github.com/sushydev/stream_mount_api v1.0.0/go.mod h1:VF1RsSWB3ZlK4ip0cHnByGU8Br9CHqIKEPXtRg/PnGk=
+github.com/sushydev/stream_mount_api v1.1.0 h1:ZYmTcWE0LTl5L0AYQ5kAiAopUFcw1YaFPvc9/ZzI0BA=
+github.com/sushydev/stream_mount_api v1.1.0/go.mod h1:VF1RsSWB3ZlK4ip0cHnByGU8Br9CHqIKEPXtRg/PnGk=
 github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c h1:u6SKchux2yDvFQnDHS3lPnIRmfVJ5Sxy3ao2SIdysLQ=
 github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c/go.mod h1:hzIxponao9Kjc7aWznkXaL4U4TWaDSs8zcsY4Ka08nM=
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
