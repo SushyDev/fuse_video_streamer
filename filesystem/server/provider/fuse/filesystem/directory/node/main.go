@@ -222,14 +222,21 @@ func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, respo
 		return nil, nil, err
 	}
 
-	streamableNode, err := node.streamableNodeService.New(foundNode.GetId())
+	fileNode, err := node.fileNodeService.New(foundNode.GetId())
 	if err != nil {
+		message := fmt.Sprintf("Failed to create file node %s", request.Name)
+		node.logger.Error(message, err)
 		return nil, nil, err
 	}
 
-	var handle fs.Handle
+	handle, err := fileNode.Open(ctx, &fuse.OpenRequest{}, &fuse.OpenResponse{})
+	if err != nil {
+		message := fmt.Sprintf("Failed to open file node %s", request.Name)
+		node.logger.Error(message, err)
+		return nil, nil, err
+	}
 
-	return streamableNode, handle, nil
+	return fileNode, handle, nil
 }
 
 func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Node, error) {
