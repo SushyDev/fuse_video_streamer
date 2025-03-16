@@ -88,10 +88,7 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 		return syscall.ENOENT
 	}
 
-	attr.Mode = os.ModeDir | 0o777
-
-	// attr.Gid = uint32(os.Getgid())
-	// attr.Uid = uint32(os.Getuid())
+	attr.Mode = os.ModeDir
 
 	return nil
 }

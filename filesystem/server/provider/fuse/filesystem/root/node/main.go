@@ -7,9 +7,9 @@ import (
 	"sync"
 	"syscall"
 
-	directory_node_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/node/service/factory"
 	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 	filesystem_provider_repository "fuse_video_steamer/filesystem/client/repository"
+	directory_node_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/node/service/factory"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/logger"
 
@@ -67,10 +67,7 @@ func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
 		return syscall.ENOENT
 	}
 
-	attr.Mode = os.ModeDir | 0o777
-
-	// attr.Gid = uint32(os.Getgid())
-	// attr.Uid = uint32(os.Getuid())
+	attr.Mode = os.ModeDir
 
 	return nil
 }

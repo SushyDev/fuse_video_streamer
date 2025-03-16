@@ -38,8 +38,8 @@ func New(client filesystem_client_interfaces.Client, logger *logger.Logger, iden
 	context, cancel := context.WithCancel(context.Background())
 
 	node := &Node{
-		client:        client,
-		identifier:    identifier,
+		client:     client,
+		identifier: identifier,
 
 		size: size,
 
@@ -79,12 +79,8 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 		return syscall.ENOENT
 	}
 
-	// attr.Inode = node.identifier
-	attr.Mode = os.ModePerm | 0o777
+	attr.Mode = os.FileMode(0)
 	attr.Size = node.size
-
-	// attr.Gid = uint32(os.Getgid())
-	// attr.Uid = uint32(os.Getuid())
 
 	return nil
 }

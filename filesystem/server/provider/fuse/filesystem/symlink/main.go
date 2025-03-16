@@ -24,8 +24,7 @@ func New(client filesystem_client_interfaces.Client, identifier uint64) *Symlink
 }
 
 func (symlink *Symlink) Attr(ctx context.Context, attr *fuse.Attr) error {
-	attr.Inode = symlink.identifier
-	attr.Mode = os.ModeSymlink | 0777
+	attr.Mode = os.ModeSymlink
 
 	return nil
 }

@@ -84,12 +84,8 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 		return syscall.ENOENT
 	}
 
-	// attr.Inode = node.identifier
-	attr.Mode = os.ModePerm | 0o777
+	attr.Mode = os.FileMode(0)
 	attr.Size = node.size
-
-	// attr.Gid = uint32(os.Getgid())
-	// attr.Uid = uint32(os.Getuid())
 
 	return nil
 }
@@ -111,7 +107,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 
 	node.handles = append(node.handles, handle)
 
-	// openResponse.Flags = fuse.OpenKeepCache
+	openResponse.Flags = fuse.OpenResponseFlags(fuse.OpenReadOnly)
 
 	return handle, nil
 }
