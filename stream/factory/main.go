@@ -18,7 +18,6 @@ type Factory struct {
 	client filesystem_client_interfaces.Client
 
 	cachedItem CacheItem
-	streams []*stream.Stream
 
 	context context.Context
 	cancel  context.CancelFunc
@@ -45,11 +44,7 @@ func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*stream.S
 		return nil, err
 	}
 
-	newStream := stream.NewStream(url, int64(size))
-
-	factory.streams = append(factory.streams, newStream)
-
-	return newStream, nil
+	return stream.New(url, int64(size))
 }
 
 func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
@@ -74,11 +69,6 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 
 func (factory *Factory) Close() {
 	factory.cancel()
-
-	for _, stream := range factory.streams {
-		stream.Close()
-		stream = nil
-	}
 }
 
 func (factory *Factory) isClosed() bool {

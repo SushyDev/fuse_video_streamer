@@ -74,7 +74,7 @@ func (instance *Server) unmount() error {
 	var unmounted bool
 	var err error
 
-	for range 10 {
+	for {
 		err = fuse.Unmount(instance.mountpoint)
 		if err == nil {
 			unmounted = true

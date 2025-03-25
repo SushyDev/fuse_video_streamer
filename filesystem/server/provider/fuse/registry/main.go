@@ -43,6 +43,7 @@ func GetInstance(client client_interfaces.Client) *Registry {
 		cancel: cancel,
 	}
 
+
 	instances[root.GetName()] = instance
 
 	return instance
@@ -75,6 +76,4 @@ func Close() {
 		instance.CloseNodes()
 		instance = nil
 	}
-
-	instances = nil
 }

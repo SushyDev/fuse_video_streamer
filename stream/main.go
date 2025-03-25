@@ -48,7 +48,7 @@ func calculatePreloadSize(bufferSize int64) int64 {
 	return min(maxPreloadSize, preloadSize, bufferSize)
 }
 
-func NewStream(url string, size int64) *Stream {
+func New(url string, size int64) (*Stream, error) {
 	id := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	bufferSize := calculateBufferSize(int64(size))
@@ -69,7 +69,7 @@ func NewStream(url string, size int64) *Stream {
 		cancel: cancel,
 	}
 
-	return stream
+	return stream, nil
 }
 
 func (stream *Stream) Id() string {
@@ -150,8 +150,6 @@ func (stream *Stream) isClosed() bool {
 }
 
 func (stream *Stream) newTransfer(startPosition int64) error {
-	fmt.Println("New transfer at", stream.id)
-
 	if stream.isClosed() {
 		return fmt.Errorf("Stream is closed")
 	}

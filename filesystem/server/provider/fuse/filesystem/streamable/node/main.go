@@ -102,7 +102,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 
 	node.handles = append(node.handles, handle)
 
-	openResponse.Flags = fuse.OpenResponseFlags(fuse.OpenReadOnly)
+	openResponse.Flags |= fuse.OpenNonSeekable
 
 	return handle, nil
 }

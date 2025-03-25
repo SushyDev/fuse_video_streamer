@@ -44,8 +44,6 @@ func New(node interfaces.StreamableNode, stream *stream.Stream, logger *logger.L
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	fmt.Printf("New handle %d with stream id %s\n", incrementId, stream.Id())
-
 	return &Handle{
 		node: node,
 
@@ -73,7 +71,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	}
 
 	if handle.stream == nil {
-		message := fmt.Sprintf("Failed to read video stream for handle %d, closing video stream", handle.id)
+		message := fmt.Sprintf("No video stream for handle %d, closing video stream", handle.id)
 		handle.logger.Error(message, nil)
 
 		handle.Close()
@@ -106,24 +104,14 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 }
 
 func (handle *Handle) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
-	handle.mu.Lock()
-	defer handle.mu.Unlock()
-
-	if handle.isClosed() {
-		return syscall.ENOENT
-	}
-
-	if handle.stream != nil {
-		handle.stream.Close()
-		handle.stream = nil
-	}
+	handle.Close()
 
 	return nil
 }
 
 func (handle *Handle) Close() error {
-	// handle.mu.Lock()
-	// defer handle.mu.Unlock()
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
 
 	if handle.isClosed() {
 		return nil

@@ -102,8 +102,6 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 
 	node.handles = append(node.handles, handle)
 
-	openResponse.Flags = fuse.OpenDirectIO
-
 	return handle, nil
 }
 
