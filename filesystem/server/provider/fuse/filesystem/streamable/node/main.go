@@ -10,14 +10,12 @@ import (
 	streamable_handle_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/streamable/handle/service/factory"
 	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_steamer/logger"
-	"fuse_video_steamer/stream/factory"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 )
 
 type Node struct {
-	streamFactory *factory.Factory
 	handleService interfaces.StreamableHandleService
 
 	client     filesystem_client_interfaces.Client
@@ -39,10 +37,7 @@ var _ interfaces.StreamableNode = &Node{}
 func New(client filesystem_client_interfaces.Client, logger *logger.Logger, identifier uint64, size uint64) *Node {
 	context, cancel := context.WithCancel(context.Background())
 
-	stream_factory := factory.NewFactory(client, identifier, size)
-
 	node := &Node{
-		streamFactory: stream_factory,
 		client:        client,
 		identifier:    identifier,
 
@@ -124,9 +119,6 @@ func (node *Node) Close() error {
 
 	node.handleService.Close()
 	node.handleService = nil
-
-	node.streamFactory.Close()
-	node.streamFactory = nil
 
 	var wg sync.WaitGroup
 

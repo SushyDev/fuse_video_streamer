@@ -5,6 +5,7 @@ import (
 	"fuse_video_steamer/config"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
 
@@ -33,16 +34,15 @@ func (symlink *Symlink) Readlink(ctx context.Context, req *fuse.ReadlinkRequest)
 	fileSystem := symlink.client.GetFileSystem()
 
 	linkPath, err := fileSystem.ReadLink(symlink.identifier)
-
 	if err != nil {
-		return "", err
+		return "", syscall.ENOENT
 	}
 
 	mountPath := config.GetMountPoint()
 
 	path, err := filepath.Abs(filepath.Join(mountPath, symlink.client.GetName(), linkPath))
 	if err != nil {
-		return "", err
+		return "", syscall.ENOENT
 	}
 
 	return path, nil

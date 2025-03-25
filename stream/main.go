@@ -13,18 +13,18 @@ import (
 
 const (
 	maxBufferSize  = int64(256 * 1024 * 1024) // 256MB
-	maxPreloadSize = int64(16 * 1024 * 1024) // 16MB
+	maxPreloadSize = int64(16 * 1024 * 1024)  // 16MB
 )
 
 type Stream struct {
-	id  string
+	id   string
 	url  string
 	size int64
 
 	buffer ring_buffer.LockingRingBufferInterface
 
-	context context.Context
-	cancel  context.CancelFunc
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	// Job
 	transfer *transfer.Transfer
@@ -55,7 +55,7 @@ func NewStream(url string, size int64) *Stream {
 
 	buffer := ring_buffer.NewLockingRingBuffer(bufferSize, 0)
 
-	context, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 
 	stream := &Stream{
 		id: id,
@@ -65,8 +65,8 @@ func NewStream(url string, size int64) *Stream {
 
 		buffer: buffer,
 
-		context: context,
-		cancel:  cancel,
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
 	return stream
@@ -100,11 +100,11 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	requestedPosition := min(seekPosition+requestedBytes, stream.size)
 
 	if !stream.buffer.IsPositionAvailable(requestedPosition) {
-		ctx, cancel := context.WithTimeout(stream.context, 10*time.Second)
+		ctx, cancel := context.WithTimeout(stream.ctx, 10*time.Second)
 		defer cancel()
 
 		ok := stream.buffer.WaitForPosition(ctx, requestedPosition)
-		if !ok {
+		if !ok && !stream.isClosed() {
 			return 0, fmt.Errorf("Timeout waiting for the buffer to fill")
 		}
 	}
@@ -113,9 +113,6 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 }
 
 func (stream *Stream) Close() error {
-	// stream.mu.Lock()
-	// defer stream.mu.Unlock()
-
 	if stream.isClosed() {
 		return nil
 	}
@@ -145,7 +142,7 @@ func (stream *Stream) Close() error {
 
 func (stream *Stream) isClosed() bool {
 	select {
-	case <-stream.context.Done():
+	case <-stream.ctx.Done():
 		return true
 	default:
 		return false
