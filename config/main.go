@@ -6,10 +6,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type FileSystemProvider struct {
+	Name   string `yaml:"name"`
+	Target string `yaml:"target"`
+}
+
 type Config struct {
-	MountPoint  string   `yaml:"mount_point"`
-	VolumeName  string   `yaml:"volume_name"`
-	FileServers []string `yaml:"file_servers"`
+	MountPoint  string               `yaml:"mount_point"`
+	VolumeName  string               `yaml:"volume_name"`
+	FileServers []FileSystemProvider `yaml:"file_servers"`
 }
 
 func get() Config {
@@ -54,7 +59,7 @@ func GetVolumeName() string {
 	return cfg.VolumeName
 }
 
-func GetFileServers() []string {
+func GetFileServers() []FileSystemProvider {
 	cfg := get()
 	return cfg.FileServers
 }

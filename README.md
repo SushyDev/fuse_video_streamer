@@ -42,7 +42,7 @@ fuse_video_streamer:
   cap_add:
     - SYS_ADMIN
   security_opt:
-    - apparmor:unconfirmed
+    - apparmor:unconfined
   devices:
     - /dev/fuse:/dev/fuse:rwm
   pid: host # Very important, each stream is opened per PID!
@@ -68,10 +68,11 @@ Fuse Video Streamer uses a `config.yml` file (Very important its `yml` and not `
 
 Example `config.yml`.
 ```yaml
-mount_points: "/mnt/fvs"
+mount_point: "/mnt/fvs"
 volume_name: "fvs"
 file_servers:
-  - "localhost:xxxx"
+  - name: debrid_drive
+    target: "localhost:xxxx"
 ```
 
 #### Done

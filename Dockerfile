@@ -1,4 +1,4 @@
-FROM golang:1.23.2-alpine AS builder
+FROM golang:1.24.0-alpine AS builder
 
 RUN apk update && apk add --no-cache \
     build-base \
@@ -32,5 +32,13 @@ WORKDIR /app
 RUN apk add --no-cache fuse
 
 COPY --from=builder /app/main /app/main
+
+RUN adduser -D app
+
+RUN chown app /app/main
+
+RUN mkdir -p /mnt/fvs && chown app /mnt/fvs
+
+USER app
 
 ENTRYPOINT ["/app/main"]

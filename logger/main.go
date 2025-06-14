@@ -2,10 +2,10 @@ package logger
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
-	"log"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -20,12 +20,12 @@ func createLogger(fileName string) (*zap.SugaredLogger, error) {
 
 	// Create the log directory if it doesn't exist
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, err
 	}
 
 	// Open the log file
-	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		return nil, err
 	}
@@ -78,29 +78,47 @@ func NewLogger(service string) (*Logger, error) {
 }
 
 func (instance *Logger) Info(message string) {
-	// replace tabs with spaces
 	loggerMessage := strings.ReplaceAll(message, "\t", " ")
-
-	instance.logger.Infof(loggerMessage)
+	instance.logger.Info(loggerMessage)
 
 	formattedMessage := fmt.Sprintf("INFO	%s:	%s", instance.service, message)
+	log.Println(formattedMessage)
+}
 
+func (instance Logger) Warn(message string) {
+	loggerMessage := strings.ReplaceAll(message, "\t", " ")
+	instance.logger.Warn(loggerMessage)
+
+	formattedMessage := fmt.Sprintf("WARN	%s:	%s", instance.service, message)
 	log.Println(formattedMessage)
 }
 
 func (instance Logger) Error(message string, err error) {
-	instance.logger.Error(fmt.Sprintf("%s: %v", message, err))
+	loggerMessage := fmt.Sprintf("%s: %v", message, err)
+	instance.logger.Error(loggerMessage)
 
 	formattedMessage := fmt.Sprintf("ERROR	%s:	%s: %v", instance.service, message, err)
-
 	log.Println(formattedMessage)
 }
 
-
 func (instance *Logger) Fatal(message string, err error) {
-	instance.logger.Fatal(fmt.Sprintf("%s: %v", message, err))
+	loggerMessage := fmt.Sprintf("%s: %v", message, err)
+	instance.logger.Fatal(loggerMessage)
 
 	formattedMessage := fmt.Sprintf("FATAL	%s:	%s: %v", instance.service, message, err)
-
 	log.Fatal(formattedMessage)
+}
+
+func (instance *Logger) Debug(message string) {
+	loggerMessage := strings.ReplaceAll(message, "\t", " ")
+	instance.logger.Debug(loggerMessage)
+
+	formattedMessage := fmt.Sprintf("DEBUG	%s:	%s", instance.service, message)
+	log.Println(formattedMessage)
+}
+
+func (instance *Logger) Close() {
+	instance.logger.Sync()
+
+	delete(loggers, instance.service)
 }
