@@ -22,7 +22,7 @@ const (
 	SmallVideoPreloadSize  = int64(32 * 1024 * 1024)  // 32MB for < 1GB files
 	MediumVideoPreloadSize = int64(128 * 1024 * 1024) // 128MB for 1-10GB files
 	LargeVideoPreloadSize  = int64(256 * 1024 * 1024) // 256MB for 10GB+ files
-	MaxPreloadSize         = int64(32 * 1024 * 1024) // 16MB absolute max preload size
+	MaxPreloadSize         = int64(16 * 1024 * 1024) // 16MB absolute max preload size
 )
 
 type Stream struct {
@@ -41,6 +41,8 @@ type Stream struct {
 }
 
 func calculateBufferSize(fileSize int64) int64 {
+	return min(fileSize, SmallVideoBuffer)
+
 	switch {
 	case fileSize < 1024*1024*1024: // < 1GB
 		return SmallVideoBuffer

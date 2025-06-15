@@ -81,6 +81,8 @@ func PutBuffer(buffer []byte) {
 }
 
 func calculateBufferSize(fileSize int64) int64 {
+	return SmallVideoBuffer
+
 	switch {
 	case fileSize < 1024*1024*1024: // < 1GB
 		return SmallVideoBuffer
