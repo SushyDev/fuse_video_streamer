@@ -127,7 +127,7 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	foundNode, err := fileSystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
 	if err != nil {
-		node.logger.Error(fmt.Sprintf("Failed to lookup node: %s in directory with ID: %d, error: %v", lookupRequest.Name, node.GetIdentifier(), err))
+		node.logger.Error(fmt.Sprintf("Failed to lookup node: %s in directory with ID: %d", lookupRequest.Name, node.GetIdentifier()), err)
 
 		return nil, syscall.EAGAIN
 	}

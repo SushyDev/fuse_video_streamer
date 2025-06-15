@@ -56,7 +56,7 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 
 	url, err := fileSystem.GetStreamUrl(identifier)
 	if err != nil {
-		return "", fmt.Errorf("Failed to get video url for node with id %d", identifier, err)
+		return "", fmt.Errorf("Failed to get video url for node with id %d", identifier, err.Error())
 	}
 
 	factory.cachedItem = CacheItem{
