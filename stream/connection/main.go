@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,6 +15,8 @@ var _ io.ReadCloser = &Connection{}
 type Connection struct {
 	url           string
 	startPosition int64
+
+	closed int32
 
 	context context.Context
 	cancel  context.CancelFunc
@@ -41,15 +44,23 @@ func NewConnection(url string, startPosition int64) (*Connection, error) {
 }
 
 func (connection *Connection) Read(buf []byte) (int, error) {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
-
-	if connection.isClosed() {
+	if atomic.LoadInt32(&connection.closed) == 1 {
 		return 0, nil
 	}
 
+	connection.mu.RLock()
+	body := connection.body
+	connection.mu.RUnlock()
+
 	if connection.body != nil {
-		return connection.body.Read(buf)
+		return body.Read(buf)
+	}
+
+	connection.mu.Lock()
+	defer connection.mu.Unlock()
+
+	if atomic.LoadInt32(&connection.closed) == 1 {
+		return 0, nil
 	}
 
 	request, err := http.NewRequestWithContext(connection.context, "GET", connection.url, nil)
@@ -62,9 +73,11 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			MaxIdleConns:        1,
-			MaxConnsPerHost:     1,
-			MaxIdleConnsPerHost: 1,
+			MaxIdleConns:        10,
+			MaxConnsPerHost:     5,
+			MaxIdleConnsPerHost: 3,
+			IdleConnTimeout:     90 * time.Second,
+			DisableCompression:  true,
 			Proxy:               http.ProxyFromEnvironment,
 		},
 		Timeout: 4 * time.Hour,
@@ -86,12 +99,12 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 }
 
 func (connection *Connection) Close() error {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
-
-	if connection.isClosed() {
+	if !atomic.CompareAndSwapInt32(&connection.closed, 0, 1) {
 		return nil
 	}
+
+	connection.mu.Lock()
+	defer connection.mu.Unlock()
 
 	connection.cancel()
 
@@ -108,10 +121,5 @@ func (connection *Connection) Close() error {
 }
 
 func (connection *Connection) isClosed() bool {
-	select {
-	case <-connection.context.Done():
-		return true
-	default:
-		return false
-	}
+	return atomic.LoadInt32(&connection.closed) == 1
 }

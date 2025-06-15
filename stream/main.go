@@ -12,8 +12,17 @@ import (
 )
 
 const (
-	maxBufferSize  = int64(256 * 1024 * 1024) // 256MB
-	maxPreloadSize = int64(16 * 1024 * 1024)  // 16MB
+	SmallVideoBuffer  = int64(64 * 1024 * 1024)   // 64MB for < 1GB files
+	MediumVideoBuffer = int64(256 * 1024 * 1024)  // 256MB for 1-10GB files
+	LargeVideoBuffer  = int64(512 * 1024 * 1024)  // 512MB for 10GB+ files
+	MaxBufferSize     = int64(1024 * 1024 * 1024) // 1GB absolute max
+)
+
+const (
+	SmallVideoPreloadSize  = int64(32 * 1024 * 1024)  // 32MB for < 1GB files
+	MediumVideoPreloadSize = int64(128 * 1024 * 1024) // 128MB for 1-10GB files
+	LargeVideoPreloadSize  = int64(256 * 1024 * 1024) // 256MB for 10GB+ files
+	MaxPreloadSize         = int64(32 * 1024 * 1024) // 16MB absolute max preload size
 )
 
 type Stream struct {
@@ -26,26 +35,37 @@ type Stream struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Job
 	transfer *transfer.Transfer
 
 	mu sync.Mutex
 }
 
-// Buffer size is 10% of buffer size, capped at 1GB or fileSize
 func calculateBufferSize(fileSize int64) int64 {
-	return maxBufferSize
-
-	bufferSize := int64(float64(fileSize) * 0.1)
-	return min(maxBufferSize, bufferSize, fileSize)
+	switch {
+	case fileSize < 1024*1024*1024: // < 1GB
+		return SmallVideoBuffer
+	case fileSize < 10*1024*1024*1024: // < 10GB
+		return MediumVideoBuffer
+	case fileSize < 50*1024*1024*1024: // < 50GB
+		return LargeVideoBuffer
+	default:
+		return MaxBufferSize
+	}
 }
 
-// Preload size is half the buffer size, capped at 16 MB or buffer size
 func calculatePreloadSize(bufferSize int64) int64 {
-	return maxPreloadSize
+	return min(bufferSize/2, MaxPreloadSize)
 
-	preloadSize := int64(float64(bufferSize) * 0.5)
-	return min(maxPreloadSize, preloadSize, bufferSize)
+	switch {
+	case bufferSize <= SmallVideoBuffer:
+		return SmallVideoPreloadSize
+	case bufferSize <= MediumVideoBuffer:
+		return MediumVideoPreloadSize
+	case bufferSize <= LargeVideoBuffer:
+		return LargeVideoPreloadSize
+	default:
+		return MaxPreloadSize
+	}
 }
 
 func New(url string, size int64) (*Stream, error) {

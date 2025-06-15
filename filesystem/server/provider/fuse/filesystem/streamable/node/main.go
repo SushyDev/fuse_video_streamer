@@ -120,19 +120,9 @@ func (node *Node) Close() error {
 	node.handleService.Close()
 	node.handleService = nil
 
-	var wg sync.WaitGroup
-
 	for _, handle := range node.handles {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			handle.Close()
-			handle = nil
-		}()
+		handle.Close()
 	}
-
-	wg.Wait()
 
 	node.handles = nil
 

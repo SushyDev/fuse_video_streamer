@@ -79,7 +79,9 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		return syscall.ENOENT
 	}
 
-	buffer := pool.GetBuffer()
+	fileSize := handle.node.GetSize()
+
+	buffer := pool.GetBuffer(int64(fileSize))
 	defer pool.PutBuffer(buffer)
 
 	bytesRead, err := handle.stream.ReadAt(buffer[:readRequest.Size], readRequest.Offset)

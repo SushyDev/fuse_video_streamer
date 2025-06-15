@@ -4,14 +4,21 @@ import (
 	"context"
 	"fuse_video_streamer/config"
 	"fuse_video_streamer/filesystem/interfaces"
-	filesystem_server_service "fuse_video_streamer/filesystem/server/service"
 	filesystem_server_provider_fuse_service "fuse_video_streamer/filesystem/server/provider/fuse/service"
+	filesystem_server_service "fuse_video_streamer/filesystem/server/service"
+	// "log"
+	// "net/http"
+	// _ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
 func main() {
+	// go func() {
+	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
+	// }()
+
 	config.Validate()
 
 	mountpoint := config.GetMountPoint()

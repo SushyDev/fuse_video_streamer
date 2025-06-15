@@ -58,7 +58,8 @@ func (transfer *Transfer) start() {
 	done := make(chan error, 1)
 
 	go func() {
-		_, err := io.Copy(transfer.buffer, transfer.connection)
+		buf := make([]byte, 16*1024*1024) // 16MB buffer size
+		_, err := io.CopyBuffer(transfer.buffer, transfer.connection, buf)
 		done <- err
 	}()
 
