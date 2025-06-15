@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -73,8 +74,12 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			MaxIdleConns:        10,
-			MaxConnsPerHost:     5,
+			TLSClientConfig: &tls.Config{
+				ClientSessionCache: tls.NewLRUClientSessionCache(100),
+			},
+			ForceAttemptHTTP2:   true,
+			MaxIdleConns:        100,
+			MaxConnsPerHost:     10,
 			MaxIdleConnsPerHost: 3,
 			IdleConnTimeout:     90 * time.Second,
 			DisableCompression:  true,
