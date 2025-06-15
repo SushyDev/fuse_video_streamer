@@ -12,8 +12,6 @@ import (
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
 
-var _ io.Closer = &Transfer{}
-
 type Transfer struct {
 	buffer     io.WriteCloser
 	connection *connection.Connection
@@ -24,6 +22,15 @@ type Transfer struct {
 	logger *logger.Logger
 
 	wg *sync.WaitGroup
+}
+
+var _ io.Closer = &Transfer{}
+
+// Buffer pool for efficient memory reuse
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 64*1024) // 64KB buffers
+	},
 }
 
 func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection) *Transfer {
@@ -57,11 +64,7 @@ func (transfer *Transfer) start() {
 
 	done := make(chan error, 1)
 
-	go func() {
-		buf := make([]byte, 128*1024*1024) // 128MB buffer size
-		_, err := io.CopyBuffer(transfer.buffer, transfer.connection, buf)
-		done <- err
-	}()
+	go transfer.copyData(done)
 
 	select {
 	case <-transfer.context.Done():
@@ -77,12 +80,45 @@ func (transfer *Transfer) start() {
 			if strings.HasPrefix(err.Error(), "Buffer is closed") {
 				break
 			}
-
 			transfer.logger.Error("Error copying from connection", err)
 		}
 	}
 
 	transfer.buffer.Write(ring_buffer.EOFMarker)
+}
+
+func (transfer *Transfer) copyData(done chan<- error) {
+	buf := bufferPool.Get().([]byte)
+	defer bufferPool.Put(buf)
+
+	for {
+		select {
+		case <-transfer.context.Done():
+			done <- context.Canceled
+			return
+		default:
+		}
+
+		bytesRead, readErr := transfer.connection.Read(buf)
+		
+		if bytesRead > 0 {
+			_, writeErr := transfer.buffer.Write(buf[:bytesRead])
+			if writeErr != nil {
+				done <- writeErr
+				return
+			}
+		}
+
+		if readErr != nil {
+			if readErr == io.EOF {
+				done <- nil
+			} else {
+				done <- readErr
+			}
+
+			return
+		}
+	}
 }
 
 func (transfer *Transfer) Close() error {
@@ -95,8 +131,6 @@ func (transfer *Transfer) Close() error {
 		if err != nil {
 			fmt.Println("Error closing connection:", err)
 		}
-
-		transfer.connection = nil
 	}
 
 	transfer.cancel()
