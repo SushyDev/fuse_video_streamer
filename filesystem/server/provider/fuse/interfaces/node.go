@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 
 	"github.com/anacrolix/fuse/fs"
 )

@@ -1,12 +1,12 @@
 package service
 
 import (
-	interfaces "fuse_video_steamer/filesystem/interfaces"
-	filesystem_server_provider_fuse "fuse_video_steamer/filesystem/server/provider/fuse"
-	filesystem_server_provider_fuse_filesystem "fuse_video_steamer/filesystem/server/provider/fuse/filesystem"
-	filesystem_server_provider_fuse_root_node_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/root/node/service/factory"
-	filesystem_server_provider_fuse_interfaces "fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
+	interfaces "fuse_video_streamer/filesystem/interfaces"
+	filesystem_server_provider_fuse "fuse_video_streamer/filesystem/server/provider/fuse"
+	filesystem_server_provider_fuse_filesystem "fuse_video_streamer/filesystem/server/provider/fuse/filesystem"
+	filesystem_server_provider_fuse_root_node_service_factory "fuse_video_streamer/filesystem/server/provider/fuse/filesystem/root/node/service/factory"
+	filesystem_server_provider_fuse_interfaces "fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse"
 )

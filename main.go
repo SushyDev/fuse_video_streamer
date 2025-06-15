@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"fuse_video_steamer/config"
-	"fuse_video_steamer/filesystem/interfaces"
-	filesystem_server_service "fuse_video_steamer/filesystem/server/service"
-	filesystem_server_provider_fuse_service "fuse_video_steamer/filesystem/server/provider/fuse/service"
+	"fuse_video_streamer/config"
+	"fuse_video_streamer/filesystem/interfaces"
+	filesystem_server_service "fuse_video_streamer/filesystem/server/service"
+	filesystem_server_provider_fuse_service "fuse_video_streamer/filesystem/server/provider/fuse/service"
 	"os"
 	"os/signal"
 	"syscall"

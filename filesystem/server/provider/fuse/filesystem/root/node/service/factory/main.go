@@ -1,9 +1,9 @@
 package factory
 
 import (
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/root/node/service"
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/node/service/factory"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/root/node/service"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/directory/node/service/factory"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
 )
 
 type ServiceFactory struct {

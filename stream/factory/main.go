@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/stream"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/stream"
 )
 
 type CacheItem struct {
@@ -56,7 +56,7 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 
 	url, err := fileSystem.GetStreamUrl(identifier)
 	if err != nil {
-		return "", fmt.Errorf("Failed to get video url for node with id %d", identifier)
+		return "", fmt.Errorf("Failed to get video url for node with id %d", identifier, err)
 	}
 
 	factory.cachedItem = CacheItem{

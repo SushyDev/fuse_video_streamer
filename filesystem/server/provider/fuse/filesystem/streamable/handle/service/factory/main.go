@@ -1,10 +1,10 @@
 package factory
 
 import (
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/streamable/handle/service"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	stream_factory "fuse_video_steamer/stream/factory"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/streamable/handle/service"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	stream_factory "fuse_video_streamer/stream/factory"
 )
 
 type Factory struct {}

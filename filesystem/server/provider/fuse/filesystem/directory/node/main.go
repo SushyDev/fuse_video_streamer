@@ -8,11 +8,11 @@ import (
 	"sync"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	directory_handle_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/handle/service/factory"
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/symlink"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	directory_handle_service_factory "fuse_video_streamer/filesystem/server/provider/fuse/filesystem/directory/handle/service/factory"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/symlink"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -123,14 +123,20 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	fileSystem := node.client.GetFileSystem()
 
+	fmt.Printf("Looking up node: %s in directory with ID: %d\n", lookupRequest.Name, node.GetIdentifier())
+
 	foundNode, err := fileSystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
 	if err != nil {
-		return nil, err
+		node.logger.Error(fmt.Sprintf("Failed to lookup node: %s in directory with ID: %d, error: %v", lookupRequest.Name, node.GetIdentifier(), err))
+
+		return nil, syscall.EAGAIN
 	}
 
 	if foundNode == nil {
 		return nil, syscall.ENOENT
 	}
+
+	fmt.Printf("Found node: %s with ID: %d\n", foundNode.GetName(), foundNode.GetId())
 
 	switch foundNode.GetMode() {
 	case io_fs.ModeDir:

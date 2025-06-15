@@ -3,8 +3,8 @@ package stream
 import (
 	"context"
 	"fmt"
-	"fuse_video_steamer/stream/connection"
-	"fuse_video_steamer/stream/transfer"
+	"fuse_video_streamer/stream/connection"
+	"fuse_video_streamer/stream/transfer"
 	"sync"
 	"time"
 

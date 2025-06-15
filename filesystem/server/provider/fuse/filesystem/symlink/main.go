@@ -2,12 +2,12 @@ package symlink
 
 import (
 	"context"
-	"fuse_video_steamer/config"
+	"fuse_video_streamer/config"
 	"os"
 	"path/filepath"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 
 	"github.com/anacrolix/fuse"
 )

@@ -5,8 +5,8 @@ import (
 	io_fs "io/fs"
 	"time"
 
-	"fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/logger"
+	"fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/logger"
 
 	api "github.com/sushydev/stream_mount_api"
 )

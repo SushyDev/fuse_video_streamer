@@ -3,10 +3,10 @@ package repository
 import (
 	"fmt"
 
-	"fuse_video_steamer/config"
-	"fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/logger"
-	"fuse_video_steamer/filesystem/client/provider/grpc"
+	"fuse_video_streamer/config"
+	"fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/logger"
+	"fuse_video_streamer/filesystem/client/provider/grpc"
 )
 
 type clientRepository struct {

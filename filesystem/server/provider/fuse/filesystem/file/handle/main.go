@@ -5,8 +5,8 @@ import (
 	"sync"
 	"syscall"
 
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"

@@ -6,8 +6,8 @@ import (
 	"context"
 	"sync"
 
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 )
 
 type Registry struct {

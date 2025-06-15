@@ -7,10 +7,10 @@ import (
 	"sync"
 	"syscall"
 
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/filesystem/server/provider/fuse/pool"
-	"fuse_video_steamer/logger"
-	"fuse_video_steamer/stream"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/pool"
+	"fuse_video_streamer/logger"
+	"fuse_video_streamer/stream"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"

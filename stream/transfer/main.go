@@ -3,8 +3,8 @@ package transfer
 import (
 	"context"
 	"fmt"
-	"fuse_video_steamer/logger"
-	"fuse_video_steamer/stream/connection"
+	"fuse_video_streamer/logger"
+	"fuse_video_streamer/stream/connection"
 	"io"
 	"strings"
 	"sync"

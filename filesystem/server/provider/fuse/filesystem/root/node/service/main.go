@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/root/node"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/root/node"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
 )
 
 type Service struct {

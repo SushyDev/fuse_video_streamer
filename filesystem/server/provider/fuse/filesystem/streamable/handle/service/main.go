@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/streamable/handle"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
-	"fuse_video_steamer/stream/factory"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/streamable/handle"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
+	"fuse_video_streamer/stream/factory"
 )
 
 type Service struct {

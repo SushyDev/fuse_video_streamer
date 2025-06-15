@@ -1,11 +1,11 @@
 package factory
 
 import (
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/node/service"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	file_node_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/file/node/service/factory"
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	streamable_node_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/streamable/node/service/factory"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/directory/node/service"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	file_node_service_factory "fuse_video_streamer/filesystem/server/provider/fuse/filesystem/file/node/service/factory"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	streamable_node_service_factory "fuse_video_streamer/filesystem/server/provider/fuse/filesystem/streamable/node/service/factory"
 )
 
 type Factory struct {}
