@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
@@ -22,6 +23,8 @@ type Transfer struct {
 	logger *logger.Logger
 
 	wg *sync.WaitGroup
+
+	closed atomic.Bool
 }
 
 var _ io.Closer = &Transfer{}
@@ -100,7 +103,7 @@ func (transfer *Transfer) copyData(done chan<- error) {
 		}
 
 		bytesRead, readErr := transfer.connection.Read(buf)
-		
+
 		if bytesRead > 0 {
 			_, writeErr := transfer.buffer.Write(buf[:bytesRead])
 			if writeErr != nil {
@@ -122,9 +125,7 @@ func (transfer *Transfer) copyData(done chan<- error) {
 }
 
 func (transfer *Transfer) Close() error {
-	if transfer.isClosed() {
-		return nil
-	}
+	transfer.closed.Store(true)
 
 	if transfer.connection != nil {
 		err := transfer.connection.Close()
@@ -138,13 +139,4 @@ func (transfer *Transfer) Close() error {
 	transfer.wg.Wait()
 
 	return nil
-}
-
-func (transfer *Transfer) isClosed() bool {
-	select {
-	case <-transfer.context.Done():
-		return true
-	default:
-		return false
-	}
 }

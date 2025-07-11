@@ -123,7 +123,6 @@ func (handle *Handle) Close() error {
 
 	if handle.stream != nil {
 		handle.stream.Close()
-		handle.stream = nil
 	}
 
 	return nil
