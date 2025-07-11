@@ -17,14 +17,14 @@ type Connection struct {
 	url           string
 	startPosition int64
 
-	closed int32
-
 	context context.Context
 	cancel  context.CancelFunc
 
 	body io.ReadCloser
 
 	mu sync.RWMutex
+
+	closed atomic.Bool
 }
 
 func NewConnection(url string, startPosition int64) (*Connection, error) {
@@ -45,7 +45,7 @@ func NewConnection(url string, startPosition int64) (*Connection, error) {
 }
 
 func (connection *Connection) Read(buf []byte) (int, error) {
-	if atomic.LoadInt32(&connection.closed) == 1 {
+	if connection.closed.Load() {
 		return 0, nil
 	}
 
@@ -60,7 +60,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	connection.mu.Lock()
 	defer connection.mu.Unlock()
 
-	if atomic.LoadInt32(&connection.closed) == 1 {
+	if connection.closed.Load() {
 		return 0, nil
 	}
 
@@ -104,12 +104,9 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 }
 
 func (connection *Connection) Close() error {
-	if !atomic.CompareAndSwapInt32(&connection.closed, 0, 1) {
-		return nil
+	if connection.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
 	}
-
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
 
 	connection.cancel()
 
@@ -126,5 +123,5 @@ func (connection *Connection) Close() error {
 }
 
 func (connection *Connection) isClosed() bool {
-	return atomic.LoadInt32(&connection.closed) == 1
+	return connection.closed.Load()
 }

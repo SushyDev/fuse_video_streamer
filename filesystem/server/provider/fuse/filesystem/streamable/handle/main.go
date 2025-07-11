@@ -125,6 +125,8 @@ func (handle *Handle) Close() error {
 		handle.stream.Close()
 	}
 
+	fmt.Printf("With FLAGS: Close: %d\n", handle.id)
+
 	return nil
 }
 

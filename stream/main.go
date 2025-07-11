@@ -6,6 +6,7 @@ import (
 	"fuse_video_streamer/stream/connection"
 	"fuse_video_streamer/stream/transfer"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
@@ -22,7 +23,7 @@ const (
 	SmallVideoPreloadSize  = int64(32 * 1024 * 1024)  // 32MB for < 1GB files
 	MediumVideoPreloadSize = int64(128 * 1024 * 1024) // 128MB for 1-10GB files
 	LargeVideoPreloadSize  = int64(256 * 1024 * 1024) // 256MB for 10GB+ files
-	MaxPreloadSize         = int64(16 * 1024 * 1024) // 16MB absolute max preload size
+	MaxPreloadSize         = int64(16 * 1024 * 1024)  // 16MB absolute max preload size
 )
 
 type Stream struct {
@@ -38,6 +39,8 @@ type Stream struct {
 	transfer *transfer.Transfer
 
 	mu sync.Mutex
+
+	closed atomic.Bool
 }
 
 func calculateBufferSize(fileSize int64) int64 {
@@ -135,8 +138,8 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 }
 
 func (stream *Stream) Close() error {
-	if stream.isClosed() {
-		return nil
+	if !stream.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
 	}
 
 	stream.cancel()
@@ -163,12 +166,7 @@ func (stream *Stream) Close() error {
 }
 
 func (stream *Stream) isClosed() bool {
-	select {
-	case <-stream.ctx.Done():
-		return true
-	default:
-		return false
-	}
+	return stream.closed.Load()
 }
 
 func (stream *Stream) newTransfer(startPosition int64) error {
