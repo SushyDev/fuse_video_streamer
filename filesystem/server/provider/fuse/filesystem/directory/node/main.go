@@ -121,12 +121,13 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return nil, syscall.ENOENT
 	}
 
-	fileSystem := node.client.GetFileSystem()
+	remote_filesystem := node.client.GetFileSystem()
 
-	fmt.Printf("Looking up node: %s in directory with ID: %d\n", lookupRequest.Name, node.GetIdentifier())
+	foundNode, err := remote_filesystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
 
-	foundNode, err := fileSystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
-	if err != nil {
+	if err == syscall.ENOENT {
+		return nil, syscall.ENOENT
+	} else if err != nil {
 		node.logger.Error(fmt.Sprintf("Failed to lookup node: %s in directory with ID: %d", lookupRequest.Name, node.GetIdentifier()), err)
 
 		return nil, syscall.EAGAIN
@@ -135,8 +136,6 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	if foundNode == nil {
 		return nil, syscall.ENOENT
 	}
-
-	fmt.Printf("Found node: %s with ID: %d\n", foundNode.GetName(), foundNode.GetId())
 
 	switch foundNode.GetMode() {
 	case io_fs.ModeDir:

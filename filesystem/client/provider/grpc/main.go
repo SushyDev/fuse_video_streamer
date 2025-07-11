@@ -57,6 +57,7 @@ func New(entry config.FileSystemProvider) (interfaces.Client, error) {
 
 	fileSystem := filesystem.New(client, logger)
 
+	// TODO healthcheck endpoint
 	logger.Info(fmt.Sprintf("Connected to file system provider:	%s", entry.Name))
 
 	return &provider{
