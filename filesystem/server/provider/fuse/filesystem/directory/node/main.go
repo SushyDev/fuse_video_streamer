@@ -6,6 +6,7 @@ import (
 	io_fs "io/fs"
 	"os"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
@@ -34,8 +35,7 @@ type Node struct {
 
 	mu sync.RWMutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.DirectoryNode = &Node{}
@@ -48,8 +48,6 @@ func New(
 	logger *logger.Logger,
 	identifier uint64,
 ) *Node {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	node := &Node{
 		directoryNodeService:  directoryNodeService,
 		streamableNodeService: streamableNodeService,
@@ -59,9 +57,6 @@ func New(
 		identifier: identifier,
 
 		logger: logger,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}
 
 	directoryHandleServiceFactory := directory_handle_service_factory.New()
@@ -289,14 +284,9 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 }
 
 func (node *Node) Close() error {
-	// node.mu.Lock()
-	// defer node.mu.Unlock()
-
-	if node.isClosed() {
+	if !node.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-
-	node.cancel()
 
 	for _, handle := range node.handles {
 		handle.Close()
@@ -307,10 +297,5 @@ func (node *Node) Close() error {
 }
 
 func (node *Node) isClosed() bool {
-	select {
-	case <-node.ctx.Done():
-		return true
-	default:
-		return false
-	}
+	return node.closed.Load()
 }

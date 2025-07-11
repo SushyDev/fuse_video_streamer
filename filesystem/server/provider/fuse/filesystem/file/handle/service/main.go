@@ -1,7 +1,7 @@
 package service
 
 import (
-	"context"
+	"sync/atomic"
 
 	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/file/handle"
@@ -13,21 +13,15 @@ type Service struct {
 	node   interfaces.FileNode
 	client filesystem_client_interfaces.Client
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.FileHandleService = &Service{}
 
 func New(node interfaces.FileNode, client filesystem_client_interfaces.Client) *Service {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Service{
 		node:   node,
 		client: client,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}
 }
 
@@ -45,16 +39,13 @@ func (service *Service) New() (interfaces.FileHandle, error) {
 }
 
 func (service *Service) Close() error {
-	service.cancel()
+	if !service.closed.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	return nil
 }
 
 func (service *Service) isClosed() bool {
-	select {
-	case <-service.ctx.Done():
-		return true
-	default:
-		return false
-	}
+	return service.closed.Load()
 }

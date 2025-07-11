@@ -1,30 +1,23 @@
 package service
 
 import (
-	"context"
-
 	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/root/node"
 	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_streamer/logger"
+	"sync/atomic"
 )
 
 type Service struct {
 	directoryNodeServiceFactory interfaces.DirectoryNodeServiceFactory
 
-	ctx context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.RootNodeService = &Service{}
 
 func New(directoryNodeServiceFactory interfaces.DirectoryNodeServiceFactory) *Service {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Service{
 		directoryNodeServiceFactory: directoryNodeServiceFactory,
-
-		ctx: ctx,
-		cancel: cancel,
 	}
 }
 
@@ -44,16 +37,13 @@ func (service *Service) New() (interfaces.RootNode, error) {
 }
 
 func (service *Service) Close() error {
-	service.cancel()
+	if !service.closed.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	return nil
 }
 
 func (service *Service) isClosed() bool {
-	select {
-	case <-service.ctx.Done():
-		return true
-	default:
-		return false
-	}
+	return service.closed.Load()
 }

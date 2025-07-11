@@ -127,7 +127,9 @@ func (transfer *Transfer) copyData(done chan<- error) {
 }
 
 func (transfer *Transfer) Close() error {
-	transfer.closed.Store(true)
+	if !transfer.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
+	}
 
 	fmt.Println("Closing transfer...")
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
@@ -28,8 +29,7 @@ type node struct {
 
 	mu sync.RWMutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.RootNode = &node{}
@@ -40,8 +40,6 @@ func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Lo
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &node{
 		fileSystemProviderRepository: fileSystemProviderRepository,
 
@@ -49,9 +47,6 @@ func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Lo
 		directoryNodeService:        directoryNodeService,
 
 		logger:  logger,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}, nil
 }
 
@@ -138,10 +133,9 @@ func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 }
 
 func (node *node) Close() error {
-	// node.mu.Lock()
-	// defer node.mu.Unlock()
-
-	node.cancel()
+	if !node.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
+	}
 
 	node.directoryNodeService.Close()
 	node.directoryNodeService = nil
@@ -150,10 +144,5 @@ func (node *node) Close() error {
 }
 
 func (node *node) isClosed() bool {
-	select {
-	case <-node.ctx.Done():
-		return true
-	default:
-		return false
-	}
+	return node.closed.Load()
 }

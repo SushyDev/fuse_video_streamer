@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
@@ -31,8 +32,7 @@ type Handle struct {
 
 	mu sync.RWMutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.StreamableHandle = &Handle{}
@@ -42,8 +42,6 @@ var incrementId uint64
 func New(node interfaces.StreamableNode, stream *stream.Stream, logger *logger.Logger) *Handle {
 	incrementId++
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Handle{
 		node: node,
 
@@ -52,9 +50,6 @@ func New(node interfaces.StreamableNode, stream *stream.Stream, logger *logger.L
 		stream: stream,
 
 		logger: logger,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}
 }
 
@@ -112,14 +107,9 @@ func (handle *Handle) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 }
 
 func (handle *Handle) Close() error {
-	handle.mu.Lock()
-	defer handle.mu.Unlock()
-
-	if handle.isClosed() {
+	if !handle.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-
-	handle.cancel()
 
 	if handle.stream != nil {
 		handle.stream.Close()
@@ -131,10 +121,5 @@ func (handle *Handle) Close() error {
 }
 
 func (handle *Handle) isClosed() bool {
-	select {
-	case <-handle.ctx.Done():
-		return true
-	default:
-		return false
-	}
+	return handle.closed.Load()
 }

@@ -1,9 +1,9 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/streamable/node"
@@ -19,24 +19,18 @@ type Service struct {
 
 	mu sync.RWMutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.StreamableNodeService = &Service{}
 
 func New(client filesystem_client_interfaces.Client, logger *logger.Logger) (interfaces.StreamableNodeService, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	registry := registry.GetInstance(client)
 
 	return &Service{
 		client:   client,
 		logger:   logger,
 		registry: registry,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}, nil
 }
 
@@ -71,14 +65,13 @@ func (service *Service) New(identifier uint64) (interfaces.StreamableNode, error
 }
 
 func (service *Service) Close() error {
+	if !service.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	return nil
 }
 
 func (service *Service) isClosed() bool {
-	select {
-	case <-service.ctx.Done():
-		return true
-	default:
-		return false
-	}
+	return service.closed.Load()
 }

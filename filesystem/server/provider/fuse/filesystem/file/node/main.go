@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
@@ -22,21 +23,18 @@ type Node struct {
 	identifier uint64
 	size       uint64
 
+	handles []interfaces.FileHandle
+
 	logger *logger.Logger
 
 	mu sync.RWMutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	handles []interfaces.FileHandle
+	closed atomic.Bool
 }
 
 var _ interfaces.FileNode = &Node{}
 
 func New(client filesystem_client_interfaces.Client, logger *logger.Logger, identifier uint64, size uint64) *Node {
-	context, cancel := context.WithCancel(context.Background())
-
 	node := &Node{
 		client:     client,
 		identifier: identifier,
@@ -46,9 +44,6 @@ func New(client filesystem_client_interfaces.Client, logger *logger.Logger, iden
 		logger: logger,
 
 		mu: sync.RWMutex{},
-
-		ctx:    context,
-		cancel: cancel,
 	}
 
 	fileHandleServiceFactory := file_handle_service_factory.New()
@@ -106,14 +101,9 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 }
 
 func (node *Node) Close() error {
-	// node.mu.Lock()
-	// defer node.mu.Unlock()
-
-	if node.isClosed() {
-		return nil
+	if !node.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
 	}
-
-	node.cancel()
 
 	node.handleService.Close()
 	node.handleService = nil
@@ -138,10 +128,5 @@ func (node *Node) Close() error {
 }
 
 func (node *Node) isClosed() bool {
-	select {
-	case <-node.ctx.Done():
-		return true
-	default:
-		return false
-	}
+	return node.closed.Load()
 }
