@@ -44,7 +44,9 @@ func (service *Service) New(identifier uint64) (interfaces.StreamableNode, error
 
 	logger, err := logger.NewLogger("Root Node")
 	if err != nil {
-		panic(err)
+		message := fmt.Sprintf("Failed to create logger for streamable node with identifier %d", identifier)
+		service.logger.Error(message, err)
+		return nil, err
 	}
 
 	fileSystem := service.client.GetFileSystem()
@@ -57,7 +59,11 @@ func (service *Service) New(identifier uint64) (interfaces.StreamableNode, error
 		return nil, err
 	}
 
-	newNode := node.New(service.client, logger, identifier, size)
+	newNode, err := node.New(service.client, logger, identifier, size)
+	if err != nil {
+		service.logger.Error("Failed to create new streamable node", err)
+		return nil, err
+	}
 
 	service.registry.Add(newNode)
 

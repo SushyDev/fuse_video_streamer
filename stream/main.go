@@ -6,6 +6,7 @@ import (
 	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 	"fuse_video_streamer/stream/connection"
 	"fuse_video_streamer/stream/transfer"
+	"fuse_video_streamer/logger"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -200,7 +201,12 @@ func (stream *Stream) newTransfer(startPosition int64) error {
 
 	streamMetrics := debugger.NewStreamTransferMetrics(stream.id, stream.url, stream.size)
 
-	transfer := transfer.NewTransfer(stream.buffer, connection, streamMetrics)
+	logger, err := logger.NewLogger("Stream Transfer")
+	if err != nil {
+		return err
+	}
+
+	transfer := transfer.NewTransfer(stream.buffer, connection, streamMetrics, logger)
 	stream.transfer = transfer
 
 	return nil

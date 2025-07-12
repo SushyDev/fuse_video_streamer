@@ -34,7 +34,7 @@ type Node struct {
 
 var _ interfaces.StreamableNode = &Node{}
 
-func New(client filesystem_client_interfaces.Client, logger *logger.Logger, identifier uint64, size uint64) *Node {
+func New(client filesystem_client_interfaces.Client, logger *logger.Logger, identifier uint64, size uint64) (*Node, error) {
 	node := &Node{
 		client:        client,
 		identifier:    identifier,
@@ -49,12 +49,13 @@ func New(client filesystem_client_interfaces.Client, logger *logger.Logger, iden
 	fileHandleServiceFactory := streamable_handle_service_factory.New()
 	fileHandleService, err := fileHandleServiceFactory.New(node, client)
 	if err != nil {
-		panic(err)
+		node.logger.Error("Failed to create file handle service", err)
+		return nil, err
 	}
 
 	node.handleService = fileHandleService
 
-	return node
+	return node, nil
 }
 
 func (node *Node) GetIdentifier() uint64 {

@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 	"fuse_video_streamer/logger"
 
@@ -21,7 +20,6 @@ type Handle struct {
 
 	id uint64
 
-	client    filesystem_client_interfaces.Client
 	directory interfaces.DirectoryNode
 
 	mu sync.RWMutex
@@ -35,17 +33,18 @@ var _ interfaces.DirectoryHandle = &Handle{}
 
 var incrementId uint64
 
-func New(client filesystem_client_interfaces.Client, directory interfaces.DirectoryNode, logger *logger.Logger) *Handle {
+func New(directory interfaces.DirectoryNode, logger *logger.Logger) *Handle {
 	incrementId++
 
-	return &Handle{
+	handle := &Handle{
 		id: incrementId,
 
-		client:    client,
 		directory: directory,
 
 		logger: logger,
 	}
+
+	return handle
 }
 
 func (handle *Handle) GetIdentifier() uint64 {
@@ -60,7 +59,7 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 		return nil, syscall.ENOENT
 	}
 
-	fileSystem := handle.client.GetFileSystem()
+	fileSystem := handle.directory.GetClient().GetFileSystem()
 
 	nodes, err := fileSystem.ReadDirAll(handle.directory.GetIdentifier())
 	if err != nil && err != syscall.ENOENT {
@@ -73,26 +72,29 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 
 	for _, entry := range nodes {
 		switch entry.GetMode() {
+		// --- Symlink
 		case io_fs.ModeSymlink:
 			entries = append(entries, fuse.Dirent{
 				Name: entry.GetName(),
 				Type: fuse.DT_Link,
 			})
+		// --- File
 		case io_fs.FileMode(0):
 			entries = append(entries, fuse.Dirent{
 				Name: entry.GetName(),
 				Type: fuse.DT_File,
 			})
+		// --- Directory
 		case io_fs.ModeDir:
 			entries = append(entries, fuse.Dirent{
 				Name: entry.GetName(),
 				Type: fuse.DT_Dir,
 			})
+		// --- Unknown
 		default:
-			message := fmt.Sprintf("Unknown file mode %s", entry.GetName())
+			message := fmt.Sprintf("Unknown file mode %s for file %s", entry.GetMode(), entry.GetName())
 			handle.logger.Error(message, nil)
 		}
-
 	}
 
 	return entries, nil

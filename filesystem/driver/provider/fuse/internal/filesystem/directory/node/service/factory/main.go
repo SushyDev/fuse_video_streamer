@@ -12,6 +12,7 @@ import (
 type Factory struct {}
 
 var _ interfaces.DirectoryNodeServiceFactory = &Factory{}
+
 func New() *Factory {
 	return &Factory{}
 }

@@ -38,12 +38,7 @@ var bufferPool = sync.Pool{
 	},
 }
 
-func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection, metrics *metrics.StreamTransferMetrics) *Transfer {
-	logger, err := logger.NewLogger("Transfer")
-	if err != nil {
-		panic(err)
-	}
-
+func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection, metrics *metrics.StreamTransferMetrics, logger *logger.Logger) *Transfer {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	transfer := &Transfer{

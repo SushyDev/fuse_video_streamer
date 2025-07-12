@@ -47,8 +47,12 @@ func New(
 	client filesystem_client_interfaces.Client,
 	logger *logger.Logger,
 	identifier uint64,
-) *Node {
+) (*Node, error) {
+	directoryHandleServiceFactory := directory_handle_service_factory.New()
+
 	node := &Node{
+		directoryHandleService: directoryHandleServiceFactory.New(),
+
 		directoryNodeService:  directoryNodeService,
 		streamableNodeService: streamableNodeService,
 		fileNodeService:       fileNodeService,
@@ -59,20 +63,16 @@ func New(
 		logger: logger,
 	}
 
-	directoryHandleServiceFactory := directory_handle_service_factory.New()
-	directoryHandleService, err := directoryHandleServiceFactory.New(node, client)
-	if err != nil {
-		panic(err)
-	}
-
-	node.directoryHandleService = directoryHandleService
-
-	return node
+	return node, nil
 
 }
 
 func (node *Node) GetIdentifier() uint64 {
 	return node.identifier
+}
+
+func (node *Node) GetClient() filesystem_client_interfaces.Client {
+	return node.client
 }
 
 func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
@@ -96,7 +96,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		return nil, syscall.ENOENT
 	}
 
-	handle, err := node.directoryHandleService.New()
+	handle, err := node.directoryHandleService.New(node)
 	if err != nil {
 		message := "Failed to open directory"
 		node.logger.Error(message, err)

@@ -59,6 +59,8 @@ type DirectoryNode interface {
 	fs.NodeCreater
 	fs.NodeMkdirer
 	fs.NodeLinker
+
+	GetClient() filesystem_client_interfaces.Client
 }
 
 // --- Streamable

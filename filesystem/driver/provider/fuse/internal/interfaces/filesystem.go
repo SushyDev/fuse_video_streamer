@@ -12,5 +12,5 @@ type FuseFileSystem interface {
 	useClosable
 
 	fs.FS
-	// fs.FSDestroyer
+	fs.FSDestroyer
 }

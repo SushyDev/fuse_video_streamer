@@ -3,29 +3,22 @@ package service
 import (
 	"sync/atomic"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/file/handle"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 	"fuse_video_streamer/logger"
 )
 
 type Service struct {
-	node   interfaces.FileNode
-	client filesystem_client_interfaces.Client
-
 	closed atomic.Bool
 }
 
 var _ interfaces.FileHandleService = &Service{}
 
-func New(node interfaces.FileNode, client filesystem_client_interfaces.Client) *Service {
-	return &Service{
-		node:   node,
-		client: client,
-	}
+func New() *Service {
+	return &Service{}
 }
 
-func (service *Service) New() (interfaces.FileHandle, error) {
+func (service *Service) New(node interfaces.FileNode) (interfaces.FileHandle, error) {
 	if service.IsClosed() {
 		return nil, nil
 	}
@@ -35,7 +28,7 @@ func (service *Service) New() (interfaces.FileHandle, error) {
 		return nil, err
 	}
 
-	return handle.New(service.node, logger), nil
+	return handle.New(node, logger), nil
 }
 
 func (service *Service) Close() error {

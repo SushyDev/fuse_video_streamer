@@ -21,6 +21,8 @@ type Service struct {
 
 	registry *registry.Registry
 
+	logger *logger.Logger
+
 	mu sync.RWMutex
 
 	closed atomic.Bool
@@ -36,7 +38,12 @@ func New(
 ) (interfaces.DirectoryNodeService, error) {
 	registry := registry.GetInstance(client)
 
-	return &Service{
+	logger, err := logger.NewLogger("Root Node")
+	if err != nil {
+		return nil, err
+	}
+
+	service := &Service{
 		client: client,
 
 		directoryNodeServiceFactory:  directoryNodeServiceFactory,
@@ -44,7 +51,11 @@ func New(
 		fileNodeServiceFactory:       fileNodeServiceFactory,
 
 		registry: registry,
-	}, nil
+
+		logger: logger,
+	}
+
+	return service, nil
 }
 
 func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error) {
@@ -57,25 +68,33 @@ func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error)
 
 	logger, err := logger.NewLogger("Root Node")
 	if err != nil {
-		panic(err)
+		service.logger.Error("Failed to create logger for new directory node", err)
+		return nil, err
 	}
 
 	directoryNodeService, err := service.directoryNodeServiceFactory.New(service.client)
 	if err != nil {
+		service.logger.Error("Failed to create directory node service", err)
 		return nil, err
 	}
 
 	streamableNodeService, err := service.streamableNodeServiceFactory.New(service.client)
 	if err != nil {
+		service.logger.Error("Failed to create streamable node service", err)
 		return nil, err
 	}
 
 	fileNodeService, err := service.fileNodeServiceFactory.New(service.client)
 	if err != nil {
+		service.logger.Error("Failed to create file node service", err)
 		return nil, err
 	}
 
-	newNode := node.New(directoryNodeService, streamableNodeService, fileNodeService, service.client, logger, identifier)
+	newNode, err := node.New(directoryNodeService, streamableNodeService, fileNodeService, service.client, logger, identifier)
+	if err != nil {
+		service.logger.Error("Failed to create new directory node", err)
+		return nil, err
+	}
 
 	service.registry.Add(newNode)
 

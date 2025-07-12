@@ -4,8 +4,6 @@ import (
 	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/file/node/service"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-
-	"fuse_video_streamer/logger"
 )
 
 type Factory struct {}
@@ -17,10 +15,5 @@ func New() *Factory {
 }
 
 func (factory *Factory) New(client filesystem_client_interfaces.Client) (interfaces.FileNodeService, error) {
-	logger, err := logger.NewLogger("File Node Service")
-	if err != nil {
-		return nil, err
-	}
-
-	return service.New(client, logger)
+	return service.New(client)
 }

@@ -38,7 +38,11 @@ type Node struct {
 var _ interfaces.FileNode = &Node{}
 
 func New(client filesystem_client_interfaces.Client, metric *metrics.FileNodeMetrics, logger *logger.Logger, identifier uint64, size uint64) *Node {
+	fileHandleServiceFactory := file_handle_service_factory.New()
+
 	node := &Node{
+		handleService: fileHandleServiceFactory.New(),
+
 		client:     client,
 		identifier: identifier,
 
@@ -49,14 +53,6 @@ func New(client filesystem_client_interfaces.Client, metric *metrics.FileNodeMet
 
 		mu: sync.RWMutex{},
 	}
-
-	fileHandleServiceFactory := file_handle_service_factory.New()
-	fileHandleService, err := fileHandleServiceFactory.New(node, client)
-	if err != nil {
-		panic(err)
-	}
-
-	node.handleService = fileHandleService
 
 	return node
 }
@@ -92,7 +88,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		return nil, syscall.ENOENT
 	}
 
-	handle, err := node.handleService.New()
+	handle, err := node.handleService.New(node)
 	if err != nil {
 		message := "Failed to create file handle"
 		node.logger.Error(message, err)

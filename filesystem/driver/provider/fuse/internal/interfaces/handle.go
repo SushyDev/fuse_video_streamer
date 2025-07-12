@@ -34,22 +34,22 @@ type RootHandle interface {
 // --- Directory
 
 type DirectoryHandleServiceFactory interface {
-	New(DirectoryNode, filesystem_client_interfaces.Client) (DirectoryHandleService, error)
+	New() DirectoryHandleService
 }
 
 type DirectoryHandleService interface {
 	useClosable
 
-	New() (DirectoryHandle, error)
+	New(DirectoryNode) (DirectoryHandle, error)
 }
 
 type DirectoryHandle interface {
+	useIntentifier
+
 	Handle
 
 	fs.Handle
 	fs.HandleReadDirAller
-
-	GetIdentifier() uint64
 }
 
 // --- Streamable
@@ -62,32 +62,33 @@ type StreamableHandleService interface {
 	useClosable
 
 	New() (StreamableHandle, error)
-	Close() error
 }
 
 type StreamableHandle interface {
+	useIntentifier
+
 	Handle
 
 	fs.Handle
 	fs.HandleReader
 	fs.HandleReleaser
-
-	GetIdentifier() uint64
 }
 
 // --- File
 
 type FileHandleServiceFactory interface {
-	New(FileNode, filesystem_client_interfaces.Client) (FileHandleService, error)
+	New() FileHandleService
 }
 
 type FileHandleService interface {
 	useClosable
 
-	New() (FileHandle, error)
+	New(FileNode) (FileHandle, error)
 }
 
 type FileHandle interface {
+	useIntentifier
+
 	Handle
 
 	fs.Handle
@@ -98,6 +99,4 @@ type FileHandle interface {
 	fs.HandleFlusher
 
 	fs.NodeFsyncer
-
-	GetIdentifier() uint64
 }

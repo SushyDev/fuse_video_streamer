@@ -56,7 +56,6 @@ func (service *Service) Close() error {
 	}
 
 	service.streamFactory.Close()
-	service.streamFactory = nil
 
 	return nil
 }

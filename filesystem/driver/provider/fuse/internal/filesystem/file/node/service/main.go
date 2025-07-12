@@ -29,8 +29,13 @@ var _ interfaces.FileNodeService = &Service{}
 
 var clients = []api.FileSystemServiceClient{}
 
-func New(client filesystem_client_interfaces.Client, logger *logger.Logger) (interfaces.FileNodeService, error) {
+func New(client filesystem_client_interfaces.Client) (interfaces.FileNodeService, error) {
 	registry := registry.GetInstance(client)
+
+	logger, err := logger.NewLogger("File Node")
+	if err != nil {
+		return nil, err
+	}
 
 	return &Service{
 		client:   client,
@@ -49,7 +54,7 @@ func (service *Service) New(identifier uint64) (interfaces.FileNode, error) {
 
 	logger, err := logger.NewLogger("Root Node")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	fileSystem := service.client.GetFileSystem()
