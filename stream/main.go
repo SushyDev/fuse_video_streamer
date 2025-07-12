@@ -3,7 +3,7 @@ package stream
 import (
 	"context"
 	"fmt"
-	"fuse_video_streamer/filesystem/server/provider/fuse/metrics"
+	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 	"fuse_video_streamer/stream/connection"
 	"fuse_video_streamer/stream/transfer"
 	"sync"

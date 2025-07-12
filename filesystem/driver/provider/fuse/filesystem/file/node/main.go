@@ -1,0 +1,136 @@
+package node
+
+import (
+	"context"
+	"os"
+	"sync"
+	"sync/atomic"
+	"syscall"
+
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	file_handle_service_factory "fuse_video_streamer/filesystem/driver/provider/fuse/filesystem/file/handle/service/factory"
+	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
+	"fuse_video_streamer/filesystem/driver/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
+
+
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
+)
+
+type Node struct {
+	handleService interfaces.FileHandleService
+
+	client     filesystem_client_interfaces.Client
+	identifier uint64
+	size       uint64
+
+	handles []interfaces.FileHandle
+
+	metrics *metrics.FileNodeMetrics
+	logger *logger.Logger
+
+	mu sync.RWMutex
+
+	closed atomic.Bool
+}
+
+var _ interfaces.FileNode = &Node{}
+
+func New(client filesystem_client_interfaces.Client, metric *metrics.FileNodeMetrics, logger *logger.Logger, identifier uint64, size uint64) *Node {
+	node := &Node{
+		client:     client,
+		identifier: identifier,
+
+		size: size,
+
+		metrics: metric,
+		logger: logger,
+
+		mu: sync.RWMutex{},
+	}
+
+	fileHandleServiceFactory := file_handle_service_factory.New()
+	fileHandleService, err := fileHandleServiceFactory.New(node, client)
+	if err != nil {
+		panic(err)
+	}
+
+	node.handleService = fileHandleService
+
+	return node
+}
+
+func (node *Node) GetIdentifier() uint64 {
+	return node.identifier
+}
+
+func (node *Node) GetSize() uint64 {
+	return node.size
+}
+
+func (node *Node) GetClient() filesystem_client_interfaces.Client {
+	return node.client
+}
+
+func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
+	if node.IsClosed() {
+		return syscall.ENOENT
+	}
+
+	attr.Mode = os.FileMode(0)
+	attr.Size = node.size
+
+	return nil
+}
+
+func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
+
+	if node.IsClosed() {
+		return nil, syscall.ENOENT
+	}
+
+	handle, err := node.handleService.New()
+	if err != nil {
+		message := "Failed to create file handle"
+		node.logger.Error(message, err)
+		return nil, err
+	}
+
+	node.handles = append(node.handles, handle)
+
+	return handle, nil
+}
+
+func (node *Node) Close() error {
+	if !node.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
+	}
+
+	node.handleService.Close()
+	node.handleService = nil
+
+	var wg sync.WaitGroup
+
+	for _, handle := range node.handles {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			handle.Close()
+			handle = nil
+		}()
+	}
+
+	wg.Wait()
+
+	node.handles = nil
+
+	return nil
+}
+
+func (node *Node) IsClosed() bool {
+	return node.closed.Load()
+}
