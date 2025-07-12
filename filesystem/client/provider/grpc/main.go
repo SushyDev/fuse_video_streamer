@@ -1,10 +1,12 @@
 package grpc
 
 import (
-	"fuse_video_steamer/config"
-	"fuse_video_steamer/logger"
-	"fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/filesystem/client/provider/grpc/internal/filesystem"
+	"fmt"
+
+	"fuse_video_streamer/config"
+	"fuse_video_streamer/logger"
+	"fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/filesystem/client/provider/grpc/internal/filesystem"
 
 	api "github.com/sushydev/stream_mount_api"
 
@@ -54,6 +56,9 @@ func New(entry config.FileSystemProvider) (interfaces.Client, error) {
 	}
 
 	fileSystem := filesystem.New(client, logger)
+
+	// TODO healthcheck endpoint
+	logger.Info(fmt.Sprintf("Connected to file system provider:	%s", entry.Name))
 
 	return &provider{
 		name: entry.Name,

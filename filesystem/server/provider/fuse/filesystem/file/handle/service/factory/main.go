@@ -1,9 +1,9 @@
 package factory
 
 import (
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/file/handle/service"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/file/handle/service"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
 )
 
 type Factory struct {}

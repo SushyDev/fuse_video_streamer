@@ -1,15 +1,15 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/node"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/filesystem/server/provider/fuse/registry"
-	"fuse_video_steamer/logger"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/directory/node"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/registry"
+	"fuse_video_streamer/logger"
 )
 
 type Service struct {
@@ -23,8 +23,7 @@ type Service struct {
 
 	mu sync.RWMutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.DirectoryNodeService = &Service{}
@@ -35,8 +34,6 @@ func New(
 	streamableNodeServiceFactory interfaces.StreamableNodeServiceFactory,
 	fileNodeServiceFactory interfaces.FileNodeServiceFactory,
 ) (interfaces.DirectoryNodeService, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	registry := registry.GetInstance(client)
 
 	return &Service{
@@ -47,9 +44,6 @@ func New(
 		fileNodeServiceFactory:       fileNodeServiceFactory,
 
 		registry: registry,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}, nil
 }
 
@@ -57,7 +51,7 @@ func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error)
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
-	if service.isClosed() {
+	if service.IsClosed() {
 		return nil, fmt.Errorf("Service is closed")
 	}
 
@@ -89,25 +83,13 @@ func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error)
 }
 
 func (service *Service) Close() error {
-	// service.mu.Lock()
-	// defer service.mu.Unlock()
-
-	if service.isClosed() {
+	if !service.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-
-	service.cancel()
-
-	fmt.Println("Directory node service closed")
 
 	return nil
 }
 
-func (service *Service) isClosed() bool {
-	select {
-	case <-service.ctx.Done():
-		return true
-	default:
-		return false
-	}
+func (service *Service) IsClosed() bool {
+	return service.closed.Load()
 }

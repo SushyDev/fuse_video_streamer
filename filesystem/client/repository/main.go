@@ -3,10 +3,10 @@ package repository
 import (
 	"fmt"
 
-	"fuse_video_steamer/config"
-	"fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/logger"
-	"fuse_video_steamer/filesystem/client/provider/grpc"
+	"fuse_video_streamer/config"
+	"fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/logger"
+	"fuse_video_streamer/filesystem/client/provider/grpc"
 )
 
 type clientRepository struct {
@@ -47,7 +47,7 @@ func (repository *clientRepository) GetClientByName(name string) (interfaces.Cli
 		}
 	}
 
-	return nil, fmt.Errorf("Client with name %s not found", name)
+	return nil, fmt.Errorf("client with name %s not found", name)
 }
 
 func (repository *clientRepository) GetClients() ([]interfaces.Client, error) {

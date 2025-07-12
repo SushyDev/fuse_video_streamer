@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
-	"fuse_video_steamer/config"
-	"fuse_video_steamer/filesystem/interfaces"
-	filesystem_server_service "fuse_video_steamer/filesystem/server/service"
-	filesystem_server_provider_fuse_service "fuse_video_steamer/filesystem/server/provider/fuse/service"
+	"fuse_video_streamer/config"
+	"fuse_video_streamer/filesystem/interfaces"
+	filesystem_server_provider_fuse_service "fuse_video_streamer/filesystem/server/provider/fuse/service"
+	filesystem_server_service "fuse_video_streamer/filesystem/server/service"
+	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
 func main() {
+	// go debug()
+	
 	config.Validate()
 
 	mountpoint := config.GetMountPoint()
@@ -43,3 +48,9 @@ func waitForExit(cancel context.CancelFunc) {
 
 	cancel()
 }
+
+func debug() {
+		fmt.Println("Pprof server started on localhost:6060")
+		fmt.Println(http.ListenAndServe("localhost:6060", nil))
+}
+

@@ -1,4 +1,4 @@
-module fuse_video_steamer
+module fuse_video_streamer
 
 go 1.24.0
 

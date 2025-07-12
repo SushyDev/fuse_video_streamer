@@ -5,11 +5,12 @@ import (
 	"fmt"
 	io_fs "io/fs"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -27,8 +28,7 @@ type Handle struct {
 
 	logger *logger.Logger
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.DirectoryHandle = &Handle{}
@@ -38,8 +38,6 @@ var incrementId uint64
 func New(client filesystem_client_interfaces.Client, directory interfaces.DirectoryNode, logger *logger.Logger) *Handle {
 	incrementId++
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Handle{
 		id: incrementId,
 
@@ -47,9 +45,6 @@ func New(client filesystem_client_interfaces.Client, directory interfaces.Direct
 		directory: directory,
 
 		logger: logger,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}
 }
 
@@ -61,7 +56,7 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
-	if handle.isClosed() {
+	if handle.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -104,23 +99,13 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 }
 
 func (handle *Handle) Close() error {
-	// handle.mu.Lock()
-	// defer handle.mu.Unlock()
-
-	if handle.isClosed() {
+	if !handle.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-
-	handle.cancel()
 
 	return nil
 }
 
-func (handle *Handle) isClosed() bool {
-	select {
-	case <-handle.ctx.Done():
-		return true
-	default:
-		return false
-	}
+func (handle *Handle) IsClosed() bool {
+	return handle.closed.Load()
 }

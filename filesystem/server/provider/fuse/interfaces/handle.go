@@ -1,10 +1,16 @@
 package interfaces
 
 import (
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 
 	"github.com/anacrolix/fuse/fs"
 )
+
+// --- Generic
+
+type Handle interface {
+	useClosable
+}
 
 // --- Root
 
@@ -13,15 +19,16 @@ type RootHandleServiceFactory interface {
 }
 
 type RootHandleService interface {
+	useClosable
+
 	New() (RootHandle, error)
-	Close() error
 }
 
 type RootHandle interface {
+	Handle
+
 	fs.Handle
 	fs.HandleReadDirAller
-
-	Close() error
 }
 
 // --- Directory
@@ -31,16 +38,18 @@ type DirectoryHandleServiceFactory interface {
 }
 
 type DirectoryHandleService interface {
+	useClosable
+
 	New() (DirectoryHandle, error)
-	Close() error
 }
 
 type DirectoryHandle interface {
+	Handle
+
 	fs.Handle
 	fs.HandleReadDirAller
 
 	GetIdentifier() uint64
-	Close() error
 }
 
 // --- Streamable
@@ -50,17 +59,20 @@ type StreamableHandleServiceFactory interface {
 }
 
 type StreamableHandleService interface {
+	useClosable
+
 	New() (StreamableHandle, error)
 	Close() error
 }
 
 type StreamableHandle interface {
+	Handle
+
 	fs.Handle
 	fs.HandleReader
 	fs.HandleReleaser
 
 	GetIdentifier() uint64
-	Close() error
 }
 
 // --- File
@@ -70,11 +82,14 @@ type FileHandleServiceFactory interface {
 }
 
 type FileHandleService interface {
+	useClosable
+
 	New() (FileHandle, error)
-	Close() error
 }
 
 type FileHandle interface {
+	Handle
+
 	fs.Handle
 	fs.HandleReadAller
 	fs.HandleReader
@@ -85,5 +100,4 @@ type FileHandle interface {
 	fs.NodeFsyncer
 
 	GetIdentifier() uint64
-	Close() error
 }

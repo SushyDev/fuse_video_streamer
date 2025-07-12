@@ -1,12 +1,12 @@
 package factory
 
 import (
-	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/stream"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/stream"
 )
 
 type CacheItem struct {
@@ -19,18 +19,12 @@ type Factory struct {
 
 	cachedItem CacheItem
 
-	context context.Context
-	cancel  context.CancelFunc
+	closed atomic.Bool
 }
 
 func New(client filesystem_client_interfaces.Client) *Factory {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Factory{
 		client:  client,
-
-		context: ctx,
-		cancel:  cancel,
 	}
 }
 
@@ -56,7 +50,7 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 
 	url, err := fileSystem.GetStreamUrl(identifier)
 	if err != nil {
-		return "", fmt.Errorf("Failed to get video url for node with id %d", identifier)
+		return "", fmt.Errorf("Failed to get video url for node with id %d. %v", identifier, err.Error())
 	}
 
 	factory.cachedItem = CacheItem{
@@ -68,16 +62,15 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 }
 
 func (factory *Factory) Close() {
-	factory.cancel()
+	if !factory.closed.CompareAndSwap(false, true) {
+		return
+	}
+	
+	return
 }
 
 func (factory *Factory) isClosed() bool {
-	select {
-	case <-factory.context.Done():
-		return true
-	default:
-		return false
-	}
+	return factory.closed.Load()
 }
 
 // TODO - Wont be needed probably

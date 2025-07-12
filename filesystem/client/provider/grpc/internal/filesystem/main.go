@@ -1,12 +1,13 @@
 package filesystem
 
 import (
+	"fmt"
 	"context"
 	io_fs "io/fs"
 	"time"
 
-	"fuse_video_steamer/filesystem/client/interfaces"
-	"fuse_video_steamer/logger"
+	"fuse_video_streamer/filesystem/client/interfaces"
+	"fuse_video_streamer/logger"
 
 	api "github.com/sushydev/stream_mount_api"
 )
@@ -181,6 +182,8 @@ func (fs *filesystem) Create(parentNodeId uint64, name string, mode io_fs.FileMo
 func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces.Node, error) {
 	requestCtx, cancel := context.WithTimeout(fs.ctx, 10*time.Second)
 	defer cancel()
+
+	fmt.Println("Creating directory:", name, "under parent node ID:", parentNodeId)
 
 	response, err := fs.api.Mkdir(requestCtx, &api.MkdirRequest{
 		ParentNodeId: parentNodeId,

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	filesystem_interfaces "fuse_video_steamer/filesystem/interfaces"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
+	filesystem_interfaces "fuse_video_streamer/filesystem/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -41,7 +41,7 @@ func (server *Server) Serve() {
 
 	err := fileSystemServer.Serve(server.fileSystem)
 	if err != nil {
-		server.logger.Fatal("Failed to serve filesystem", err)
+		server.logger.Fatal("failed to serve filesystem", err)
 	}
 
 	server.logger.Info("Filesystem shutdown")
@@ -53,13 +53,13 @@ func (instance *Server) Close() error {
 
 	err := instance.unmount()
 	if err != nil {
-		instance.logger.Error("Failed to unmount filesystem", err)
+		instance.logger.Error("failed to unmount filesystem", err)
 	}
 
 	if instance.connection != nil {
 		err := instance.connection.Close()
 		if err != nil {
-			instance.logger.Error("Failed to close connection", err)
+			instance.logger.Error("failed to close connection", err)
 		}
 
 		instance.connection = nil
@@ -87,13 +87,13 @@ func (instance *Server) unmount() error {
 			continue
 		}
 
-		instance.logger.Error("Failed to unmount filesystem", err)
+		instance.logger.Error("failed to unmount filesystem", err)
 
 		break
 	}
 
 	if !unmounted {
-		return fmt.Errorf("Reached max tries to unmount filesystem. Last error: %v", err)
+		return fmt.Errorf("reached max tries to unmount filesystem. Last error: %v", err)
 	}
 
 	return nil

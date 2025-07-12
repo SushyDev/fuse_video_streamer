@@ -3,16 +3,15 @@ package transfer
 import (
 	"context"
 	"fmt"
-	"fuse_video_steamer/logger"
-	"fuse_video_steamer/stream/connection"
+	"fuse_video_streamer/logger"
+	"fuse_video_streamer/stream/connection"
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
-
-var _ io.Closer = &Transfer{}
 
 type Transfer struct {
 	buffer     io.WriteCloser
@@ -24,6 +23,17 @@ type Transfer struct {
 	logger *logger.Logger
 
 	wg *sync.WaitGroup
+
+	closed atomic.Bool
+}
+
+var _ io.Closer = &Transfer{}
+
+// Buffer pool for efficient memory reuse
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 64*1024) // 64KB buffers
+	},
 }
 
 func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection) *Transfer {
@@ -57,10 +67,7 @@ func (transfer *Transfer) start() {
 
 	done := make(chan error, 1)
 
-	go func() {
-		_, err := io.Copy(transfer.buffer, transfer.connection)
-		done <- err
-	}()
+	go transfer.copyData(done)
 
 	select {
 	case <-transfer.context.Done():
@@ -76,7 +83,6 @@ func (transfer *Transfer) start() {
 			if strings.HasPrefix(err.Error(), "Buffer is closed") {
 				break
 			}
-
 			transfer.logger.Error("Error copying from connection", err)
 		}
 	}
@@ -84,9 +90,43 @@ func (transfer *Transfer) start() {
 	transfer.buffer.Write(ring_buffer.EOFMarker)
 }
 
+func (transfer *Transfer) copyData(done chan<- error) {
+	buf := bufferPool.Get().([]byte)
+	defer bufferPool.Put(&buf)
+
+	for {
+		select {
+		case <-transfer.context.Done():
+			done <- context.Canceled
+			return
+		default:
+		}
+
+		bytesRead, readErr := transfer.connection.Read(buf)
+
+		if bytesRead > 0 {
+			_, writeErr := transfer.buffer.Write(buf[:bytesRead])
+			if writeErr != nil {
+				done <- writeErr
+				return
+			}
+		}
+
+		if readErr != nil {
+			if readErr == io.EOF {
+				done <- nil
+			} else {
+				done <- readErr
+			}
+
+			return
+		}
+	}
+}
+
 func (transfer *Transfer) Close() error {
-	if transfer.isClosed() {
-		return nil
+	if !transfer.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
 	}
 
 	if transfer.connection != nil {
@@ -94,22 +134,11 @@ func (transfer *Transfer) Close() error {
 		if err != nil {
 			fmt.Println("Error closing connection:", err)
 		}
-
-		transfer.connection = nil
 	}
 
 	transfer.cancel()
 
 	transfer.wg.Wait()
-
+	
 	return nil
-}
-
-func (transfer *Transfer) isClosed() bool {
-	select {
-	case <-transfer.context.Done():
-		return true
-	default:
-		return false
-	}
 }

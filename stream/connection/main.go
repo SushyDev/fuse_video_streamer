@@ -2,10 +2,12 @@ package connection
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,11 +23,13 @@ type Connection struct {
 	body io.ReadCloser
 
 	mu sync.RWMutex
+
+	closed atomic.Bool
 }
 
 func NewConnection(url string, startPosition int64) (*Connection, error) {
 	if startPosition < 0 {
-		return nil, fmt.Errorf("Invalid seek position: %d", startPosition)
+		return nil, fmt.Errorf("invalid seek position: %d", startPosition)
 	}
 
 	connectionContext, connectionCancel := context.WithCancel(context.Background())
@@ -41,20 +45,28 @@ func NewConnection(url string, startPosition int64) (*Connection, error) {
 }
 
 func (connection *Connection) Read(buf []byte) (int, error) {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
-
-	if connection.isClosed() {
+	if connection.closed.Load() {
 		return 0, nil
 	}
 
-	if connection.body != nil {
-		return connection.body.Read(buf)
+	connection.mu.RLock()
+	body := connection.body
+	connection.mu.RUnlock()
+
+	if body != nil {
+		return body.Read(buf)
+	}
+
+	connection.mu.Lock()
+	defer connection.mu.Unlock()
+
+	if connection.closed.Load() {
+		return 0, nil
 	}
 
 	request, err := http.NewRequestWithContext(connection.context, "GET", connection.url, nil)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to create request")
+		return 0, fmt.Errorf("failed to create request")
 	}
 
 	rangeHeader := fmt.Sprintf("bytes=%d-", connection.startPosition)
@@ -62,9 +74,15 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			MaxIdleConns:        1,
-			MaxConnsPerHost:     1,
-			MaxIdleConnsPerHost: 1,
+			TLSClientConfig: &tls.Config{
+				ClientSessionCache: tls.NewLRUClientSessionCache(100),
+			},
+			ForceAttemptHTTP2:   true,
+			MaxIdleConns:        100,
+			MaxConnsPerHost:     10,
+			MaxIdleConnsPerHost: 3,
+			IdleConnTimeout:     90 * time.Second,
+			DisableCompression:  true,
 			Proxy:               http.ProxyFromEnvironment,
 		},
 		Timeout: 4 * time.Hour,
@@ -72,12 +90,12 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	response, err := client.Do(request)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to do request: %v", err)
+		return 0, fmt.Errorf("failed to do request: %v", err)
 	}
 
 	// Some systems like zurg use 200 status code for partial content
 	if response.StatusCode != http.StatusPartialContent && response.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("Failed to get partial content: %d", response.StatusCode)
+		return 0, fmt.Errorf("failed to get partial content: %d", response.StatusCode)
 	}
 
 	connection.body = response.Body
@@ -86,11 +104,8 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 }
 
 func (connection *Connection) Close() error {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
-
-	if connection.isClosed() {
-		return nil
+	if !connection.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
 	}
 
 	connection.cancel()
@@ -98,7 +113,7 @@ func (connection *Connection) Close() error {
 	if connection.body != nil {
 		err := connection.body.Close()
 		if err != nil {
-			return fmt.Errorf("Error closing body: %v", err)
+			return fmt.Errorf("error closing body: %v", err)
 		}
 
 		connection.body = nil
@@ -108,10 +123,5 @@ func (connection *Connection) Close() error {
 }
 
 func (connection *Connection) isClosed() bool {
-	select {
-	case <-connection.context.Done():
-		return true
-	default:
-		return false
-	}
+	return connection.closed.Load()
 }

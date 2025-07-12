@@ -6,13 +6,14 @@ import (
 	io_fs "io/fs"
 	"os"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	directory_handle_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/handle/service/factory"
-	"fuse_video_steamer/filesystem/server/provider/fuse/filesystem/symlink"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	directory_handle_service_factory "fuse_video_streamer/filesystem/server/provider/fuse/filesystem/directory/handle/service/factory"
+	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/symlink"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -34,8 +35,7 @@ type Node struct {
 
 	mu sync.RWMutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.DirectoryNode = &Node{}
@@ -48,8 +48,6 @@ func New(
 	logger *logger.Logger,
 	identifier uint64,
 ) *Node {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	node := &Node{
 		directoryNodeService:  directoryNodeService,
 		streamableNodeService: streamableNodeService,
@@ -59,9 +57,6 @@ func New(
 		identifier: identifier,
 
 		logger: logger,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}
 
 	directoryHandleServiceFactory := directory_handle_service_factory.New()
@@ -84,7 +79,7 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -97,7 +92,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -117,15 +112,20 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
-	fileSystem := node.client.GetFileSystem()
+	remote_filesystem := node.client.GetFileSystem()
 
-	foundNode, err := fileSystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
-	if err != nil {
-		return nil, err
+	foundNode, err := remote_filesystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
+
+	if err == syscall.ENOENT {
+		return nil, syscall.ENOENT
+	} else if err != nil {
+		node.logger.Error(fmt.Sprintf("Failed to lookup node: %s in directory with ID: %d", lookupRequest.Name, node.GetIdentifier()), err)
+
+		return nil, syscall.EAGAIN
 	}
 
 	if foundNode == nil {
@@ -154,7 +154,7 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -174,7 +174,7 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -199,7 +199,7 @@ func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, respo
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, nil, syscall.ENOENT
 	}
 
@@ -240,7 +240,7 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -260,7 +260,7 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -284,14 +284,9 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 }
 
 func (node *Node) Close() error {
-	// node.mu.Lock()
-	// defer node.mu.Unlock()
-
-	if node.isClosed() {
+	if !node.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-
-	node.cancel()
 
 	for _, handle := range node.handles {
 		handle.Close()
@@ -301,11 +296,6 @@ func (node *Node) Close() error {
 	return nil
 }
 
-func (node *Node) isClosed() bool {
-	select {
-	case <-node.ctx.Done():
-		return true
-	default:
-		return false
-	}
+func (node *Node) IsClosed() bool {
+	return node.closed.Load()
 }

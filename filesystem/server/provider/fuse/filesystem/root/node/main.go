@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_steamer/filesystem/client/interfaces"
-	filesystem_provider_repository "fuse_video_steamer/filesystem/client/repository"
-	directory_node_service_factory "fuse_video_steamer/filesystem/server/provider/fuse/filesystem/directory/node/service/factory"
-	"fuse_video_steamer/filesystem/server/provider/fuse/interfaces"
-	"fuse_video_steamer/logger"
+	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	filesystem_provider_repository "fuse_video_streamer/filesystem/client/repository"
+	directory_node_service_factory "fuse_video_streamer/filesystem/server/provider/fuse/filesystem/directory/node/service/factory"
+	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -28,8 +29,7 @@ type node struct {
 
 	mu sync.RWMutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	closed atomic.Bool
 }
 
 var _ interfaces.RootNode = &node{}
@@ -40,8 +40,6 @@ func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Lo
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &node{
 		fileSystemProviderRepository: fileSystemProviderRepository,
 
@@ -49,9 +47,6 @@ func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Lo
 		directoryNodeService:        directoryNodeService,
 
 		logger:  logger,
-
-		ctx:    ctx,
-		cancel: cancel,
 	}, nil
 }
 
@@ -63,7 +58,7 @@ func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -76,7 +71,7 @@ func (node *node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -87,7 +82,7 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -117,7 +112,7 @@ func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, nil
 	}
 
@@ -138,10 +133,9 @@ func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 }
 
 func (node *node) Close() error {
-	// node.mu.Lock()
-	// defer node.mu.Unlock()
-
-	node.cancel()
+	if !node.closed.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	node.directoryNodeService.Close()
 	node.directoryNodeService = nil
@@ -149,11 +143,6 @@ func (node *node) Close() error {
 	return nil
 }
 
-func (node *node) isClosed() bool {
-	select {
-	case <-node.ctx.Done():
-		return true
-	default:
-		return false
-	}
+func (node *node) IsClosed() bool {
+	return node.closed.Load()
 }
