@@ -8,6 +8,7 @@ import (
 	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 	"fuse_video_streamer/filesystem/server/provider/fuse/filesystem/file/node"
 	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
+	"fuse_video_streamer/filesystem/server/provider/fuse/metrics"
 	"fuse_video_streamer/filesystem/server/provider/fuse/registry"
 	"fuse_video_streamer/logger"
 
@@ -60,7 +61,9 @@ func (service *Service) New(identifier uint64) (interfaces.FileNode, error) {
 		return nil, err
 	}
 
-	newNode := node.New(service.client, logger, identifier, size)
+	metrics := metrics.NewFileNodeMetrics(identifier)
+
+	newNode := node.New(service.client, metrics, logger, identifier, size)
 
 	service.registry.Add(newNode)
 

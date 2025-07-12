@@ -3,6 +3,7 @@ package transfer
 import (
 	"context"
 	"fmt"
+	"fuse_video_streamer/filesystem/server/provider/fuse/metrics"
 	"fuse_video_streamer/logger"
 	"fuse_video_streamer/stream/connection"
 	"io"
@@ -20,7 +21,8 @@ type Transfer struct {
 	context context.Context
 	cancel  context.CancelFunc
 
-	logger *logger.Logger
+	metrics *metrics.StreamTransferMetrics
+	logger  *logger.Logger
 
 	wg *sync.WaitGroup
 
@@ -36,7 +38,7 @@ var bufferPool = sync.Pool{
 	},
 }
 
-func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection) *Transfer {
+func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection, metrics *metrics.StreamTransferMetrics) *Transfer {
 	logger, err := logger.NewLogger("Transfer")
 	if err != nil {
 		panic(err)
@@ -53,7 +55,8 @@ func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *conn
 
 		wg: &sync.WaitGroup{},
 
-		logger: logger,
+		metrics: metrics,
+		logger:  logger,
 	}
 
 	go transfer.start()
@@ -77,8 +80,12 @@ func (transfer *Transfer) start() {
 		}
 	case err := <-done:
 		switch err {
+		case io.EOF:
+			break
 		case context.Canceled:
+			break
 		case nil:
+			break
 		default:
 			if strings.HasPrefix(err.Error(), "Buffer is closed") {
 				break
@@ -92,7 +99,7 @@ func (transfer *Transfer) start() {
 
 func (transfer *Transfer) copyData(done chan<- error) {
 	buf := bufferPool.Get().([]byte)
-	defer bufferPool.Put(&buf)
+	defer bufferPool.Put(buf)
 
 	for {
 		select {
@@ -107,18 +114,17 @@ func (transfer *Transfer) copyData(done chan<- error) {
 		if bytesRead > 0 {
 			_, writeErr := transfer.buffer.Write(buf[:bytesRead])
 			if writeErr != nil {
+				transfer.metrics.RecordTransferOperation(int64(bytesRead), true)
 				done <- writeErr
 				return
 			}
+
+			transfer.metrics.RecordTransferOperation(int64(bytesRead), false)
 		}
 
 		if readErr != nil {
-			if readErr == io.EOF {
-				done <- nil
-			} else {
-				done <- readErr
-			}
-
+			transfer.metrics.RecordTransferOperation(0, true)
+			done <- readErr
 			return
 		}
 	}
@@ -126,7 +132,7 @@ func (transfer *Transfer) copyData(done chan<- error) {
 
 func (transfer *Transfer) Close() error {
 	if !transfer.closed.CompareAndSwap(false, true) {
-		return nil // Already closed
+		return nil
 	}
 
 	if transfer.connection != nil {
@@ -139,6 +145,8 @@ func (transfer *Transfer) Close() error {
 	transfer.cancel()
 
 	transfer.wg.Wait()
-	
+
+	transfer.metrics.Finish()
+
 	return nil
 }

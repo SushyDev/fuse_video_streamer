@@ -3,6 +3,7 @@ package stream
 import (
 	"context"
 	"fmt"
+	"fuse_video_streamer/filesystem/server/provider/fuse/metrics"
 	"fuse_video_streamer/stream/connection"
 	"fuse_video_streamer/stream/transfer"
 	"sync"
@@ -110,7 +111,7 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	}
 
 	if stream.buffer == nil {
-		return 0, fmt.Errorf("Buffer is closed")
+		return 0, fmt.Errorf("buffer is closed")
 	}
 
 	requestedBytes := int64(len(p))
@@ -130,7 +131,7 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 
 		ok := stream.buffer.WaitForPosition(ctx, requestedPosition)
 		if !ok && !stream.isClosed() {
-			return 0, fmt.Errorf("Timeout waiting for the buffer to fill")
+			return 0, fmt.Errorf("timeout waiting for the buffer to fill")
 		}
 	}
 
@@ -147,7 +148,7 @@ func (stream *Stream) Close() error {
 	if stream.buffer != nil {
 		err := stream.buffer.Close()
 		if err != nil {
-			return fmt.Errorf("Error closing buffer: %v", err)
+			return fmt.Errorf("error closing buffer: %v", err)
 		}
 
 		stream.buffer = nil
@@ -156,7 +157,7 @@ func (stream *Stream) Close() error {
 	if stream.transfer != nil {
 		err := stream.transfer.Close()
 		if err != nil {
-			fmt.Println("Error closing transfer:", err)
+			fmt.Println("error closing transfer:", err)
 		}
 
 		stream.transfer = nil
@@ -171,11 +172,11 @@ func (stream *Stream) isClosed() bool {
 
 func (stream *Stream) newTransfer(startPosition int64) error {
 	if stream.isClosed() {
-		return fmt.Errorf("Stream is closed")
+		return fmt.Errorf("stream is closed")
 	}
 
 	if stream.buffer == nil {
-		return fmt.Errorf("Buffer is closed")
+		return fmt.Errorf("buffer is closed")
 	}
 
 	if stream.transfer != nil {
@@ -194,7 +195,12 @@ func (stream *Stream) newTransfer(startPosition int64) error {
 	}
 
 	stream.buffer.ResetToPosition(streamStartPosition)
-	transfer := transfer.NewTransfer(stream.buffer, connection)
+
+	debugger := metrics.GetMetricsCollection()
+
+	streamMetrics := debugger.NewStreamTransferMetrics(stream.id, stream.url, stream.size)
+
+	transfer := transfer.NewTransfer(stream.buffer, connection, streamMetrics)
 	stream.transfer = transfer
 
 	return nil

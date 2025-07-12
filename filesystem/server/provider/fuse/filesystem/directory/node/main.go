@@ -116,9 +116,8 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return nil, syscall.ENOENT
 	}
 
-	remote_filesystem := node.client.GetFileSystem()
-
-	foundNode, err := remote_filesystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
+	client_filesystem := node.client.GetFileSystem()
+	foundNode, err := client_filesystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
 
 	if err == syscall.ENOENT {
 		return nil, syscall.ENOENT

@@ -9,8 +9,10 @@ import (
 
 	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
 	file_handle_service_factory "fuse_video_streamer/filesystem/server/provider/fuse/filesystem/file/handle/service/factory"
+	"fuse_video_streamer/filesystem/server/provider/fuse/metrics"
 	"fuse_video_streamer/filesystem/server/provider/fuse/interfaces"
 	"fuse_video_streamer/logger"
+
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -25,6 +27,7 @@ type Node struct {
 
 	handles []interfaces.FileHandle
 
+	metrics *metrics.FileNodeMetrics
 	logger *logger.Logger
 
 	mu sync.RWMutex
@@ -34,13 +37,14 @@ type Node struct {
 
 var _ interfaces.FileNode = &Node{}
 
-func New(client filesystem_client_interfaces.Client, logger *logger.Logger, identifier uint64, size uint64) *Node {
+func New(client filesystem_client_interfaces.Client, metric *metrics.FileNodeMetrics, logger *logger.Logger, identifier uint64, size uint64) *Node {
 	node := &Node{
 		client:     client,
 		identifier: identifier,
 
 		size: size,
 
+		metrics: metric,
 		logger: logger,
 
 		mu: sync.RWMutex{},
