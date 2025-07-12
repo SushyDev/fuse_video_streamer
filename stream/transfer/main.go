@@ -32,7 +32,7 @@ var _ io.Closer = &Transfer{}
 // Buffer pool for efficient memory reuse
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 64*1024) // 64KB buffers
+		return make([]byte, 256*1024) // 256KB buffers for better I/O performance
 	},
 }
 
@@ -92,15 +92,23 @@ func (transfer *Transfer) start() {
 
 func (transfer *Transfer) copyData(done chan<- error) {
 	buf := bufferPool.Get().([]byte)
-	defer bufferPool.Put(&buf)
+	defer bufferPool.Put(buf)
+
+	// Batch read/write operations to reduce context switching
+	const batchSize = 5
+	batchCount := 0
 
 	for {
-		select {
-		case <-transfer.context.Done():
-			done <- context.Canceled
-			return
-		default:
+		// Only check context cancellation every batch to reduce overhead
+		if batchCount%batchSize == 0 {
+			select {
+			case <-transfer.context.Done():
+				done <- context.Canceled
+				return
+			default:
+			}
 		}
+		batchCount++
 
 		bytesRead, readErr := transfer.connection.Read(buf)
 

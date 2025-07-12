@@ -76,19 +76,25 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 
 	fileSize := handle.node.GetSize()
 
-	buffer := pool.GetBuffer(int64(fileSize))
+	// Use requested size instead of file size for buffer allocation
+	requestedSize := int64(readRequest.Size)
+	bufferSize := min(requestedSize, fileSize)
+	
+	buffer := pool.GetBuffer(bufferSize)
 	defer pool.PutBuffer(buffer)
 
-	bytesRead, err := handle.stream.ReadAt(buffer[:readRequest.Size], readRequest.Offset)
+	// Only allocate what we need from the buffer
+	readBuffer := buffer[:readRequest.Size]
+	bytesRead, err := handle.stream.ReadAt(readBuffer, readRequest.Offset)
 
 	switch err {
 
 	case nil:
-		readResponse.Data = buffer[:bytesRead]
+		readResponse.Data = readBuffer[:bytesRead]
 		return nil
 
 	case io.EOF:
-		readResponse.Data = buffer[:bytesRead]
+		readResponse.Data = readBuffer[:bytesRead]
 		return nil
 
 	default:

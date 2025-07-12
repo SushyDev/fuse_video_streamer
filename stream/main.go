@@ -101,6 +101,26 @@ func (stream *Stream) Id() string {
 	return stream.id
 }
 
+func calculateReadTimeout(requestSize int64) time.Duration {
+	// Base timeout + additional time based on request size
+	// Assume 100MB/s transfer rate for timeout calculation
+	const baseTimeout = 2 * time.Second
+	const transferRate = int64(100 * 1024 * 1024) // 100MB/s
+
+	additionalTimeout := time.Duration(requestSize/transferRate) * time.Second
+	timeout := baseTimeout + additionalTimeout
+
+	// Cap between 2s and 30s
+	if timeout < 2*time.Second {
+		return 2 * time.Second
+	}
+	if timeout > 30*time.Second {
+		return 30 * time.Second
+	}
+
+	return timeout
+}
+
 func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
@@ -125,7 +145,9 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	requestedPosition := min(seekPosition+requestedBytes, stream.size)
 
 	if !stream.buffer.IsPositionAvailable(requestedPosition) {
-		ctx, cancel := context.WithTimeout(stream.ctx, 10*time.Second)
+		// Use adaptive timeout based on request size
+		timeoutDuration := calculateReadTimeout(requestedBytes)
+		ctx, cancel := context.WithTimeout(stream.ctx, timeoutDuration)
 		defer cancel()
 
 		ok := stream.buffer.WaitForPosition(ctx, requestedPosition)

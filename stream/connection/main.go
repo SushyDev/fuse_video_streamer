@@ -13,6 +13,25 @@ import (
 
 var _ io.ReadCloser = &Connection{}
 
+// Shared HTTP client for connection reuse
+var sharedHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			ClientSessionCache: tls.NewLRUClientSessionCache(100),
+		},
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		MaxConnsPerHost:       20,  // Increased for better parallelism
+		MaxIdleConnsPerHost:   10,  // Increased to maintain more connections
+		IdleConnTimeout:       90 * time.Second,
+		DisableCompression:    true,
+		Proxy:                 http.ProxyFromEnvironment,
+		WriteBufferSize:       256 * 1024, // 256KB write buffer
+		ReadBufferSize:        256 * 1024, // 256KB read buffer
+	},
+	Timeout: 4 * time.Hour,
+}
+
 type Connection struct {
 	url           string
 	startPosition int64
@@ -45,6 +64,7 @@ func NewConnection(url string, startPosition int64) (*Connection, error) {
 }
 
 func (connection *Connection) Read(buf []byte) (int, error) {
+	// Check closed state once at the beginning
 	if connection.closed.Load() {
 		return 0, nil
 	}
@@ -60,8 +80,14 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	connection.mu.Lock()
 	defer connection.mu.Unlock()
 
+	// Double-check pattern - check again under write lock
 	if connection.closed.Load() {
 		return 0, nil
+	}
+
+	// Check if another goroutine already created the body
+	if connection.body != nil {
+		return connection.body.Read(buf)
 	}
 
 	request, err := http.NewRequestWithContext(connection.context, "GET", connection.url, nil)
@@ -72,23 +98,10 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	rangeHeader := fmt.Sprintf("bytes=%d-", connection.startPosition)
 	request.Header.Set("Range", rangeHeader)
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				ClientSessionCache: tls.NewLRUClientSessionCache(100),
-			},
-			ForceAttemptHTTP2:   true,
-			MaxIdleConns:        100,
-			MaxConnsPerHost:     10,
-			MaxIdleConnsPerHost: 3,
-			IdleConnTimeout:     90 * time.Second,
-			DisableCompression:  true,
-			Proxy:               http.ProxyFromEnvironment,
-		},
-		Timeout: 4 * time.Hour,
+	response, err := sharedHTTPClient.Do(request)
+	if err != nil {
+		return 0, fmt.Errorf("failed to do request: %v", err)
 	}
-
-	response, err := client.Do(request)
 	if err != nil {
 		return 0, fmt.Errorf("failed to do request: %v", err)
 	}
