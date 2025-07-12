@@ -29,7 +29,7 @@ type Connection struct {
 
 func NewConnection(url string, startPosition int64) (*Connection, error) {
 	if startPosition < 0 {
-		return nil, fmt.Errorf("Invalid seek position: %d", startPosition)
+		return nil, fmt.Errorf("invalid seek position: %d", startPosition)
 	}
 
 	connectionContext, connectionCancel := context.WithCancel(context.Background())
@@ -53,7 +53,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	body := connection.body
 	connection.mu.RUnlock()
 
-	if connection.body != nil {
+	if body != nil {
 		return body.Read(buf)
 	}
 
@@ -66,7 +66,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	request, err := http.NewRequestWithContext(connection.context, "GET", connection.url, nil)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to create request")
+		return 0, fmt.Errorf("failed to create request")
 	}
 
 	rangeHeader := fmt.Sprintf("bytes=%d-", connection.startPosition)
@@ -90,12 +90,12 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	response, err := client.Do(request)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to do request: %v", err)
+		return 0, fmt.Errorf("failed to do request: %v", err)
 	}
 
 	// Some systems like zurg use 200 status code for partial content
 	if response.StatusCode != http.StatusPartialContent && response.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("Failed to get partial content: %d", response.StatusCode)
+		return 0, fmt.Errorf("failed to get partial content: %d", response.StatusCode)
 	}
 
 	connection.body = response.Body
@@ -104,7 +104,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 }
 
 func (connection *Connection) Close() error {
-	if connection.closed.CompareAndSwap(false, true) {
+	if !connection.closed.CompareAndSwap(false, true) {
 		return nil // Already closed
 	}
 
@@ -113,7 +113,7 @@ func (connection *Connection) Close() error {
 	if connection.body != nil {
 		err := connection.body.Close()
 		if err != nil {
-			return fmt.Errorf("Error closing body: %v", err)
+			return fmt.Errorf("error closing body: %v", err)
 		}
 
 		connection.body = nil
