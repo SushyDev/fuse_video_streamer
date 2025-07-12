@@ -92,7 +92,7 @@ func (transfer *Transfer) start() {
 
 func (transfer *Transfer) copyData(done chan<- error) {
 	buf := bufferPool.Get().([]byte)
-	defer bufferPool.Put(buf)
+	defer bufferPool.Put(&buf)
 
 	for {
 		select {
