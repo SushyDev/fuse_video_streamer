@@ -79,7 +79,7 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -92,7 +92,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -112,7 +112,7 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -154,7 +154,7 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -174,7 +174,7 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -199,7 +199,7 @@ func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, respo
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, nil, syscall.ENOENT
 	}
 
@@ -240,7 +240,7 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -260,7 +260,7 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -296,6 +296,6 @@ func (node *Node) Close() error {
 	return nil
 }
 
-func (node *Node) isClosed() bool {
+func (node *Node) IsClosed() bool {
 	return node.closed.Load()
 }

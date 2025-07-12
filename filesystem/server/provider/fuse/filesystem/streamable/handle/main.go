@@ -61,7 +61,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
-	if handle.isClosed() {
+	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -80,7 +80,9 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	defer pool.PutBuffer(buffer)
 
 	bytesRead, err := handle.stream.ReadAt(buffer[:readRequest.Size], readRequest.Offset)
+
 	switch err {
+
 	case nil:
 		readResponse.Data = buffer[:bytesRead]
 		return nil
@@ -115,11 +117,9 @@ func (handle *Handle) Close() error {
 		handle.stream.Close()
 	}
 
-	fmt.Printf("With FLAGS: Close: %d\n", handle.id)
-
 	return nil
 }
 
-func (handle *Handle) isClosed() bool {
+func (handle *Handle) IsClosed() bool {
 	return handle.closed.Load()
 }

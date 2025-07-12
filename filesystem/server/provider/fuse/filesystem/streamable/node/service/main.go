@@ -38,7 +38,7 @@ func (service *Service) New(identifier uint64) (interfaces.StreamableNode, error
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
-	if service.isClosed() {
+	if service.IsClosed() {
 		return nil, fmt.Errorf("Service is closed")
 	}
 
@@ -72,6 +72,6 @@ func (service *Service) Close() error {
 	return nil
 }
 
-func (service *Service) isClosed() bool {
+func (service *Service) IsClosed() bool {
 	return service.closed.Load()
 }

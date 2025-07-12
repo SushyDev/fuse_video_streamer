@@ -22,7 +22,7 @@ func New(directoryNodeServiceFactory interfaces.DirectoryNodeServiceFactory) *Se
 }
 
 func (service *Service) New() (interfaces.RootNode, error) {
-	if service.isClosed() {
+	if service.IsClosed() {
 		return nil, nil
 	}
 
@@ -44,6 +44,6 @@ func (service *Service) Close() error {
 	return nil
 }
 
-func (service *Service) isClosed() bool {
+func (service *Service) IsClosed() bool {
 	return service.closed.Load()
 }

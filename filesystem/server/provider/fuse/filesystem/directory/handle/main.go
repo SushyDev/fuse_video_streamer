@@ -56,7 +56,7 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
-	if handle.isClosed() {
+	if handle.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -106,6 +106,6 @@ func (handle *Handle) Close() error {
 	return nil
 }
 
-func (handle *Handle) isClosed() bool {
+func (handle *Handle) IsClosed() bool {
 	return handle.closed.Load()
 }

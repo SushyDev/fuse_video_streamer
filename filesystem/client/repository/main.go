@@ -47,7 +47,7 @@ func (repository *clientRepository) GetClientByName(name string) (interfaces.Cli
 		}
 	}
 
-	return nil, fmt.Errorf("Client with name %s not found", name)
+	return nil, fmt.Errorf("client with name %s not found", name)
 }
 
 func (repository *clientRepository) GetClients() ([]interfaces.Client, error) {

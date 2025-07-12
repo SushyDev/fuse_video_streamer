@@ -9,10 +9,11 @@ import (
 // --- Generic
 
 type Node interface {
+	useClosable
+
 	fs.Node
 
 	GetIdentifier() uint64
-	Close() error
 }
 
 // --- Root
@@ -22,11 +23,14 @@ type RootNodeServiceFactory interface {
 }
 
 type RootNodeService interface {
+	useClosable
+
 	New() (RootNode, error)
-	Close() error
 }
 
 type RootNode interface {
+	useClosable
+
 	Node
 
 	fs.NodeOpener
@@ -40,8 +44,9 @@ type DirectoryNodeServiceFactory interface {
 }
 
 type DirectoryNodeService interface {
+	useClosable
+
 	New(identifier uint64) (DirectoryNode, error)
-	Close() error
 }
 
 type DirectoryNode interface {
@@ -63,8 +68,9 @@ type StreamableNodeServiceFactory interface {
 }
 
 type StreamableNodeService interface {
+	useClosable
+
 	New(identifier uint64) (StreamableNode, error)
-	Close() error
 }
 
 type StreamableNode interface {
@@ -83,6 +89,8 @@ type FileNodeServiceFactory interface {
 }
 
 type FileNodeService interface {
+	useClosable
+
 	New(identifier uint64) (FileNode, error)
 }
 

@@ -26,7 +26,7 @@ func New(node interfaces.DirectoryNode, client filesystem_client_interfaces.Clie
 }
 
 func (service *Service) New() (interfaces.DirectoryHandle, error) {
-	if service.isClosed() {
+	if service.IsClosed() {
 		return nil, nil
 	}
 
@@ -46,6 +46,6 @@ func (service *Service) Close() error {
 	return nil
 }
 
-func (service *Service) isClosed() bool {
+func (service *Service) IsClosed() bool {
 	return service.closed.Load()
 }

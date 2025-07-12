@@ -65,8 +65,6 @@ func (transfer *Transfer) start() {
 	transfer.wg.Add(1)
 	defer transfer.wg.Done()
 
-	fmt.Println("Starting transfer...")
-
 	done := make(chan error, 1)
 
 	go transfer.copyData(done)
@@ -131,8 +129,6 @@ func (transfer *Transfer) Close() error {
 		return nil // Already closed
 	}
 
-	fmt.Println("Closing transfer...")
-
 	if transfer.connection != nil {
 		err := transfer.connection.Close()
 		if err != nil {
@@ -144,7 +140,5 @@ func (transfer *Transfer) Close() error {
 
 	transfer.wg.Wait()
 	
-	fmt.Println("Transfer closed")
-
 	return nil
 }

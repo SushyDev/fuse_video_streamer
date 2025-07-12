@@ -53,7 +53,7 @@ func (handle *Handle) ReadAll(ctx context.Context) ([]byte, error) {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
-	if handle.isClosed() {
+	if handle.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -73,7 +73,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
 
-	if handle.isClosed() {
+	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -93,8 +93,8 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 func (handle *Handle) Write(ctx context.Context, writeRequest *fuse.WriteRequest, writeResponse *fuse.WriteResponse) error {
 	handle.mu.RLock()
 	defer handle.mu.RUnlock()
-	
-	if handle.isClosed() {
+
+	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -115,7 +115,7 @@ func (handle *Handle) Release(ctx context.Context, releaseRequest *fuse.ReleaseR
 	handle.mu.Lock()
 	defer handle.mu.Unlock()
 
-	if handle.isClosed() {
+	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -126,7 +126,7 @@ func (handle *Handle) Flush(ctx context.Context, flushRequest *fuse.FlushRequest
 	handle.mu.Lock()
 	defer handle.mu.Unlock()
 
-	if handle.isClosed() {
+	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -137,7 +137,7 @@ func (handle *Handle) Fsync(ctx context.Context, fsyncRequest *fuse.FsyncRequest
 	handle.mu.Lock()
 	defer handle.mu.Unlock()
 
-	if handle.isClosed() {
+	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -152,6 +152,6 @@ func (handle *Handle) Close() error {
 	return nil
 }
 
-func (handle *Handle) isClosed() bool {
+func (handle *Handle) IsClosed() bool {
 	return handle.closed.Load()
 }

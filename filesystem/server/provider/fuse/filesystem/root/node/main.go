@@ -58,7 +58,7 @@ func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -71,7 +71,7 @@ func (node *node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -82,7 +82,7 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -112,7 +112,7 @@ func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, nil
 	}
 
@@ -134,7 +134,7 @@ func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 
 func (node *node) Close() error {
 	if !node.closed.CompareAndSwap(false, true) {
-		return nil // Already closed
+		return nil
 	}
 
 	node.directoryNodeService.Close()
@@ -143,6 +143,6 @@ func (node *node) Close() error {
 	return nil
 }
 
-func (node *node) isClosed() bool {
+func (node *node) IsClosed() bool {
 	return node.closed.Load()
 }

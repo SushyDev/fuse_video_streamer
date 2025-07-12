@@ -70,7 +70,7 @@ func (node *Node) GetClient() filesystem_client_interfaces.Client {
 }
 
 func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
-	if node.isClosed() {
+	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
@@ -84,7 +84,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	if node.isClosed() {
+	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
@@ -114,6 +114,6 @@ func (node *Node) Close() error {
 	return nil
 }
 
-func (node *Node) isClosed() bool {
+func (node *Node) IsClosed() bool {
 	return node.closed.Load()
 }
