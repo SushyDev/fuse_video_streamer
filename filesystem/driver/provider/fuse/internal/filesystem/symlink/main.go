@@ -2,6 +2,7 @@ package symlink
 
 import (
 	"context"
+	"fmt"
 	"fuse_video_streamer/config"
 	"fuse_video_streamer/logger"
 	"os"
@@ -45,7 +46,8 @@ func (symlink *Symlink) Readlink(ctx context.Context, req *fuse.ReadlinkRequest)
 
 	linkPath, err := fileSystem.ReadLink(symlink.identifier)
 	if err != nil {
-		symlink.logger.Error("Failed to read symlink", err)
+		message := fmt.Sprintf("Failed to read symlink with identifier %d and path %s", symlink.identifier, linkPath)
+		symlink.logger.Error(message, err)
 
 		return "", syscall.ENOENT
 	}

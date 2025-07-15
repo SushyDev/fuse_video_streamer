@@ -45,7 +45,7 @@ func NewConnection(url string, startPosition int64) (*Connection, error) {
 }
 
 func (connection *Connection) Read(buf []byte) (int, error) {
-	if connection.closed.Load() {
+	if connection.isClosed() {
 		return 0, nil
 	}
 
@@ -60,7 +60,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	connection.mu.Lock()
 	defer connection.mu.Unlock()
 
-	if connection.closed.Load() {
+	if connection.isClosed() {
 		return 0, nil
 	}
 
@@ -105,7 +105,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 func (connection *Connection) Close() error {
 	if !connection.closed.CompareAndSwap(false, true) {
-		return nil // Already closed
+		return nil
 	}
 
 	connection.cancel()
