@@ -3,10 +3,12 @@ package stream
 import (
 	"context"
 	"fmt"
+
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
 	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 	"fuse_video_streamer/stream/connection"
 	"fuse_video_streamer/stream/transfer"
-	"fuse_video_streamer/logger"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,6 +34,8 @@ type Stream struct {
 	id   string
 	url  string
 	size int64
+
+	loggerFactory interfaces_logger.LoggerFactory
 
 	buffer ring_buffer.LockingRingBufferInterface
 
@@ -75,7 +79,7 @@ func calculatePreloadSize(bufferSize int64) int64 {
 	}
 }
 
-func New(url string, size int64) (*Stream, error) {
+func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) (*Stream, error) {
 	id := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	bufferSize := calculateBufferSize(int64(size))
@@ -89,6 +93,8 @@ func New(url string, size int64) (*Stream, error) {
 
 		size: size,
 		url:  url,
+
+		loggerFactory: loggerFactory,
 
 		buffer: buffer,
 
@@ -201,7 +207,7 @@ func (stream *Stream) newTransfer(startPosition int64) error {
 
 	streamMetrics := debugger.NewStreamTransferMetrics(stream.id, stream.url, stream.size)
 
-	logger, err := logger.NewLogger("Stream Transfer")
+	logger, err := stream.loggerFactory.NewLogger("Stream Transfer")
 	if err != nil {
 		return err
 	}

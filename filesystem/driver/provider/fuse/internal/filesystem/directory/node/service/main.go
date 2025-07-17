@@ -5,43 +5,43 @@ import (
 	"sync"
 	"sync/atomic"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/directory/node"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
-	"fuse_video_streamer/logger"
 )
 
 type Service struct {
-	client filesystem_client_interfaces.Client
+	client interfaces_filesystem_client.Client
 
-	directoryNodeServiceFactory  interfaces.DirectoryNodeServiceFactory
-	streamableNodeServiceFactory interfaces.StreamableNodeServiceFactory
-	fileNodeServiceFactory       interfaces.FileNodeServiceFactory
+	directoryNodeServiceFactory  interfaces_fuse.DirectoryNodeServiceFactory
+	streamableNodeServiceFactory interfaces_fuse.StreamableNodeServiceFactory
+	fileNodeServiceFactory       interfaces_fuse.FileNodeServiceFactory
+
+	loggerFactory interfaces_logger.LoggerFactory
 
 	registry *registry.Registry
 
-	logger *logger.Logger
+	logger interfaces_logger.Logger
 
 	mu sync.RWMutex
 
 	closed atomic.Bool
 }
 
-var _ interfaces.DirectoryNodeService = &Service{}
+var _ interfaces_fuse.DirectoryNodeService = &Service{}
 
 func New(
-	client filesystem_client_interfaces.Client,
-	directoryNodeServiceFactory interfaces.DirectoryNodeServiceFactory,
-	streamableNodeServiceFactory interfaces.StreamableNodeServiceFactory,
-	fileNodeServiceFactory interfaces.FileNodeServiceFactory,
-) (interfaces.DirectoryNodeService, error) {
+	client interfaces_filesystem_client.Client,
+	directoryNodeServiceFactory interfaces_fuse.DirectoryNodeServiceFactory,
+	streamableNodeServiceFactory interfaces_fuse.StreamableNodeServiceFactory,
+	fileNodeServiceFactory interfaces_fuse.FileNodeServiceFactory,
+	loggerFactory interfaces_logger.LoggerFactory,
+	logger interfaces_logger.Logger,
+) (interfaces_fuse.DirectoryNodeService, error) {
 	registry := registry.GetInstance(client)
-
-	logger, err := logger.NewLogger("Root Node")
-	if err != nil {
-		return nil, err
-	}
 
 	service := &Service{
 		client: client,
@@ -49,6 +49,8 @@ func New(
 		directoryNodeServiceFactory:  directoryNodeServiceFactory,
 		streamableNodeServiceFactory: streamableNodeServiceFactory,
 		fileNodeServiceFactory:       fileNodeServiceFactory,
+
+		loggerFactory: loggerFactory,
 
 		registry: registry,
 
@@ -58,15 +60,15 @@ func New(
 	return service, nil
 }
 
-func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
+func (service *Service) New(identifier uint64) (interfaces_fuse.DirectoryNode, error) {
 	if service.IsClosed() {
 		return nil, fmt.Errorf("Service is closed")
 	}
 
-	logger, err := logger.NewLogger("Root Node")
+	service.mu.Lock()
+	defer service.mu.Unlock()
+
+	logger, err := service.loggerFactory.NewLogger("Root Node")
 	if err != nil {
 		service.logger.Error("Failed to create logger for new directory node", err)
 		return nil, err
@@ -90,7 +92,7 @@ func (service *Service) New(identifier uint64) (interfaces.DirectoryNode, error)
 		return nil, err
 	}
 
-	newNode, err := node.New(directoryNodeService, streamableNodeService, fileNodeService, service.client, logger, identifier)
+	newNode, err := node.New(service.client, service.loggerFactory, directoryNodeService, streamableNodeService, fileNodeService, logger, identifier)
 	if err != nil {
 		service.logger.Error("Failed to create new directory node", err)
 		return nil, err

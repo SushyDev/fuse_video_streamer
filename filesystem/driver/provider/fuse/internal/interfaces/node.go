@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 
 	"github.com/anacrolix/fuse/fs"
 )
@@ -40,7 +40,7 @@ type RootNode interface {
 // --- Directory
 
 type DirectoryNodeServiceFactory interface {
-	New(filesystem_client_interfaces.Client) (DirectoryNodeService, error)
+	New(interfaces_filesystem_client.Client) (DirectoryNodeService, error)
 }
 
 type DirectoryNodeService interface {
@@ -60,13 +60,13 @@ type DirectoryNode interface {
 	fs.NodeMkdirer
 	fs.NodeLinker
 
-	GetClient() filesystem_client_interfaces.Client
+	GetClient() interfaces_filesystem_client.Client
 }
 
 // --- Streamable
 
 type StreamableNodeServiceFactory interface {
-	New(filesystem_client_interfaces.Client) (StreamableNodeService, error)
+	New(interfaces_filesystem_client.Client) (StreamableNodeService, error)
 }
 
 type StreamableNodeService interface {
@@ -81,13 +81,13 @@ type StreamableNode interface {
 	fs.NodeOpener
 
 	GetSize() uint64
-	GetClient() filesystem_client_interfaces.Client
+	GetClient() interfaces_filesystem_client.Client
 }
 
 // --- File
 
 type FileNodeServiceFactory interface {
-	New(filesystem_client_interfaces.Client) (FileNodeService, error)
+	New(interfaces_filesystem_client.Client) (FileNodeService, error)
 }
 
 type FileNodeService interface {
@@ -102,6 +102,5 @@ type FileNode interface {
 	fs.NodeOpener
 
 	GetSize() uint64
-	GetClient() filesystem_client_interfaces.Client
+	GetClient() interfaces_filesystem_client.Client
 }
-	

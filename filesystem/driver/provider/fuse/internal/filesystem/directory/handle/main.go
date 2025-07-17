@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -20,20 +20,20 @@ type Handle struct {
 
 	id uint64
 
-	directory interfaces.DirectoryNode
+	directory interfaces_fuse.DirectoryNode
 
 	mu sync.RWMutex
 
-	logger *logger.Logger
+	logger interfaces_logger.Logger
 
 	closed atomic.Bool
 }
 
-var _ interfaces.DirectoryHandle = &Handle{}
+var _ interfaces_fuse.DirectoryHandle = &Handle{}
 
 var incrementId uint64
 
-func New(directory interfaces.DirectoryNode, logger *logger.Logger) *Handle {
+func New(directory interfaces_fuse.DirectoryNode, logger interfaces_logger.Logger) *Handle {
 	incrementId++
 
 	handle := &Handle{
@@ -52,18 +52,18 @@ func (handle *Handle) GetIdentifier() uint64 {
 }
 
 func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
-	handle.mu.RLock()
-	defer handle.mu.RUnlock()
-
 	if handle.IsClosed() {
 		return nil, syscall.ENOENT
 	}
+
+	handle.mu.RLock()
+	defer handle.mu.RUnlock()
 
 	fileSystem := handle.directory.GetClient().GetFileSystem()
 
 	nodes, err := fileSystem.ReadDirAll(handle.directory.GetIdentifier())
 	if err != nil && err != syscall.ENOENT {
-		message := fmt.Sprintf("Failed to read directory %d", handle.directory.GetIdentifier())
+		message := fmt.Sprintf("failed to read directory %d", handle.directory.GetIdentifier())
 		handle.logger.Error(message, err)
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 			})
 		// --- Unknown
 		default:
-			message := fmt.Sprintf("Unknown file mode %s for file %s", entry.GetMode(), entry.GetName())
+			message := fmt.Sprintf("unknown file mode %s for file %s", entry.GetMode(), entry.GetName())
 			handle.logger.Error(message, nil)
 		}
 	}

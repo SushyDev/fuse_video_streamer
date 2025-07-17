@@ -1,32 +1,38 @@
 package fuse
 
 import (
-	interfaces "fuse_video_streamer/filesystem/interfaces"
-	filesystem_server_provider_fuse_server "fuse_video_streamer/filesystem/driver/provider/fuse/internal/server"
-	filesystem_server_provider_fuse_filesystem "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem"
-	filesystem_server_provider_fuse_root_node_service_factory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/root/node/service/factory"
-	filesystem_server_provider_fuse_interfaces "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_fuse_filesystem "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_filesystem "fuse_video_streamer/filesystem/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
+	factory_root_node_service "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/root/node/service/factory"
+
+	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem"
+	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/server"
 
 	"github.com/anacrolix/fuse"
 )
 
 type FuseService struct {
-	rootNodeServiceFactory filesystem_server_provider_fuse_interfaces.RootNodeServiceFactory
+	rootNodeServiceFactory interfaces_fuse_filesystem.RootNodeServiceFactory
+
+	loggerFactory interfaces_logger.LoggerFactory
 }
 
-var _ interfaces.FileSystemServerService = &FuseService{}
+var _ interfaces_filesystem.FileSystemServerService = &FuseService{}
 
-func New() *FuseService {
-	rootNodeServiceFactory := filesystem_server_provider_fuse_root_node_service_factory.New()
+func New(loggerFactory interfaces_logger.LoggerFactory) *FuseService {
+	rootNodeServiceFactory := factory_root_node_service.New(loggerFactory)
 
 	return &FuseService{
 		rootNodeServiceFactory: rootNodeServiceFactory,
+
+		loggerFactory: loggerFactory,
 	}
 }
 
-func (service *FuseService) New(mountpoint string, volumeName string) interfaces.FileSystemServer {
-	logger, err := logger.NewLogger("Fuse")
+func (service *FuseService) New(mountpoint string, volumeName string) interfaces_filesystem.FileSystemServer {
+	logger, err := service.loggerFactory.NewLogger("Fuse")
 	if err != nil {
 		panic(err)
 	}
@@ -45,17 +51,22 @@ func (service *FuseService) New(mountpoint string, volumeName string) interfaces
 	)
 
 	if err != nil {
-		logger.Fatal("Failed to mount filesystem", err)
+		logger.Fatal("failed to mount filesystem", err)
 	}
 
 	logger.Info("Successfully created connection")
 
 	rootNodeService, err := service.rootNodeServiceFactory.New()
 	if err != nil {
-		logger.Fatal("Failed to create root node service", err)
+		logger.Fatal("failed to create root node service", err)
 	}
 
-	fileSystem := filesystem_server_provider_fuse_filesystem.New(rootNodeService)
+	fileSystemLogger, err := service.loggerFactory.NewLogger("File System")
+	if err != nil {
+		logger.Fatal("failed to create file system logger", err)
+	}
 
-	return filesystem_server_provider_fuse_server.New(mountpoint, connection, fileSystem, logger)
+	fileSystem := filesystem.New(rootNodeService, fileSystemLogger)
+
+	return server.New(mountpoint, connection, fileSystem, logger)
 }

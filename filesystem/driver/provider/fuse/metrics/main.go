@@ -24,7 +24,7 @@ type MetricsCollectionJson struct {
 type ApplicationState struct {
 }
 
-type FileNodeMetrics struct {}
+type FileNodeMetrics struct{}
 
 func NewFileNodeMetrics(identifier uint64) *FileNodeMetrics {
 	return &FileNodeMetrics{}
@@ -86,7 +86,6 @@ func (service *MetricsCollection) StartWebDebugger() error {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		applicationState, _ := service.GetState()
-
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(applicationState.String()))

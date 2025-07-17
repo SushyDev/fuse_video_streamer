@@ -6,12 +6,12 @@ import (
 	"context"
 	"sync"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 )
 
 type Registry struct {
-	nodes []interfaces.Node
+	nodes []interfaces_fuse.Node
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -19,7 +19,7 @@ type Registry struct {
 
 var instances = map[string]*Registry{}
 
-func GetInstance(client client_interfaces.Client) *Registry {
+func GetInstance(client interfaces_filesystem_client.Client) *Registry {
 	if client == nil {
 		return nil
 	}
@@ -38,18 +38,17 @@ func GetInstance(client client_interfaces.Client) *Registry {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	instance := &Registry{
-		nodes: []interfaces.Node{},
-		ctx:   ctx,
+		nodes:  []interfaces_fuse.Node{},
+		ctx:    ctx,
 		cancel: cancel,
 	}
-
 
 	instances[root.GetName()] = instance
 
 	return instance
 }
 
-func (registry *Registry) Add(node interfaces.Node) {
+func (registry *Registry) Add(node interfaces_fuse.Node) {
 	registry.nodes = append(registry.nodes, node)
 }
 

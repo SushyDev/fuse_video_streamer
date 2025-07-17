@@ -4,33 +4,28 @@ import (
 	"context"
 	"fmt"
 	"fuse_video_streamer/config"
-	"fuse_video_streamer/logger"
 	"os"
 	"path/filepath"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	intefaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"github.com/anacrolix/fuse"
 )
 
 type Symlink struct {
-	client     filesystem_client_interfaces.Client
+	client     intefaces_filesystem_client.Client
 	identifier uint64
 
-	logger *logger.Logger
+	logger interfaces_logger.Logger
 }
 
-func New(client filesystem_client_interfaces.Client, identifier uint64) *Symlink {
-	logger, err := logger.NewLogger("Symlink Node")
-	if err != nil {
-		panic(err)
-	}
-
+func New(client intefaces_filesystem_client.Client, logger interfaces_logger.Logger, identifier uint64) *Symlink {
 	return &Symlink{
 		client:     client,
 		identifier: identifier,
-		
+
 		logger: logger,
 	}
 }

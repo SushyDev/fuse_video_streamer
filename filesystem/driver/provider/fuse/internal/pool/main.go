@@ -44,7 +44,7 @@ var globalBufferPool = &BufferPool{
 // GetBuffer returns a buffer appropriate for the given file size
 func GetBuffer(fileSize int64) []byte {
 	bufferSize := calculateBufferSize(fileSize)
-	
+
 	switch bufferSize {
 	case SmallVideoBuffer:
 		return globalBufferPool.smallPool.Get().([]byte)
@@ -62,9 +62,9 @@ func PutBuffer(buffer []byte) {
 	if buffer == nil {
 		return
 	}
-	
+
 	bufferSize := int64(len(buffer))
-	
+
 	switch bufferSize {
 	case SmallVideoBuffer:
 		globalBufferPool.smallPool.Put(buffer)

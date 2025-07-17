@@ -5,63 +5,79 @@ import (
 	"sync"
 	"sync/atomic"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/streamable/node"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
-	"fuse_video_streamer/logger"
 )
 
 type Service struct {
-	client   filesystem_client_interfaces.Client
-	logger   *logger.Logger
+	client interfaces_filesystem_client.Client
+
+	logger   interfaces_logger.Logger
 	registry *registry.Registry
+
+	loggerFactory                  interfaces_logger.LoggerFactory
+	streamableHandleServiceFactory interfaces_fuse.StreamableHandleServiceFactory
 
 	mu sync.RWMutex
 
 	closed atomic.Bool
 }
 
-var _ interfaces.StreamableNodeService = &Service{}
+var _ interfaces_fuse.StreamableNodeService = &Service{}
 
-func New(client filesystem_client_interfaces.Client, logger *logger.Logger) (interfaces.StreamableNodeService, error) {
+func New(
+	client interfaces_filesystem_client.Client,
+	logger interfaces_logger.Logger,
+	loggerFactory interfaces_logger.LoggerFactory,
+	streamableHandleServiceFactory interfaces_fuse.StreamableHandleServiceFactory,
+) (interfaces_fuse.StreamableNodeService, error) {
 	registry := registry.GetInstance(client)
 
-	return &Service{
-		client:   client,
-		logger:   logger,
+	service := &Service{
+		client: client,
+		logger: logger,
+
+		loggerFactory:                  loggerFactory,
+		streamableHandleServiceFactory: streamableHandleServiceFactory,
+
 		registry: registry,
-	}, nil
+	}
+
+	return service, nil
 }
 
-func (service *Service) New(identifier uint64) (interfaces.StreamableNode, error) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-
+func (service *Service) New(identifier uint64) (interfaces_fuse.StreamableNode, error) {
 	if service.IsClosed() {
 		return nil, fmt.Errorf("Service is closed")
 	}
 
-	logger, err := logger.NewLogger("Root Node")
-	if err != nil {
-		message := fmt.Sprintf("Failed to create logger for streamable node with identifier %d", identifier)
-		service.logger.Error(message, err)
-		return nil, err
-	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
 
 	fileSystem := service.client.GetFileSystem()
 
 	size, err := fileSystem.GetFileInfo(identifier)
-
 	if err != nil {
-		message := fmt.Sprintf("Failed to get video size for %d", identifier)
+		message := fmt.Sprintf("failed to get video size for %d", identifier)
 		service.logger.Error(message, err)
 		return nil, err
 	}
 
-	newNode, err := node.New(service.client, logger, identifier, size)
+	logger, err := service.loggerFactory.NewLogger("Root Node")
 	if err != nil {
-		service.logger.Error("Failed to create new streamable node", err)
+		message := fmt.Sprintf("failed to create logger for streamable node with identifier %d", identifier)
+		service.logger.Error(message, err)
+		return nil, err
+	}
+
+	newNode, err := node.New(service.client, logger, service.streamableHandleServiceFactory, identifier, size)
+	if err != nil {
+		message := fmt.Sprintf("failed to create new streamable node with identifier %d", identifier)
+		service.logger.Error(message, err)
 		return nil, err
 	}
 

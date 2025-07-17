@@ -3,27 +3,33 @@ package service
 import (
 	"sync/atomic"
 
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/file/handle"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
 )
 
 type Service struct {
+	loggerFactory interfaces_logger.LoggerFactory
+
 	closed atomic.Bool
 }
 
-var _ interfaces.FileHandleService = &Service{}
+var _ interfaces_fuse.FileHandleService = &Service{}
 
-func New() *Service {
-	return &Service{}
+func New(loggerFactory interfaces_logger.LoggerFactory) *Service {
+	return &Service{
+		loggerFactory: loggerFactory,
+	}
 }
 
-func (service *Service) New(node interfaces.FileNode) (interfaces.FileHandle, error) {
+func (service *Service) New(node interfaces_fuse.FileNode) (interfaces_fuse.FileHandle, error) {
 	if service.IsClosed() {
 		return nil, nil
 	}
 
-	logger, err := logger.NewLogger("File Handle")
+	logger, err := service.loggerFactory.NewLogger("File Handle")
 	if err != nil {
 		return nil, err
 	}

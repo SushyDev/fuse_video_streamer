@@ -8,45 +8,50 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
-	filesystem_provider_repository "fuse_video_streamer/filesystem/client/repository"
-	directory_node_service_factory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/directory/node/service/factory"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 )
 
 type node struct {
-	fileSystemProviderRepository filesystem_client_interfaces.ClientRepository
+	fileSystemProviderRepository interfaces_filesystem_client.ClientRepository
 
-	directoryNodeServiceFactory   interfaces.DirectoryNodeServiceFactory
-	directoryHandleServiceFactory interfaces.DirectoryHandleServiceFactory
-	directoryNodeService          interfaces.DirectoryNodeService
+	directoryNodeServiceFactory   interfaces_fuse.DirectoryNodeServiceFactory
+	directoryHandleServiceFactory interfaces_fuse.DirectoryHandleServiceFactory
 
-	logger  *logger.Logger
+	loggerFactory        interfaces_logger.LoggerFactory
+	directoryNodeService interfaces_fuse.DirectoryNodeService
+
+	logger interfaces_logger.Logger
 
 	mu sync.RWMutex
 
 	closed atomic.Bool
 }
 
-var _ interfaces.RootNode = &node{}
+var _ interfaces_fuse.RootNode = &node{}
 
-func New(directoryNodeService interfaces.DirectoryNodeService, logger *logger.Logger) (*node, error) {
-	fileSystemProviderRepository, err := filesystem_provider_repository.New()
-	if err != nil {
-		return nil, err
-	}
-
+func New(
+	fileSystemProviderRepository interfaces_filesystem_client.ClientRepository,
+	directoryNodeServiceFactory interfaces_fuse.DirectoryNodeServiceFactory,
+	directoryHandleServiceFactory interfaces_fuse.DirectoryHandleServiceFactory,
+	loggerFactory interfaces_logger.LoggerFactory,
+	directoryNodeService interfaces_fuse.DirectoryNodeService,
+	logger interfaces_logger.Logger,
+) (*node, error) {
 	return &node{
 		fileSystemProviderRepository: fileSystemProviderRepository,
 
-		directoryNodeServiceFactory: directory_node_service_factory.New(),
-		directoryNodeService:        directoryNodeService,
+		directoryNodeServiceFactory:   directoryNodeServiceFactory,
+		directoryHandleServiceFactory: directoryHandleServiceFactory,
 
-		logger:  logger,
+		loggerFactory:        loggerFactory,
+		directoryNodeService: directoryNodeService,
+
+		logger: logger,
 	}, nil
 }
 
@@ -55,12 +60,12 @@ func (node *node) GetIdentifier() uint64 {
 }
 
 func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	attr.Mode = os.ModeDir
 
@@ -68,23 +73,23 @@ func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (node *node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
+
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	return node, nil
 }
 
 func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
+
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	client, err := node.fileSystemProviderRepository.GetClientByName(lookupRequest.Name)
 	if err != nil {
@@ -95,7 +100,7 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	root, err := fileSystem.Root(client.GetName())
 	if err != nil {
-		message := fmt.Sprintf("Failed to get root for client %s", lookupRequest.Name)
+		message := fmt.Sprintf("failed to get root for client %s", lookupRequest.Name)
 		node.logger.Error(message, err)
 		return nil, err
 	}
@@ -109,12 +114,12 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 }
 
 func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
 		return nil, nil
 	}
+
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	clients, err := node.fileSystemProviderRepository.GetClients()
 	if err != nil {

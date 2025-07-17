@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 
 	"github.com/anacrolix/fuse/fs"
 )
@@ -55,7 +55,7 @@ type DirectoryHandle interface {
 // --- Streamable
 
 type StreamableHandleServiceFactory interface {
-	New(StreamableNode, filesystem_client_interfaces.Client) (StreamableHandleService, error)
+	New(StreamableNode, interfaces_filesystem_client.Client) (StreamableHandleService, error)
 }
 
 type StreamableHandleService interface {

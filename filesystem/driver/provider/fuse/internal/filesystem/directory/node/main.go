@@ -9,46 +9,51 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
-	directory_handle_service_factory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/directory/handle/service/factory"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
+	factory_directory_handle_service "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/directory/handle/service/factory"
+
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/symlink"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 )
 
 type Node struct {
-	directoryHandleService interfaces.DirectoryHandleService
+	directoryHandleService interfaces_fuse.DirectoryHandleService
 
-	directoryNodeService  interfaces.DirectoryNodeService
-	streamableNodeService interfaces.StreamableNodeService
-	fileNodeService       interfaces.FileNodeService
+	directoryNodeService  interfaces_fuse.DirectoryNodeService
+	streamableNodeService interfaces_fuse.StreamableNodeService
+	fileNodeService       interfaces_fuse.FileNodeService
 
-	client     filesystem_client_interfaces.Client
+	loggerFactory interfaces_logger.LoggerFactory
+
+	client     interfaces_filesystem_client.Client
 	identifier uint64
 
-	handles []interfaces.DirectoryHandle
+	handles []interfaces_fuse.DirectoryHandle
 
-	logger *logger.Logger
+	logger interfaces_logger.Logger
 
 	mu sync.RWMutex
 
 	closed atomic.Bool
 }
 
-var _ interfaces.DirectoryNode = &Node{}
+var _ interfaces_fuse.DirectoryNode = &Node{}
 
 func New(
-	directoryNodeService interfaces.DirectoryNodeService,
-	streamableNodeService interfaces.StreamableNodeService,
-	fileNodeService interfaces.FileNodeService,
-	client filesystem_client_interfaces.Client,
-	logger *logger.Logger,
+	client interfaces_filesystem_client.Client,
+	loggerFactory interfaces_logger.LoggerFactory,
+	directoryNodeService interfaces_fuse.DirectoryNodeService,
+	streamableNodeService interfaces_fuse.StreamableNodeService,
+	fileNodeService interfaces_fuse.FileNodeService,
+	logger interfaces_logger.Logger,
 	identifier uint64,
 ) (*Node, error) {
-	directoryHandleServiceFactory := directory_handle_service_factory.New()
+	directoryHandleServiceFactory := factory_directory_handle_service.New(loggerFactory)
 
 	node := &Node{
 		directoryHandleService: directoryHandleServiceFactory.New(),
@@ -56,6 +61,8 @@ func New(
 		directoryNodeService:  directoryNodeService,
 		streamableNodeService: streamableNodeService,
 		fileNodeService:       fileNodeService,
+
+		loggerFactory: loggerFactory,
 
 		client:     client,
 		identifier: identifier,
@@ -71,17 +78,17 @@ func (node *Node) GetIdentifier() uint64 {
 	return node.identifier
 }
 
-func (node *Node) GetClient() filesystem_client_interfaces.Client {
+func (node *Node) GetClient() interfaces_filesystem_client.Client {
 	return node.client
 }
 
 func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	attr.Mode = os.ModeDir
 
@@ -89,12 +96,12 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
+
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	handle, err := node.directoryHandleService.New(node)
 	if err != nil {
@@ -109,12 +116,12 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 }
 
 func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
+
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	client_filesystem := node.client.GetFileSystem()
 	foundNode, err := client_filesystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
@@ -141,7 +148,13 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 			return node.fileNodeService.New(foundNode.GetId())
 		}
 	case io_fs.ModeSymlink:
-		return symlink.New(node.client, foundNode.GetId()), nil
+		symlinkLogger, err := node.loggerFactory.NewLogger("Symlink node")
+		if err != nil {
+			node.logger.Error("Failed to create logger for symlink node", err)
+			return nil, err
+		}
+
+		return symlink.New(node.client, symlinkLogger, foundNode.GetId()), nil
 	default:
 		message := fmt.Sprintf("Unknown file mode: %s", foundNode.GetName())
 		node.logger.Error(message, nil)
@@ -150,12 +163,12 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 }
 
 func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest) error {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-
 	if node.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
 	fileSystem := node.client.GetFileSystem()
 
@@ -170,12 +183,12 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 }
 
 func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDir fs.Node) error {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-
 	if node.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
 	newDirectory, ok := newDir.(*Node)
 	if !ok {
@@ -195,12 +208,12 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 }
 
 func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, response *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-
 	if node.IsClosed() {
 		return nil, nil, syscall.ENOENT
 	}
+
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
 	fileSystem := node.client.GetFileSystem()
 
@@ -236,12 +249,12 @@ func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, respo
 }
 
 func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Node, error) {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-
 	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
+
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
 	fileSystem := node.client.GetFileSystem()
 
@@ -256,14 +269,14 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 }
 
 func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode fs.Node) (fs.Node, error) {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-
 	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
-	oldFile, ok := oldNode.(interfaces.StreamableNode)
+	node.mu.Lock()
+	defer node.mu.Unlock()
+
+	oldFile, ok := oldNode.(interfaces_fuse.StreamableNode)
 	if !ok {
 		message := fmt.Sprintf("Not a streamable node: %s", oldNode)
 		node.logger.Error(message, nil)

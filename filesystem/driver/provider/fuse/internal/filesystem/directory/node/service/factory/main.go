@@ -1,26 +1,37 @@
 package factory
 
 import (
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/directory/node/service"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	file_node_service_factory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/file/node/service/factory"
-	streamable_node_service_factory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/streamable/node/service/factory"
+	interfacesfilesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	factory_file_node_service "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/file/node/service/factory"
+	factory_streamable_node_service "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/streamable/node/service/factory"
+
+	service_directory_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/directory/node/service"
 )
 
-type Factory struct {}
-
-var _ interfaces.DirectoryNodeServiceFactory = &Factory{}
-
-func New() *Factory {
-	return &Factory{}
+type Factory struct {
+	loggerFactory interfaces_logger.LoggerFactory
 }
 
-func (factory *Factory) New(client filesystem_client_interfaces.Client) (interfaces.DirectoryNodeService, error) {
-	directoryNodeServiceFactory := New()
-	streamableNodeServiceFactory := streamable_node_service_factory.New()
-	fileNodeServiceFactory := file_node_service_factory.New()
+var _ interfaces_fuse.DirectoryNodeServiceFactory = &Factory{}
 
-	return service.New(client, directoryNodeServiceFactory, streamableNodeServiceFactory, fileNodeServiceFactory)
+func New(loggerFactorr interfaces_logger.LoggerFactory) *Factory {
+	return &Factory{
+		loggerFactory: loggerFactorr,
+	}
+}
+
+func (factory *Factory) New(client interfacesfilesystem_client.Client) (interfaces_fuse.DirectoryNodeService, error) {
+	directoryNodeServiceFactory := New(factory.loggerFactory)
+	streamableNodeServiceFactory := factory_streamable_node_service.New(factory.loggerFactory)
+	fileNodeServiceFactory := factory_file_node_service.New(factory.loggerFactory)
+
+	logger, err := factory.loggerFactory.NewLogger("Directory Node Service")
+	if err != nil {
+		return nil, err
+	}
+
+	return service_directory_node.New(client, directoryNodeServiceFactory, streamableNodeServiceFactory, fileNodeServiceFactory, factory.loggerFactory, logger)
 }

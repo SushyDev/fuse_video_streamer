@@ -5,19 +5,24 @@ import (
 	"sync"
 	"sync/atomic"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/file/node"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
+	file_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/file/node"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
-	"fuse_video_streamer/logger"
+	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 
 	api "github.com/sushydev/stream_mount_api"
 )
 
 type Service struct {
-	client   filesystem_client_interfaces.Client
-	logger   *logger.Logger
+	client interfaces_filesystem_client.Client
+	logger interfaces_logger.Logger
+
+	loggerFactory            interfaces_logger.LoggerFactory
+	fileHandleServiceFactory interfaces_fuse.FileHandleServiceFactory
+
 	registry *registry.Registry
 
 	mu sync.RWMutex
@@ -25,39 +30,46 @@ type Service struct {
 	closed atomic.Bool
 }
 
-var _ interfaces.FileNodeService = &Service{}
+var _ interfaces_fuse.FileNodeService = &Service{}
 
 var clients = []api.FileSystemServiceClient{}
 
-func New(client filesystem_client_interfaces.Client) (interfaces.FileNodeService, error) {
+func New(
+	client interfaces_filesystem_client.Client,
+	logger interfaces_logger.Logger,
+	loggerFactory interfaces_logger.LoggerFactory,
+	fileHandleFactory interfaces_fuse.FileHandleServiceFactory,
+) (interfaces_fuse.FileNodeService, error) {
 	registry := registry.GetInstance(client)
 
-	logger, err := logger.NewLogger("File Node")
-	if err != nil {
-		return nil, err
-	}
-
 	return &Service{
-		client:   client,
-		logger:   logger,
+		client: client,
+		logger: logger,
+
+		loggerFactory:            loggerFactory,
+		fileHandleServiceFactory: fileHandleFactory,
+
 		registry: registry,
 	}, nil
 }
 
-func (service *Service) New(identifier uint64) (interfaces.FileNode, error) {
+func (service *Service) New(identifier uint64) (interfaces_fuse.FileNode, error) {
+	if service.IsClosed() {
+		return nil, fmt.Errorf("service is closed")
+	}
+
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
-	if service.IsClosed() {
-		return nil, fmt.Errorf("Service is closed")
-	}
+	metrics := metrics.NewFileNodeMetrics(identifier)
+	fileSystem := service.client.GetFileSystem()
+	fileHandleService := service.fileHandleServiceFactory.New()
 
-	logger, err := logger.NewLogger("Root Node")
+	fileNodeLogger, err := service.loggerFactory.NewLogger("File Node")
 	if err != nil {
+		service.logger.Error("Failed to create logger for new file node", err)
 		return nil, err
 	}
-
-	fileSystem := service.client.GetFileSystem()
 
 	size, err := fileSystem.GetFileInfo(identifier)
 	if err != nil {
@@ -66,9 +78,7 @@ func (service *Service) New(identifier uint64) (interfaces.FileNode, error) {
 		return nil, err
 	}
 
-	metrics := metrics.NewFileNodeMetrics(identifier)
-
-	newNode := node.New(service.client, metrics, logger, identifier, size)
+	newNode := file_node.New(service.client, service.loggerFactory, fileHandleService, metrics, fileNodeLogger, identifier, size)
 
 	service.registry.Add(newNode)
 

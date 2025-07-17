@@ -4,8 +4,10 @@ import (
 	"fmt"
 
 	"fuse_video_streamer/config"
-	"fuse_video_streamer/logger"
-	"fuse_video_streamer/filesystem/client/interfaces"
+
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
 	"fuse_video_streamer/filesystem/client/provider/grpc/internal/filesystem"
 
 	api "github.com/sushydev/stream_mount_api"
@@ -16,15 +18,15 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
-type provider struct{
-	name string
-	target string
-	fileSystem interfaces.FileSystem
+type provider struct {
+	name       string
+	target     string
+	fileSystem interfaces_filesystem_client.FileSystem
 }
 
-var _ interfaces.Client = &provider{}
+var _ interfaces_filesystem_client.Client = &provider{}
 
-func New(entry config.FileSystemProvider) (interfaces.Client, error) {
+func New(entry config.FileSystemProvider, loggerFactory interfaces_logger.LoggerFactory) (interfaces_filesystem_client.Client, error) {
 	connectParams := grpc.ConnectParams{
 		Backoff: backoff.DefaultConfig,
 	}
@@ -50,7 +52,7 @@ func New(entry config.FileSystemProvider) (interfaces.Client, error) {
 
 	client := api.NewFileSystemServiceClient(connection)
 
-	logger, err := logger.NewLogger("File System")
+	logger, err := loggerFactory.NewLogger("File System")
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +63,8 @@ func New(entry config.FileSystemProvider) (interfaces.Client, error) {
 	logger.Info(fmt.Sprintf("Connected to file system provider:	%s", entry.Name))
 
 	return &provider{
-		name: entry.Name,
-		target: entry.Target,
+		name:       entry.Name,
+		target:     entry.Target,
 		fileSystem: fileSystem,
 	}, nil
 }
@@ -71,6 +73,6 @@ func (p *provider) GetName() string {
 	return p.name
 }
 
-func (p *provider) GetFileSystem() interfaces.FileSystem {
+func (p *provider) GetFileSystem() interfaces_filesystem_client.FileSystem {
 	return p.fileSystem
 }

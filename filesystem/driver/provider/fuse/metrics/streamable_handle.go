@@ -1,3 +1,3 @@
 package metrics
 
-type StreamableHandleMetrics struct {}
+type StreamableHandleMetrics struct{}

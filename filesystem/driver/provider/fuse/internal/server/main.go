@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	filesystem_interfaces "fuse_video_streamer/filesystem/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_filesystem "fuse_video_streamer/filesystem/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -16,14 +16,14 @@ import (
 type Server struct {
 	mountpoint string
 	connection *fuse.Conn
-	fileSystem interfaces.FuseFileSystem
+	fileSystem interfaces_fuse.FuseFileSystem
 
-	logger *logger.Logger
+	logger interfaces_logger.Logger
 }
 
-var _ filesystem_interfaces.FileSystemServer = &Server{}
+var _ interfaces_filesystem.FileSystemServer = &Server{}
 
-func New(mountpoint string, connection *fuse.Conn, fileSystem interfaces.FuseFileSystem, logger *logger.Logger) *Server {
+func New(mountpoint string, connection *fuse.Conn, fileSystem interfaces_fuse.FuseFileSystem, logger interfaces_logger.Logger) *Server {
 	return &Server{
 		mountpoint: mountpoint,
 		connection: connection,

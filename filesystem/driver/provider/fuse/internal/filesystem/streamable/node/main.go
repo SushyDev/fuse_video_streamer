@@ -7,49 +7,50 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
-	streamable_handle_service_factory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/streamable/handle/service/factory"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 )
 
 type Node struct {
-	handleService interfaces.StreamableHandleService
-
-	client     filesystem_client_interfaces.Client
+	client     interfaces_filesystem_client.Client
 	identifier uint64
 	size       uint64
 
-	handles []interfaces.StreamableHandle
+	handleService interfaces_fuse.StreamableHandleService
 
-	logger *logger.Logger
+	handles []interfaces_fuse.StreamableHandle
+
+	logger interfaces_logger.Logger
 
 	mu sync.RWMutex
 
 	closed atomic.Bool
 }
 
-var _ interfaces.StreamableNode = &Node{}
+var _ interfaces_fuse.StreamableNode = &Node{}
 
-func New(client filesystem_client_interfaces.Client, logger *logger.Logger, identifier uint64, size uint64) (*Node, error) {
+func New(
+	client interfaces_filesystem_client.Client,
+	logger interfaces_logger.Logger,
+	streamableHandleServiceFactory interfaces_fuse.StreamableHandleServiceFactory,
+	identifier uint64,
+	size uint64,
+) (*Node, error) {
 	node := &Node{
-		client:        client,
-		identifier:    identifier,
-
-		size: size,
-
+		client: client,
 		logger: logger,
 
-		mu: sync.RWMutex{},
+		identifier: identifier,
+		size:       size,
 	}
 
-	fileHandleServiceFactory := streamable_handle_service_factory.New()
-	fileHandleService, err := fileHandleServiceFactory.New(node, client)
+	fileHandleService, err := streamableHandleServiceFactory.New(node, client)
 	if err != nil {
-		node.logger.Error("Failed to create file handle service", err)
+		node.logger.Error("failed to create file handle service", err)
 		return nil, err
 	}
 
@@ -66,7 +67,7 @@ func (node *Node) GetSize() uint64 {
 	return node.size
 }
 
-func (node *Node) GetClient() filesystem_client_interfaces.Client {
+func (node *Node) GetClient() interfaces_filesystem_client.Client {
 	return node.client
 }
 
@@ -91,7 +92,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 
 	handle, err := node.handleService.New()
 	if err != nil {
-		message := "Failed to create file handle"
+		message := "failed to create file handle"
 		node.logger.Error(message, err)
 		return nil, err
 	}

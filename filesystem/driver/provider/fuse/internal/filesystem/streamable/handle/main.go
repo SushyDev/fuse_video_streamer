@@ -8,9 +8,10 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/pool"
-	"fuse_video_streamer/logger"
 	"fuse_video_streamer/stream"
 
 	"github.com/anacrolix/fuse"
@@ -18,7 +19,7 @@ import (
 )
 
 type Handle struct {
-	node interfaces.StreamableNode
+	node interfaces_fuse.StreamableNode
 
 	fs.Handle
 	fs.HandleReader
@@ -28,18 +29,18 @@ type Handle struct {
 
 	stream *stream.Stream
 
-	logger *logger.Logger
+	logger interfaces_logger.Logger
 
 	mu sync.RWMutex
 
 	closed atomic.Bool
 }
 
-var _ interfaces.StreamableHandle = &Handle{}
+var _ interfaces_fuse.StreamableHandle = &Handle{}
 
 var incrementId uint64
 
-func New(node interfaces.StreamableNode, stream *stream.Stream, logger *logger.Logger) *Handle {
+func New(node interfaces_fuse.StreamableNode, stream *stream.Stream, logger interfaces_logger.Logger) *Handle {
 	incrementId++
 
 	return &Handle{
@@ -66,7 +67,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	}
 
 	if handle.stream == nil {
-		message := fmt.Sprintf("No video stream for handle %d, closing video stream", handle.id)
+		message := fmt.Sprintf("no video stream for handle %d, closing video stream", handle.id)
 		handle.logger.Error(message, nil)
 
 		handle.Close()
@@ -92,7 +93,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		return nil
 
 	default:
-		message := fmt.Sprintf("Failed to read video stream for handle %d, closing video stream", handle.id)
+		message := fmt.Sprintf("failed to read video stream for handle %d, closing video stream", handle.id)
 		handle.logger.Error(message, err)
 
 		handle.stream.Close()

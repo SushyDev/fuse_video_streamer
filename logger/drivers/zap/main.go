@@ -1,4 +1,4 @@
-package logger
+package zap_logger
 
 import (
 	"fmt"
@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"fuse_video_streamer/logger/interfaces"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -62,6 +64,8 @@ type Logger struct {
 	logger  *zap.SugaredLogger
 	service string
 }
+
+var _ interfaces.Logger = &Logger{}
 
 func NewLogger(service string) (*Logger, error) {
 	filename := strings.ToLower(strings.ReplaceAll(service, " ", "_"))

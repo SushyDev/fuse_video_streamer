@@ -6,40 +6,32 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"github.com/anacrolix/fuse"
-	"github.com/anacrolix/fuse/fs"
 )
 
 type Handle struct {
-	node interfaces.FileNode
+	id   uint64
+	node interfaces_fuse.FileNode
 
-	fs.Handle
-	fs.HandleReader
-	fs.HandleReleaser
+	logger interfaces_logger.Logger
 
-	id uint64
-
-	logger *logger.Logger
-
-	mu sync.RWMutex
-
+	mu     sync.RWMutex
 	closed atomic.Bool
 }
 
-var _ interfaces.FileHandle = &Handle{}
+var _ interfaces_fuse.FileHandle = &Handle{}
 
 var incrementId uint64
 
-func New(node interfaces.FileNode, logger *logger.Logger) *Handle {
+func New(node interfaces_fuse.FileNode, logger interfaces_logger.Logger) *Handle {
 	incrementId++
 
 	return &Handle{
+		id:   incrementId,
 		node: node,
-
-		id: incrementId,
 
 		logger: logger,
 	}
@@ -50,12 +42,12 @@ func (handle *Handle) GetIdentifier() uint64 {
 }
 
 func (handle *Handle) ReadAll(ctx context.Context) ([]byte, error) {
-	handle.mu.RLock()
-	defer handle.mu.RUnlock()
-
 	if handle.IsClosed() {
 		return nil, syscall.ENOENT
 	}
+
+	handle.mu.RLock()
+	defer handle.mu.RUnlock()
 
 	client := handle.node.GetClient()
 	fileSystem := client.GetFileSystem()
@@ -70,12 +62,12 @@ func (handle *Handle) ReadAll(ctx context.Context) ([]byte, error) {
 }
 
 func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
-	handle.mu.RLock()
-	defer handle.mu.RUnlock()
-
 	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	handle.mu.RLock()
+	defer handle.mu.RUnlock()
 
 	client := handle.node.GetClient()
 	fileSystem := client.GetFileSystem()
@@ -91,12 +83,12 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 }
 
 func (handle *Handle) Write(ctx context.Context, writeRequest *fuse.WriteRequest, writeResponse *fuse.WriteResponse) error {
-	handle.mu.RLock()
-	defer handle.mu.RUnlock()
-
 	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	handle.mu.RLock()
+	defer handle.mu.RUnlock()
 
 	client := handle.node.GetClient()
 	fileSystem := client.GetFileSystem()
@@ -112,34 +104,34 @@ func (handle *Handle) Write(ctx context.Context, writeRequest *fuse.WriteRequest
 }
 
 func (handle *Handle) Release(ctx context.Context, releaseRequest *fuse.ReleaseRequest) error {
-	handle.mu.Lock()
-	defer handle.mu.Unlock()
-
 	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
 
 	return nil
 }
 
 func (handle *Handle) Flush(ctx context.Context, flushRequest *fuse.FlushRequest) error {
-	handle.mu.Lock()
-	defer handle.mu.Unlock()
-
 	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
 
 	return nil
 }
 
 func (handle *Handle) Fsync(ctx context.Context, fsyncRequest *fuse.FsyncRequest) error {
-	handle.mu.Lock()
-	defer handle.mu.Unlock()
-
 	if handle.IsClosed() {
 		return syscall.ENOENT
 	}
+
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
 
 	return nil
 }

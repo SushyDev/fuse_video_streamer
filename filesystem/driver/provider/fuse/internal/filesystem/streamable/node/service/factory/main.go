@@ -1,25 +1,34 @@
 package factory
 
 import (
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/streamable/node/service"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
+	factory_streamable_handle "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/streamable/handle/service/factory"
+
+	service_streamable_handle "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/streamable/node/service"
 )
 
-type Factory struct {}
-
-var _ interfaces.StreamableNodeServiceFactory = &Factory{}
-
-func New() *Factory {
-	return &Factory{}
+type Factory struct {
+	loggerFactory interfaces_logger.LoggerFactory
 }
 
-func (factory *Factory) New(client filesystem_client_interfaces.Client) (interfaces.StreamableNodeService, error) {
-	logger, err := logger.NewLogger("File Node Service")
+var _ interfaces_fuse.StreamableNodeServiceFactory = &Factory{}
+
+func New(loggerFactory interfaces_logger.LoggerFactory) *Factory {
+	return &Factory{
+		loggerFactory: loggerFactory,
+	}
+}
+
+func (factory *Factory) New(client interfaces_filesystem_client.Client) (interfaces_fuse.StreamableNodeService, error) {
+	streamableNodeService, err := factory.loggerFactory.NewLogger("Streamable Node Service")
 	if err != nil {
 		return nil, err
 	}
 
-	return service.New(client, logger)
+	streamableHandleServiceFactory := factory_streamable_handle.New(factory.loggerFactory)
+
+	return service_streamable_handle.New(client, streamableNodeService, factory.loggerFactory, streamableHandleServiceFactory)
 }

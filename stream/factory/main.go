@@ -5,26 +5,35 @@ import (
 	"sync/atomic"
 	"time"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
 	"fuse_video_streamer/stream"
 )
 
 type CacheItem struct {
-	url string
+	url        string
 	expiration time.Time
 }
 
 type Factory struct {
-	client filesystem_client_interfaces.Client
+	client interfaces_filesystem_client.Client
+
+	loggerFactory interfaces_logger.LoggerFactory
 
 	cachedItem CacheItem
 
 	closed atomic.Bool
 }
 
-func New(client filesystem_client_interfaces.Client) *Factory {
+func New(
+	client interfaces_filesystem_client.Client,
+	loggerFactory interfaces_logger.LoggerFactory,
+) *Factory {
 	return &Factory{
-		client:  client,
+		client: client,
+
+		loggerFactory: loggerFactory,
 	}
 }
 
@@ -38,7 +47,7 @@ func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*stream.S
 		return nil, err
 	}
 
-	return stream.New(url, int64(size))
+	return stream.New(factory.loggerFactory, url, int64(size))
 }
 
 func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
@@ -54,7 +63,7 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 	}
 
 	factory.cachedItem = CacheItem{
-		url: url,
+		url:        url,
 		expiration: time.Now().Add(15 * time.Minute),
 	}
 
@@ -65,7 +74,7 @@ func (factory *Factory) Close() {
 	if !factory.closed.CompareAndSwap(false, true) {
 		return
 	}
-	
+
 	return
 }
 

@@ -3,30 +3,27 @@ package filesystem
 import (
 	"sync/atomic"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
-	"fuse_video_streamer/logger"
 
 	"github.com/anacrolix/fuse/fs"
 )
 
 type FileSystem struct {
-	rootNodeService interfaces.RootNodeService
+	rootNodeService interfaces_fuse.RootNodeService
 
-	logger  *logger.Logger
+	logger interfaces_logger.Logger
 
 	closed atomic.Bool
 }
 
-var _ interfaces.FuseFileSystem = &FileSystem{}
+var _ interfaces_fuse.FuseFileSystem = &FileSystem{}
 
-func New(rootNodeService interfaces.RootNodeService) interfaces.FuseFileSystem {
-	logger, err := logger.NewLogger("Filesystem")
-	if err != nil {
-		panic(err)
-	}
-
+func New(rootNodeService interfaces_fuse.RootNodeService, logger interfaces_logger.Logger) interfaces_fuse.FuseFileSystem {
 	metricsCollection := metrics.GetMetricsCollection()
 	go metricsCollection.StartWebDebugger()
 

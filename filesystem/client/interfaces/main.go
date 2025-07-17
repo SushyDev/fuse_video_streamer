@@ -39,4 +39,3 @@ type Node interface {
 	GetMode() fs.FileMode
 	GetStreamable() bool
 }
-

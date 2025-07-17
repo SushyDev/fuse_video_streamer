@@ -1,34 +1,40 @@
 package service
 
 import (
+	"fmt"
 	"sync/atomic"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/directory/handle"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
+	directory_handle "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/directory/handle"
 )
 
 type Service struct {
 	closed atomic.Bool
+
+	loggerFactory interfaces_logger.LoggerFactory
 }
 
-var _ interfaces.DirectoryHandleService = &Service{}
+var _ interfaces_fuse.DirectoryHandleService = &Service{}
 
-func New() *Service {
-	return &Service{}
+func New(loggerFactory interfaces_logger.LoggerFactory) *Service {
+	return &Service{
+		loggerFactory: loggerFactory,
+	}
 }
 
-func (service *Service) New(node interfaces.DirectoryNode) (interfaces.DirectoryHandle, error) {
+func (service *Service) New(node interfaces_fuse.DirectoryNode) (interfaces_fuse.DirectoryHandle, error) {
 	if service.IsClosed() {
-		return nil, nil
+		return nil, fmt.Errorf("directory handle service is closed")
 	}
 
-	logger, err := logger.NewLogger("Directory Handle")
+	logger, err := service.loggerFactory.NewLogger("Directory Handle")
 	if err != nil {
 		return nil, err
 	}
 
-	return handle.New(node, logger), nil
+	return directory_handle.New(node, logger), nil
 }
 
 func (service *Service) Close() error {

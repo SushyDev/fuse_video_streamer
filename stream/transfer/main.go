@@ -3,13 +3,15 @@ package transfer
 import (
 	"context"
 	"fmt"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
-	"fuse_video_streamer/logger"
-	"fuse_video_streamer/stream/connection"
 	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+
+	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
+	"fuse_video_streamer/stream/connection"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
@@ -22,7 +24,7 @@ type Transfer struct {
 	cancel  context.CancelFunc
 
 	metrics *metrics.StreamTransferMetrics
-	logger  *logger.Logger
+	logger  interfaces_logger.Logger
 
 	wg *sync.WaitGroup
 
@@ -38,7 +40,7 @@ var bufferPool = sync.Pool{
 	},
 }
 
-func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection, metrics *metrics.StreamTransferMetrics, logger *logger.Logger) *Transfer {
+func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection, metrics *metrics.StreamTransferMetrics, logger interfaces_logger.Logger) *Transfer {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	transfer := &Transfer{

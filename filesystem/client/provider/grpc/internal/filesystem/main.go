@@ -1,13 +1,13 @@
 package filesystem
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	io_fs "io/fs"
 	"time"
 
-	"fuse_video_streamer/filesystem/client/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_fuse "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	api "github.com/sushydev/stream_mount_api"
 )
@@ -15,13 +15,13 @@ import (
 type filesystem struct {
 	api api.FileSystemServiceClient
 
-	logger *logger.Logger
+	logger interfaces_logger.Logger
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-var _ interfaces.FileSystem = &filesystem{}
+var _ interfaces_fuse.FileSystem = &filesystem{}
 
 type node struct {
 	id         uint64
@@ -30,13 +30,13 @@ type node struct {
 	streamable bool
 }
 
-var _ interfaces.Node = &node{}
+var _ interfaces_fuse.Node = &node{}
 
 func newNode(id uint64, name string, mode io_fs.FileMode, streamable bool) *node {
 	return &node{
-		id:   id,
-		name: name,
-		mode: mode,
+		id:         id,
+		name:       name,
+		mode:       mode,
 		streamable: streamable,
 	}
 }
@@ -57,7 +57,7 @@ func (n *node) GetStreamable() bool {
 	return n.streamable
 }
 
-func New(api api.FileSystemServiceClient, logger *logger.Logger) *filesystem {
+func New(api api.FileSystemServiceClient, logger interfaces_logger.Logger) *filesystem {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &filesystem{
@@ -70,7 +70,7 @@ func New(api api.FileSystemServiceClient, logger *logger.Logger) *filesystem {
 	}
 }
 
-func (fs *filesystem) Root(name string) (interfaces.Node, error) {
+func (fs *filesystem) Root(name string) (interfaces_fuse.Node, error) {
 	requestCtx, cancel := context.WithTimeout(fs.ctx, 10*time.Second)
 	defer cancel()
 
@@ -89,7 +89,7 @@ func (fs *filesystem) Root(name string) (interfaces.Node, error) {
 	), nil
 }
 
-func (fs *filesystem) ReadDirAll(nodeId uint64) ([]interfaces.Node, error) {
+func (fs *filesystem) ReadDirAll(nodeId uint64) ([]interfaces_fuse.Node, error) {
 	requestCtx, cancel := context.WithTimeout(fs.ctx, 10*time.Second)
 	defer cancel()
 
@@ -101,7 +101,7 @@ func (fs *filesystem) ReadDirAll(nodeId uint64) ([]interfaces.Node, error) {
 		return nil, api.FromResponseError(err)
 	}
 
-	var nodes []interfaces.Node
+	var nodes []interfaces_fuse.Node
 	for _, node := range response.Nodes {
 		node := newNode(
 			node.GetId(),
@@ -117,7 +117,7 @@ func (fs *filesystem) ReadDirAll(nodeId uint64) ([]interfaces.Node, error) {
 
 }
 
-func (fs *filesystem) Lookup(parentNodeId uint64, name string) (interfaces.Node, error) {
+func (fs *filesystem) Lookup(parentNodeId uint64, name string) (interfaces_fuse.Node, error) {
 	requestCtx, cancel := context.WithTimeout(fs.ctx, 10*time.Second)
 	defer cancel()
 
@@ -179,7 +179,7 @@ func (fs *filesystem) Create(parentNodeId uint64, name string, mode io_fs.FileMo
 	return api.FromResponseError(err)
 }
 
-func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces.Node, error) {
+func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces_fuse.Node, error) {
 	requestCtx, cancel := context.WithTimeout(fs.ctx, 10*time.Second)
 	defer cancel()
 
@@ -202,13 +202,12 @@ func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces.Node, 
 	), nil
 }
 
-
 func (fs *filesystem) Link(parentNodeId uint64, name string, targetNodeId uint64) error {
 	requestCtx, cancel := context.WithTimeout(fs.ctx, 10*time.Second)
 	defer cancel()
 
 	_, err := fs.api.Link(requestCtx, &api.LinkRequest{
-		NodeId: targetNodeId,
+		NodeId:       targetNodeId,
 		ParentNodeId: parentNodeId,
 		Name:         name,
 	})
@@ -268,7 +267,7 @@ func (fs *filesystem) ReadFile(nodeId uint64, offset uint64, size uint64) ([]byt
 	response, err := fs.api.ReadFile(requestCtx, &api.ReadFileRequest{
 		NodeId: nodeId,
 		Offset: offset,
-		Size: size,
+		Size:   size,
 	})
 
 	if err != nil {
@@ -285,7 +284,7 @@ func (fs *filesystem) WriteFile(nodeId uint64, offset uint64, data []byte) (uint
 	response, err := fs.api.WriteFile(requestCtx, &api.WriteFileRequest{
 		NodeId: nodeId,
 		Offset: offset,
-		Data: data,
+		Data:   data,
 	})
 
 	if err != nil {

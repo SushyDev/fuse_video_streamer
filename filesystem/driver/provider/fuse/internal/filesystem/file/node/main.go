@@ -7,51 +7,57 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	filesystem_client_interfaces "fuse_video_streamer/filesystem/client/interfaces"
-	file_handle_service_factory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/file/handle/service/factory"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
-	"fuse_video_streamer/logger"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
+	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 )
 
 type Node struct {
-	handleService interfaces.FileHandleService
+	client        interfaces_filesystem_client.Client
+	loggerFactory interfaces_logger.LoggerFactory
 
-	client     filesystem_client_interfaces.Client
+	handleService interfaces_fuse.FileHandleService
+
+	metrics *metrics.FileNodeMetrics
+	logger  interfaces_logger.Logger
+
 	identifier uint64
 	size       uint64
 
-	handles []interfaces.FileHandle
-
-	metrics *metrics.FileNodeMetrics
-	logger *logger.Logger
+	handles []interfaces_fuse.FileHandle
 
 	mu sync.RWMutex
 
 	closed atomic.Bool
 }
 
-var _ interfaces.FileNode = &Node{}
+var _ interfaces_fuse.FileNode = &Node{}
 
-func New(client filesystem_client_interfaces.Client, metric *metrics.FileNodeMetrics, logger *logger.Logger, identifier uint64, size uint64) *Node {
-	fileHandleServiceFactory := file_handle_service_factory.New()
-
+func New(
+	client interfaces_filesystem_client.Client,
+	loggerFactory interfaces_logger.LoggerFactory,
+	fileHandleService interfaces_fuse.FileHandleService,
+	metric *metrics.FileNodeMetrics,
+	logger interfaces_logger.Logger,
+	identifier uint64,
+	size uint64,
+) *Node {
 	node := &Node{
-		handleService: fileHandleServiceFactory.New(),
+		client:        client,
+		loggerFactory: loggerFactory,
 
-		client:     client,
-		identifier: identifier,
-
-		size: size,
+		handleService: fileHandleService,
 
 		metrics: metric,
-		logger: logger,
+		logger:  logger,
 
-		mu: sync.RWMutex{},
+		identifier: identifier,
+		size:       size,
 	}
 
 	return node
@@ -65,7 +71,7 @@ func (node *Node) GetSize() uint64 {
 	return node.size
 }
 
-func (node *Node) GetClient() filesystem_client_interfaces.Client {
+func (node *Node) GetClient() interfaces_filesystem_client.Client {
 	return node.client
 }
 
@@ -81,16 +87,17 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
+		node.logger.Warn("Node is closed, cannot open file handle")
 		return nil, syscall.ENOENT
 	}
 
+	node.mu.RLock()
+	defer node.mu.RUnlock()
+
 	handle, err := node.handleService.New(node)
 	if err != nil {
-		message := "Failed to create file handle"
+		message := "failed to create file handle"
 		node.logger.Error(message, err)
 		return nil, err
 	}
@@ -102,7 +109,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 
 func (node *Node) Close() error {
 	if !node.closed.CompareAndSwap(false, true) {
-		return nil // Already closed
+		return nil
 	}
 
 	node.handleService.Close()
