@@ -28,7 +28,7 @@ func GetInstance(client interfaces_filesystem_client.Client) *Registry {
 
 	root, err := fileSystem.Root(client.GetName())
 	if err != nil {
-		panic(err)
+		return nil
 	}
 
 	if instance, ok := instances[root.GetName()]; ok {

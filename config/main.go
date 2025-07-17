@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -17,49 +18,63 @@ type Config struct {
 	FileServers []FileSystemProvider `yaml:"file_servers"`
 }
 
-func get() Config {
+func get() (Config, error) {
 	file, err := os.Open("config.yml")
 	if err != nil {
-		panic(err)
+		return Config{}, err
 	}
 	defer file.Close()
 
 	decoder := yaml.NewDecoder(file)
 	var cfg Config
 	if err := decoder.Decode(&cfg); err != nil {
-		panic(err)
+		return Config{}, err
 	}
 
-	return cfg
+	return cfg, nil
 }
 
-func Validate() {
-	cfg := get()
+func Validate() error {
+	cfg, err := get()
+	if err != nil {
+		return err
+	}
 
 	if cfg.MountPoint == "" {
-		panic("MountPoint is required")
+		return fmt.Errorf("mount_point is required")
 	}
 
 	if cfg.VolumeName == "" {
-		panic("VolumeName is required")
+		return fmt.Errorf("volume_name is required")
 	}
 
 	if len(cfg.FileServers) == 0 {
-		panic("FileServers is required")
+		return fmt.Errorf("file_servers is required")
 	}
+
+	return nil
 }
 
-func GetMountPoint() string {
-	cfg := get()
-	return cfg.MountPoint
+func GetMountPoint() (string, error) {
+	cfg, err := get()
+	if err != nil {
+		return "", err
+	}
+	return cfg.MountPoint, nil
 }
 
-func GetVolumeName() string {
-	cfg := get()
-	return cfg.VolumeName
+func GetVolumeName() (string, error) {
+	cfg, err := get()
+	if err != nil {
+		return "", err
+	}
+	return cfg.VolumeName, nil
 }
 
-func GetFileServers() []FileSystemProvider {
-	cfg := get()
-	return cfg.FileServers
+func GetFileServers() ([]FileSystemProvider, error) {
+	cfg, err := get()
+	if err != nil {
+		return nil, err
+	}
+	return cfg.FileServers, nil
 }

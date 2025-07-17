@@ -73,7 +73,7 @@ func (service *Service) New(identifier uint64) (interfaces_fuse.FileNode, error)
 
 	size, err := fileSystem.GetFileInfo(identifier)
 	if err != nil {
-		message := fmt.Sprintf("Failed to get video size for %d", identifier)
+		message := fmt.Sprintf("failed to get video size for %d", identifier)
 		service.logger.Error(message, err)
 		return nil, err
 	}

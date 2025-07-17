@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/anacrolix/fuse v0.3.1
+	github.com/google/uuid v1.6.0
 	github.com/sushydev/ring_buffer_go v0.1.8
 	github.com/sushydev/stream_mount_api v1.1.0
 	go.uber.org/zap v1.27.0
@@ -12,7 +13,6 @@ require (
 )
 
 require (
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect

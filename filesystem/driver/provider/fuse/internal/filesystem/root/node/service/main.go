@@ -55,13 +55,13 @@ func (service *Service) New() (interfaces_fuse.RootNode, error) {
 
 	logger, err := service.loggerFactory.NewLogger("Root Node")
 	if err != nil {
-		service.logger.Error("Failed to create logger for Root Node", err)
+		service.logger.Error("failed to create logger for Root Node", err)
 		return nil, err
 	}
 
 	directoryNodeService, err := service.directoryNodeServiceFactory.New(nil)
 	if err != nil {
-		service.logger.Error("Failed to create Directory Node Service for Root Node", err)
+		service.logger.Error("failed to create Directory Node Service for Root Node", err)
 		return nil, err
 	}
 

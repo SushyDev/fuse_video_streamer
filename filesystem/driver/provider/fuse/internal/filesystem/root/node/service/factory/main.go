@@ -25,15 +25,15 @@ type ServiceFactory struct {
 
 var _ interfaces_fuse.RootNodeServiceFactory = &ServiceFactory{}
 
-func New(loggerFactory interfaces_logger.LoggerFactory) *ServiceFactory {
+func New(loggerFactory interfaces_logger.LoggerFactory) (*ServiceFactory, error) {
 	filesystemClientRepositoryLogger, err := loggerFactory.NewLogger("Filesystem Client Repository")
 	if err != nil {
-		panic(err) // Handle logger creation error appropriately in production code
+		return nil, err
 	}
 
 	filesystemClientRepository, err := repository.New(loggerFactory, filesystemClientRepositoryLogger)
 	if err != nil {
-		panic(err) // Handle repository creation error appropriately in production code
+		return nil, err
 	}
 
 	directoryNodeServiceFactory := factory_directory_node.New(loggerFactory)
@@ -46,7 +46,7 @@ func New(loggerFactory interfaces_logger.LoggerFactory) *ServiceFactory {
 		directoryHandleServiceFactory: directoryHandleServiceFactory,
 
 		loggerFactory: loggerFactory,
-	}
+	}, nil
 }
 
 func (factory *ServiceFactory) New() (interfaces_fuse.RootNodeService, error) {

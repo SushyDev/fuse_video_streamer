@@ -39,7 +39,7 @@ func New(
 
 func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*stream.Stream, error) {
 	if factory.isClosed() {
-		return nil, fmt.Errorf("Factory is closed")
+		return nil, fmt.Errorf("factory is closed")
 	}
 
 	url, err := factory.getStreamUrl(nodeIdentifier)
@@ -59,7 +59,7 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 
 	url, err := fileSystem.GetStreamUrl(identifier)
 	if err != nil {
-		return "", fmt.Errorf("Failed to get video url for node with id %d. %v", identifier, err.Error())
+		return "", fmt.Errorf("failed to get video url for node with id %d. %v", identifier, err.Error())
 	}
 
 	factory.cachedItem = CacheItem{

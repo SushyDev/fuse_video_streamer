@@ -19,14 +19,27 @@ import (
 func main() {
 	// go debug()
 
-	config.Validate()
+	err := config.Validate()
+	if err != nil {
+		panic(err)
+	}
 
-	mountpoint := config.GetMountPoint()
-	volumeName := config.GetVolumeName()
+	mountpoint, err := config.GetMountPoint()
+	if err != nil {
+		panic(err)
+	}
+
+	volumeName, err := config.GetVolumeName()
+	if err != nil {
+		panic(err)
+	}
 
 	zapLoggerFactory := zap_logger.NewFactory()
 
-	fileSystemProvider := filesystem_server_provider_fuse.New(zapLoggerFactory)
+	fileSystemProvider, err := filesystem_server_provider_fuse.New(zapLoggerFactory)
+	if err != nil {
+		panic(err)
+	}
 	fileSystem := filesystem_server_service.New(mountpoint, volumeName, fileSystemProvider)
 
 	go fileSystem.Serve()

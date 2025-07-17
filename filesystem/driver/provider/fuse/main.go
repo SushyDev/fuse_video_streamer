@@ -21,14 +21,17 @@ type FuseService struct {
 
 var _ interfaces_filesystem.FileSystemServerService = &FuseService{}
 
-func New(loggerFactory interfaces_logger.LoggerFactory) *FuseService {
-	rootNodeServiceFactory := factory_root_node_service.New(loggerFactory)
+func New(loggerFactory interfaces_logger.LoggerFactory) (*FuseService, error) {
+	rootNodeServiceFactory, err := factory_root_node_service.New(loggerFactory)
+	if err != nil {
+		return nil, err
+	}
 
 	return &FuseService{
 		rootNodeServiceFactory: rootNodeServiceFactory,
 
 		loggerFactory: loggerFactory,
-	}
+	}, nil
 }
 
 func (service *FuseService) New(mountpoint string, volumeName string) interfaces_filesystem.FileSystemServer {

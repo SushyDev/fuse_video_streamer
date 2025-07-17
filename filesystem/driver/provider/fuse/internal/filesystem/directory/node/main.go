@@ -105,7 +105,7 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 
 	handle, err := node.directoryHandleService.New(node)
 	if err != nil {
-		message := "Failed to open directory"
+		message := "failed to open directory"
 		node.logger.Error(message, err)
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	if err == syscall.ENOENT {
 		return nil, syscall.ENOENT
 	} else if err != nil {
-		node.logger.Error(fmt.Sprintf("Failed to lookup node: %s in directory with ID: %d", lookupRequest.Name, node.GetIdentifier()), err)
+		node.logger.Error(fmt.Sprintf("failed to lookup node: %s in directory with ID: %d", lookupRequest.Name, node.GetIdentifier()), err)
 
 		return nil, syscall.EAGAIN
 	}
@@ -150,7 +150,7 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	case io_fs.ModeSymlink:
 		symlinkLogger, err := node.loggerFactory.NewLogger("Symlink node")
 		if err != nil {
-			node.logger.Error("Failed to create logger for symlink node", err)
+			node.logger.Error("failed to create logger for symlink node", err)
 			return nil, err
 		}
 
@@ -174,7 +174,7 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 
 	err := fileSystem.Remove(node.identifier, removeRequest.Name)
 	if err != nil {
-		message := fmt.Sprintf("Failed to remove %s", removeRequest.Name)
+		message := fmt.Sprintf("failed to remove %s", removeRequest.Name)
 		node.logger.Error(message, err)
 		return err
 	}
@@ -199,7 +199,7 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 
 	err := fileSystem.Rename(node.GetIdentifier(), request.OldName, newDirectory.GetIdentifier(), request.NewName)
 	if err != nil {
-		message := fmt.Sprintf("Failed to rename %s to %s", request.OldName, request.NewName)
+		message := fmt.Sprintf("failed to rename %s to %s", request.OldName, request.NewName)
 		node.logger.Error(message, err)
 		return err
 	}
@@ -219,28 +219,28 @@ func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, respo
 
 	err := fileSystem.Create(node.GetIdentifier(), request.Name, io_fs.FileMode(request.Mode))
 	if err != nil {
-		message := fmt.Sprintf("Failed to create %s", request.Name)
+		message := fmt.Sprintf("failed to create %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, nil, err
 	}
 
 	foundNode, err := fileSystem.Lookup(node.GetIdentifier(), request.Name)
 	if err != nil {
-		message := fmt.Sprintf("Failed to lookup %s", request.Name)
+		message := fmt.Sprintf("failed to lookup %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, nil, err
 	}
 
 	fileNode, err := node.fileNodeService.New(foundNode.GetId())
 	if err != nil {
-		message := fmt.Sprintf("Failed to create file node %s", request.Name)
+		message := fmt.Sprintf("failed to create file node %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, nil, err
 	}
 
 	handle, err := fileNode.Open(ctx, &fuse.OpenRequest{}, &fuse.OpenResponse{})
 	if err != nil {
-		message := fmt.Sprintf("Failed to open file node %s", request.Name)
+		message := fmt.Sprintf("failed to open file node %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, nil, err
 	}
@@ -260,7 +260,7 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 
 	newDir, err := fileSystem.MkDir(node.GetIdentifier(), request.Name)
 	if err != nil {
-		message := fmt.Sprintf("Failed to mkdir %s", request.Name)
+		message := fmt.Sprintf("failed to mkdir %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, err
 	}
@@ -278,7 +278,7 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 
 	oldFile, ok := oldNode.(interfaces_fuse.StreamableNode)
 	if !ok {
-		message := fmt.Sprintf("Not a streamable node: %s", oldNode)
+		message := fmt.Sprintf("not a streamable node: %s", oldNode)
 		node.logger.Error(message, nil)
 		return nil, syscall.ENOSYS
 	}
@@ -287,7 +287,7 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 
 	err := fileSystem.Link(node.GetIdentifier(), request.NewName, oldFile.GetIdentifier())
 	if err != nil {
-		message := fmt.Sprintf("Failed to link %s", request.NewName)
+		message := fmt.Sprintf("failed to link %s", request.NewName)
 		node.logger.Error(message, err)
 		return nil, err
 	}

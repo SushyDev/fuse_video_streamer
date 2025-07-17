@@ -41,17 +41,21 @@ func (symlink *Symlink) Readlink(ctx context.Context, req *fuse.ReadlinkRequest)
 
 	linkPath, err := fileSystem.ReadLink(symlink.identifier)
 	if err != nil {
-		message := fmt.Sprintf("Failed to read symlink with identifier %d and path %s", symlink.identifier, linkPath)
+		message := fmt.Sprintf("failed to read symlink with identifier %d and path %s", symlink.identifier, linkPath)
 		symlink.logger.Error(message, err)
 
 		return "", syscall.ENOENT
 	}
 
-	mountPath := config.GetMountPoint()
+	mountPath, err := config.GetMountPoint()
+	if err != nil {
+		symlink.logger.Error("failed to get mount point", err)
+		return "", syscall.ENOENT
+	}
 
 	path, err := filepath.Abs(filepath.Join(mountPath, symlink.client.GetName(), linkPath))
 	if err != nil {
-		symlink.logger.Error("Failed to get absolute path for symlink", err)
+		symlink.logger.Error("failed to get absolute path for symlink", err)
 
 		return "", syscall.ENOENT
 	}

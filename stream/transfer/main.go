@@ -135,7 +135,7 @@ func (transfer *Transfer) Close() error {
 	if transfer.connection != nil {
 		err := transfer.connection.Close()
 		if err != nil {
-			fmt.Println("Error closing connection:", err)
+			fmt.Println("error closing connection:", err)
 		}
 	}
 

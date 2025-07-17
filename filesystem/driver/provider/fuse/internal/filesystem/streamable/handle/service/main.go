@@ -49,13 +49,13 @@ func (service *Service) New() (interfaces_fuse.StreamableHandle, error) {
 
 	logger, err := service.loggerFactory.NewLogger("File Handle")
 	if err != nil {
-		service.logger.Error("Failed to create logger for Streamable Handle", err)
+		service.logger.Error("failed to create logger for Streamable Handle", err)
 		return nil, err
 	}
 
 	stream, err := service.streamFactory.NewStream(service.node.GetIdentifier(), service.node.GetSize())
 	if err != nil {
-		service.logger.Error("Failed to create stream for Streamable Handle", err)
+		service.logger.Error("failed to create stream for Streamable Handle", err)
 		return nil, err
 	}
 

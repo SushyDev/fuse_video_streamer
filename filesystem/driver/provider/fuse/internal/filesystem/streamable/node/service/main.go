@@ -52,7 +52,7 @@ func New(
 
 func (service *Service) New(identifier uint64) (interfaces_fuse.StreamableNode, error) {
 	if service.IsClosed() {
-		return nil, fmt.Errorf("Service is closed")
+		return nil, fmt.Errorf("service is closed")
 	}
 
 	service.mu.Lock()

@@ -62,7 +62,7 @@ func New(
 
 func (service *Service) New(identifier uint64) (interfaces_fuse.DirectoryNode, error) {
 	if service.IsClosed() {
-		return nil, fmt.Errorf("Service is closed")
+		return nil, fmt.Errorf("service is closed")
 	}
 
 	service.mu.Lock()
@@ -70,31 +70,31 @@ func (service *Service) New(identifier uint64) (interfaces_fuse.DirectoryNode, e
 
 	logger, err := service.loggerFactory.NewLogger("Root Node")
 	if err != nil {
-		service.logger.Error("Failed to create logger for new directory node", err)
+		service.logger.Error("failed to create logger for new directory node", err)
 		return nil, err
 	}
 
 	directoryNodeService, err := service.directoryNodeServiceFactory.New(service.client)
 	if err != nil {
-		service.logger.Error("Failed to create directory node service", err)
+		service.logger.Error("failed to create directory node service", err)
 		return nil, err
 	}
 
 	streamableNodeService, err := service.streamableNodeServiceFactory.New(service.client)
 	if err != nil {
-		service.logger.Error("Failed to create streamable node service", err)
+		service.logger.Error("failed to create streamable node service", err)
 		return nil, err
 	}
 
 	fileNodeService, err := service.fileNodeServiceFactory.New(service.client)
 	if err != nil {
-		service.logger.Error("Failed to create file node service", err)
+		service.logger.Error("failed to create file node service", err)
 		return nil, err
 	}
 
 	newNode, err := node.New(service.client, service.loggerFactory, directoryNodeService, streamableNodeService, fileNodeService, logger, identifier)
 	if err != nil {
-		service.logger.Error("Failed to create new directory node", err)
+		service.logger.Error("failed to create new directory node", err)
 		return nil, err
 	}
 

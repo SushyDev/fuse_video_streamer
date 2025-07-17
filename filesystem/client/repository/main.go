@@ -21,7 +21,10 @@ type clientRepository struct {
 var _ interfaces_fuse.ClientRepository = &clientRepository{}
 
 func New(loggerFactory interfaces_logger.LoggerFactory, logger interfaces_logger.Logger) (interfaces_fuse.ClientRepository, error) {
-	fileSystemProviders := config.GetFileServers()
+	fileSystemProviders, err := config.GetFileServers()
+	if err != nil {
+		return nil, err
+	}
 
 	var providers []interfaces_fuse.Client
 	for _, fileSystemProvider := range fileSystemProviders {
