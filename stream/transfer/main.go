@@ -2,7 +2,6 @@ package transfer
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -73,7 +72,6 @@ func (transfer *Transfer) start() {
 	case <-transfer.context.Done():
 		if transfer.connection != nil {
 			transfer.connection.Close()
-			transfer.connection = nil
 		}
 	case err := <-done:
 		switch err {
@@ -135,7 +133,7 @@ func (transfer *Transfer) Close() error {
 	if transfer.connection != nil {
 		err := transfer.connection.Close()
 		if err != nil {
-			fmt.Println("error closing connection:", err)
+			transfer.logger.Error("Error closing connection", err)
 		}
 	}
 

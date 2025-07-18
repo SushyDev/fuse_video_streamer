@@ -83,12 +83,12 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openResponse *fuse.OpenResponse) (fs.Handle, error) {
-	node.mu.RLock()
-	defer node.mu.RUnlock()
-
 	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
+
+	node.mu.RLock()
+	defer node.mu.RUnlock()
 
 	handle, err := node.handleService.New()
 	if err != nil {

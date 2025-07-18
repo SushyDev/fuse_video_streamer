@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
@@ -21,8 +20,6 @@ type Service struct {
 
 	loggerFactory                  interfaces_logger.LoggerFactory
 	streamableHandleServiceFactory interfaces_fuse.StreamableHandleServiceFactory
-
-	mu sync.RWMutex
 
 	closed atomic.Bool
 }
@@ -52,11 +49,9 @@ func New(
 
 func (service *Service) New(identifier uint64) (interfaces_fuse.StreamableNode, error) {
 	if service.IsClosed() {
+		service.logger.Warn("Attempted to create a new Streamable Node after service was closed")
 		return nil, fmt.Errorf("service is closed")
 	}
-
-	service.mu.Lock()
-	defer service.mu.Unlock()
 
 	fileSystem := service.client.GetFileSystem()
 

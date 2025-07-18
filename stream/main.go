@@ -110,12 +110,12 @@ func (stream *Stream) Id() string {
 }
 
 func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
-	stream.mu.Lock()
-	defer stream.mu.Unlock()
-
 	if stream.isClosed() {
 		return 0, fmt.Errorf("stream is closed")
 	}
+
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
 
 	if stream.buffer == nil {
 		return 0, fmt.Errorf("buffer is closed")

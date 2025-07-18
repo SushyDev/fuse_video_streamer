@@ -12,6 +12,7 @@ import (
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/pool"
+
 	"fuse_video_streamer/stream"
 
 	"github.com/anacrolix/fuse"
@@ -59,19 +60,29 @@ func (handle *Handle) GetIdentifier() uint64 {
 }
 
 func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, readResponse *fuse.ReadResponse) error {
-	handle.mu.RLock()
-	defer handle.mu.RUnlock()
-
 	if handle.IsClosed() {
+		message := fmt.Sprintf("handle %d is closed, cannot read from video stream", handle.id)
+		handle.logger.Error(message, nil)
 		return syscall.ENOENT
 	}
 
-	if handle.stream == nil {
+	handle.mu.RLock()
+	stream := handle.stream
+	handle.mu.RUnlock()
+
+	if stream == nil {
 		message := fmt.Sprintf("no video stream for handle %d, closing video stream", handle.id)
 		handle.logger.Error(message, nil)
-
 		handle.Close()
+		return syscall.ENOENT
+	}
 
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
+
+	if handle.IsClosed() {
+		message := fmt.Sprintf("handle %d is closed, cannot read from video stream", handle.id)
+		handle.logger.Error(message, nil)
 		return syscall.ENOENT
 	}
 
@@ -80,7 +91,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	buffer := pool.GetBuffer(int64(fileSize))
 	defer pool.PutBuffer(buffer)
 
-	bytesRead, err := handle.stream.ReadAt(buffer[:readRequest.Size], readRequest.Offset)
+	bytesRead, err := stream.ReadAt(buffer[:readRequest.Size], readRequest.Offset)
 
 	switch err {
 
@@ -96,8 +107,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		message := fmt.Sprintf("failed to read video stream for handle %d, closing video stream", handle.id)
 		handle.logger.Error(message, err)
 
-		handle.stream.Close()
-		handle.stream = nil
+		stream.Close()
 
 		return err
 	}
