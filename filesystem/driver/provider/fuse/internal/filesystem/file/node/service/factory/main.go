@@ -22,7 +22,7 @@ func New(loggerFactory interfaces_logger.LoggerFactory) *Factory {
 	}
 }
 
-func (factory *Factory) New(client factory_filesystem_client.Client) (interfaces_fuse.FileNodeService, error) {
+func (factory *Factory) New(client factory_filesystem_client.Client, tree interfaces_fuse.Tree) (interfaces_fuse.FileNodeService, error) {
 	fileNodeServiceLogger, err := factory.loggerFactory.NewLogger("File Node Service")
 	if err != nil {
 		return nil, err
@@ -30,5 +30,5 @@ func (factory *Factory) New(client factory_filesystem_client.Client) (interfaces
 
 	fileHandleServiceFactory := factory_file_handle_service.New(factory.loggerFactory)
 
-	return service_file_node.New(client, fileNodeServiceLogger, factory.loggerFactory, fileHandleServiceFactory)
+	return service_file_node.New(client, fileHandleServiceFactory, factory.loggerFactory, fileNodeServiceLogger, tree)
 }

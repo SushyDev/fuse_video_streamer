@@ -14,17 +14,15 @@ import (
 )
 
 type Service struct {
-	client interfaces_filesystem_client.Client
-
+	client                       interfaces_filesystem_client.Client
 	directoryNodeServiceFactory  interfaces_fuse.DirectoryNodeServiceFactory
 	streamableNodeServiceFactory interfaces_fuse.StreamableNodeServiceFactory
 	fileNodeServiceFactory       interfaces_fuse.FileNodeServiceFactory
-
-	loggerFactory interfaces_logger.LoggerFactory
+	loggerFactory                interfaces_logger.LoggerFactory
+	logger                       interfaces_logger.Logger
+	tree                         interfaces_fuse.Tree
 
 	registry *registry.Registry
-
-	logger interfaces_logger.Logger
 
 	mu sync.RWMutex
 
@@ -40,27 +38,26 @@ func New(
 	fileNodeServiceFactory interfaces_fuse.FileNodeServiceFactory,
 	loggerFactory interfaces_logger.LoggerFactory,
 	logger interfaces_logger.Logger,
+	tree interfaces_fuse.Tree,
 ) (interfaces_fuse.DirectoryNodeService, error) {
 	registry := registry.GetInstance(client)
 
 	service := &Service{
-		client: client,
-
+		client:                       client,
 		directoryNodeServiceFactory:  directoryNodeServiceFactory,
 		streamableNodeServiceFactory: streamableNodeServiceFactory,
 		fileNodeServiceFactory:       fileNodeServiceFactory,
-
-		loggerFactory: loggerFactory,
+		loggerFactory:                loggerFactory,
+		tree:                         tree,
+		logger:                       logger,
 
 		registry: registry,
-
-		logger: logger,
 	}
 
 	return service, nil
 }
 
-func (service *Service) New(identifier uint64) (interfaces_fuse.DirectoryNode, error) {
+func (service *Service) New(parentDirectoryNode interfaces_fuse.DirectoryNode, remoteIdentifier uint64) (interfaces_fuse.DirectoryNode, error) {
 	if service.IsClosed() {
 		return nil, fmt.Errorf("service is closed")
 	}
@@ -74,27 +71,35 @@ func (service *Service) New(identifier uint64) (interfaces_fuse.DirectoryNode, e
 		return nil, err
 	}
 
-	directoryNodeService, err := service.directoryNodeServiceFactory.New(service.client)
+	directoryNodeService, err := service.directoryNodeServiceFactory.New(service.client, service.tree)
 	if err != nil {
 		service.logger.Error("failed to create directory node service", err)
 		return nil, err
 	}
 
-	streamableNodeService, err := service.streamableNodeServiceFactory.New(service.client)
+	streamableNodeService, err := service.streamableNodeServiceFactory.New(service.client, service.tree)
 	if err != nil {
 		service.logger.Error("failed to create streamable node service", err)
 		return nil, err
 	}
 
-	fileNodeService, err := service.fileNodeServiceFactory.New(service.client)
+	fileNodeService, err := service.fileNodeServiceFactory.New(service.client, service.tree)
 	if err != nil {
 		service.logger.Error("failed to create file node service", err)
 		return nil, err
 	}
 
-	newNode, err := node.New(service.client, service.loggerFactory, directoryNodeService, streamableNodeService, fileNodeService, logger, identifier)
+	identifier := service.tree.GetNextIdentifier()
+
+	newNode, err := node.New(service.client, service.loggerFactory, directoryNodeService, streamableNodeService, fileNodeService, logger, identifier, remoteIdentifier)
 	if err != nil {
 		service.logger.Error("failed to create new directory node", err)
+		return nil, err
+	}
+
+	err = service.tree.RegisterNodeOnIdentifier(identifier, newNode)
+	if err != nil {
+		service.logger.Error("failed to register new directory node in tree", err)
 		return nil, err
 	}
 

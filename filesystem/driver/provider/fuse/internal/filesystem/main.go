@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"fmt"
 	"sync/atomic"
 
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
@@ -14,7 +15,9 @@ import (
 )
 
 type FileSystem struct {
-	rootNodeService interfaces_fuse.RootNodeService
+	tree interfaces_fuse.Tree
+
+	rootNode interfaces_fuse.RootNode
 
 	logger interfaces_logger.Logger
 
@@ -23,19 +26,36 @@ type FileSystem struct {
 
 var _ interfaces_fuse.FuseFileSystem = &FileSystem{}
 
-func New(rootNodeService interfaces_fuse.RootNodeService, logger interfaces_logger.Logger) interfaces_fuse.FuseFileSystem {
+func New(tree interfaces_fuse.Tree, rootNodeService interfaces_fuse.RootNodeService, logger interfaces_logger.Logger) (interfaces_fuse.FuseFileSystem, error) {
 	metricsCollection := metrics.GetMetricsCollection()
 	go metricsCollection.StartWebDebugger()
 
-	return &FileSystem{
-		rootNodeService: rootNodeService,
+	if logger == nil {
+		return nil, fmt.Errorf("logger cannot be nil")
+	}
+
+	if rootNodeService == nil {
+		return nil, fmt.Errorf("root Node Service cannot be nil")
+	}
+
+	rootNode, err := rootNodeService.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create root node: %w", err)
+	}
+
+	fileSystem := &FileSystem{
+		tree: tree,
+
+		rootNode: rootNode,
 
 		logger: logger,
 	}
+
+	return fileSystem, nil
 }
 
 func (fileSystem *FileSystem) Root() (fs.Node, error) {
-	return fileSystem.rootNodeService.New()
+	return fileSystem.rootNode, nil
 }
 
 func (fileSystem *FileSystem) Destroy() {
@@ -50,9 +70,7 @@ func (fileSystem *FileSystem) Close() error {
 
 	fileSystem.logger.Info("Closing")
 
-	fileSystem.rootNodeService.Close()
-	fileSystem.rootNodeService = nil
-
+	fileSystem.rootNode.Close()
 	registry.Close()
 
 	fileSystem.logger.Info("Closed")

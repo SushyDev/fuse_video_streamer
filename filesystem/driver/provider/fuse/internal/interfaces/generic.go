@@ -1,7 +1,11 @@
 package interfaces
 
-type useIntentifier interface {
+type useIdentifier interface {
 	GetIdentifier() uint64
+}
+
+type useRemoteIdentifier interface {
+	GetRemoteIdentifier() uint64
 }
 
 type useClosable interface {

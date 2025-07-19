@@ -52,7 +52,7 @@ func (handle *Handle) ReadAll(ctx context.Context) ([]byte, error) {
 	client := handle.node.GetClient()
 	fileSystem := client.GetFileSystem()
 
-	data, err := fileSystem.ReadFile(handle.node.GetIdentifier(), 0, handle.node.GetSize())
+	data, err := fileSystem.ReadFile(handle.node.GetRemoteIdentifier(), 0, handle.node.GetSize())
 
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	client := handle.node.GetClient()
 	fileSystem := client.GetFileSystem()
 
-	data, err := fileSystem.ReadFile(handle.node.GetIdentifier(), uint64(readRequest.Offset), uint64(readRequest.Size))
+	data, err := fileSystem.ReadFile(handle.node.GetRemoteIdentifier(), uint64(readRequest.Offset), uint64(readRequest.Size))
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (handle *Handle) Write(ctx context.Context, writeRequest *fuse.WriteRequest
 	client := handle.node.GetClient()
 	fileSystem := client.GetFileSystem()
 
-	bytesWritten, err := fileSystem.WriteFile(handle.node.GetIdentifier(), uint64(writeRequest.Offset), writeRequest.Data)
+	bytesWritten, err := fileSystem.WriteFile(handle.node.GetRemoteIdentifier(), uint64(writeRequest.Offset), writeRequest.Data)
 	if err != nil {
 		return err
 	}

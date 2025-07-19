@@ -53,7 +53,7 @@ func (service *Service) New() (interfaces_fuse.StreamableHandle, error) {
 		return nil, err
 	}
 
-	stream, err := service.streamFactory.NewStream(service.node.GetIdentifier(), service.node.GetSize())
+	stream, err := service.streamFactory.NewStream(service.node.GetRemoteIdentifier(), service.node.GetSize())
 	if err != nil {
 		service.logger.Error("failed to create stream for Streamable Handle", err)
 		return nil, err

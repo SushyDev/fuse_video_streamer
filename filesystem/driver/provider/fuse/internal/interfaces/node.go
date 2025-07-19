@@ -19,7 +19,7 @@ type Node interface {
 // --- Root
 
 type RootNodeServiceFactory interface {
-	New() (RootNodeService, error)
+	New(Tree) (RootNodeService, error)
 }
 
 type RootNodeService interface {
@@ -30,6 +30,7 @@ type RootNodeService interface {
 
 type RootNode interface {
 	useClosable
+	useIdentifier
 
 	Node
 
@@ -40,16 +41,20 @@ type RootNode interface {
 // --- Directory
 
 type DirectoryNodeServiceFactory interface {
-	New(interfaces_filesystem_client.Client) (DirectoryNodeService, error)
+	New(interfaces_filesystem_client.Client, Tree) (DirectoryNodeService, error)
 }
 
 type DirectoryNodeService interface {
 	useClosable
 
-	New(identifier uint64) (DirectoryNode, error)
+	New(parentDirectoryNode DirectoryNode, remoteIdentifier uint64) (DirectoryNode, error)
 }
 
 type DirectoryNode interface {
+	useClosable
+	useIdentifier
+	useRemoteIdentifier
+
 	Node
 
 	fs.NodeOpener
@@ -66,16 +71,20 @@ type DirectoryNode interface {
 // --- Streamable
 
 type StreamableNodeServiceFactory interface {
-	New(interfaces_filesystem_client.Client) (StreamableNodeService, error)
+	New(interfaces_filesystem_client.Client, Tree) (StreamableNodeService, error)
 }
 
 type StreamableNodeService interface {
 	useClosable
 
-	New(identifier uint64) (StreamableNode, error)
+	New(parentDirectoryNode DirectoryNode, remoteIdentifier uint64) (StreamableNode, error)
 }
 
 type StreamableNode interface {
+	useClosable
+	useIdentifier
+	useRemoteIdentifier
+
 	Node
 
 	fs.NodeOpener
@@ -87,16 +96,20 @@ type StreamableNode interface {
 // --- File
 
 type FileNodeServiceFactory interface {
-	New(interfaces_filesystem_client.Client) (FileNodeService, error)
+	New(interfaces_filesystem_client.Client, Tree) (FileNodeService, error)
 }
 
 type FileNodeService interface {
 	useClosable
 
-	New(identifier uint64) (FileNode, error)
+	New(parentDirectoryNode DirectoryNode, remoteIdentifier uint64) (FileNode, error)
 }
 
 type FileNode interface {
+	useClosable
+	useIdentifier
+	useRemoteIdentifier
+
 	Node
 
 	fs.NodeOpener

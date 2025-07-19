@@ -9,6 +9,7 @@ import (
 
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/server"
+	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/tree"
 
 	"github.com/anacrolix/fuse"
 )
@@ -34,10 +35,10 @@ func New(loggerFactory interfaces_logger.LoggerFactory) (*FuseService, error) {
 	}, nil
 }
 
-func (service *FuseService) New(mountpoint string, volumeName string) interfaces_filesystem.FileSystemServer {
+func (service *FuseService) New(mountpoint string, volumeName string) (interfaces_filesystem.FileSystemServer, error) {
 	logger, err := service.loggerFactory.NewLogger("Fuse")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	connection, err := fuse.Mount(
@@ -54,22 +55,27 @@ func (service *FuseService) New(mountpoint string, volumeName string) interfaces
 	)
 
 	if err != nil {
-		logger.Fatal("failed to mount filesystem", err)
+		return nil, err
 	}
 
 	logger.Info("Successfully created connection")
 
-	rootNodeService, err := service.rootNodeServiceFactory.New()
+	tree := tree.New()
+
+	rootNodeService, err := service.rootNodeServiceFactory.New(tree)
 	if err != nil {
-		logger.Fatal("failed to create root node service", err)
+		return nil, err
 	}
 
 	fileSystemLogger, err := service.loggerFactory.NewLogger("File System")
 	if err != nil {
-		logger.Fatal("failed to create file system logger", err)
+		return nil, err
 	}
 
-	fileSystem := filesystem.New(rootNodeService, fileSystemLogger)
+	fileSystem, err := filesystem.New(tree, rootNodeService, fileSystemLogger)
+	if err != nil {
+		return nil, err
+	}
 
-	return server.New(mountpoint, connection, fileSystem, logger)
+	return server.New(mountpoint, connection, fileSystem, logger), nil
 }

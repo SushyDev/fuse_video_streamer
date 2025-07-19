@@ -31,7 +31,10 @@ type Node struct {
 	loggerFactory interfaces_logger.LoggerFactory
 
 	client     interfaces_filesystem_client.Client
+
 	identifier uint64
+	remoteIdentifier uint64
+
 
 	handles []interfaces_fuse.DirectoryHandle
 
@@ -52,6 +55,7 @@ func New(
 	fileNodeService interfaces_fuse.FileNodeService,
 	logger interfaces_logger.Logger,
 	identifier uint64,
+	remoteIdentifier uint64,
 ) (*Node, error) {
 	directoryHandleServiceFactory := factory_directory_handle_service.New(loggerFactory)
 
@@ -66,6 +70,7 @@ func New(
 
 		client:     client,
 		identifier: identifier,
+		remoteIdentifier: remoteIdentifier,
 
 		logger: logger,
 	}
@@ -76,6 +81,10 @@ func New(
 
 func (node *Node) GetIdentifier() uint64 {
 	return node.identifier
+}
+
+func (node *Node) GetRemoteIdentifier() uint64 {
+	return node.remoteIdentifier
 }
 
 func (node *Node) GetClient() interfaces_filesystem_client.Client {
@@ -124,28 +133,33 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	defer node.mu.RUnlock()
 
 	client_filesystem := node.client.GetFileSystem()
-	foundNode, err := client_filesystem.Lookup(node.GetIdentifier(), lookupRequest.Name)
+	foundNode, err := client_filesystem.Lookup(node.GetRemoteIdentifier(), lookupRequest.Name)
 
 	if err == syscall.ENOENT {
+		node.logger.Error(fmt.Sprintf("node: %s not found in directory with ID: %d", lookupRequest.Name, node.GetRemoteIdentifier()), nil)
+
 		return nil, syscall.ENOENT
 	} else if err != nil {
-		node.logger.Error(fmt.Sprintf("failed to lookup node: %s in directory with ID: %d", lookupRequest.Name, node.GetIdentifier()), err)
+		node.logger.Error(fmt.Sprintf("failed to lookup node: %s in directory with ID: %d", lookupRequest.Name, node.GetRemoteIdentifier()), err)
 
 		return nil, syscall.EAGAIN
 	}
 
 	if foundNode == nil {
+		node.logger.Error(fmt.Sprintf("node: %s not found in directory with ID: %d", lookupRequest.Name, node.GetRemoteIdentifier()), nil)
 		return nil, syscall.ENOENT
 	}
 
+	node.logger.Debug(fmt.Sprintf("found node: %s with ID: %d in directory with ID: %d", foundNode.GetName(), foundNode.GetId(), node.GetRemoteIdentifier()))
+
 	switch foundNode.GetMode() {
 	case io_fs.ModeDir:
-		return node.directoryNodeService.New(foundNode.GetId())
+		return node.directoryNodeService.New(node, foundNode.GetId())
 	case io_fs.FileMode(0):
 		if foundNode.GetStreamable() {
-			return node.streamableNodeService.New(foundNode.GetId())
+			return node.streamableNodeService.New(node, foundNode.GetId())
 		} else {
-			return node.fileNodeService.New(foundNode.GetId())
+			return node.fileNodeService.New(node, foundNode.GetId())
 		}
 	case io_fs.ModeSymlink:
 		symlinkLogger, err := node.loggerFactory.NewLogger("Symlink node")
@@ -197,7 +211,7 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 
 	fileSystem := node.client.GetFileSystem()
 
-	err := fileSystem.Rename(node.GetIdentifier(), request.OldName, newDirectory.GetIdentifier(), request.NewName)
+	err := fileSystem.Rename(node.GetRemoteIdentifier(), request.OldName, newDirectory.GetRemoteIdentifier(), request.NewName)
 	if err != nil {
 		message := fmt.Sprintf("failed to rename %s to %s", request.OldName, request.NewName)
 		node.logger.Error(message, err)
@@ -217,21 +231,21 @@ func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, respo
 
 	fileSystem := node.client.GetFileSystem()
 
-	err := fileSystem.Create(node.GetIdentifier(), request.Name, io_fs.FileMode(request.Mode))
+	err := fileSystem.Create(node.GetRemoteIdentifier(), request.Name, io_fs.FileMode(request.Mode))
 	if err != nil {
 		message := fmt.Sprintf("failed to create %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, nil, err
 	}
 
-	foundNode, err := fileSystem.Lookup(node.GetIdentifier(), request.Name)
+	foundNode, err := fileSystem.Lookup(node.GetRemoteIdentifier(), request.Name)
 	if err != nil {
 		message := fmt.Sprintf("failed to lookup %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, nil, err
 	}
 
-	fileNode, err := node.fileNodeService.New(foundNode.GetId())
+	fileNode, err := node.fileNodeService.New(node, foundNode.GetId())
 	if err != nil {
 		message := fmt.Sprintf("failed to create file node %s", request.Name)
 		node.logger.Error(message, err)
@@ -258,14 +272,14 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 
 	fileSystem := node.client.GetFileSystem()
 
-	newDir, err := fileSystem.MkDir(node.GetIdentifier(), request.Name)
+	remoteDirectoryNode, err := fileSystem.MkDir(node.GetRemoteIdentifier(), request.Name)
 	if err != nil {
 		message := fmt.Sprintf("failed to mkdir %s", request.Name)
 		node.logger.Error(message, err)
 		return nil, err
 	}
 
-	return node.directoryNodeService.New(newDir.GetId())
+	return node.directoryNodeService.New(node, remoteDirectoryNode.GetId())
 }
 
 func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode fs.Node) (fs.Node, error) {
@@ -285,7 +299,7 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 
 	fileSystem := node.client.GetFileSystem()
 
-	err := fileSystem.Link(node.GetIdentifier(), request.NewName, oldFile.GetIdentifier())
+	err := fileSystem.Link(node.GetRemoteIdentifier(), request.NewName, oldFile.GetRemoteIdentifier())
 	if err != nil {
 		message := fmt.Sprintf("failed to link %s", request.NewName)
 		node.logger.Error(message, err)

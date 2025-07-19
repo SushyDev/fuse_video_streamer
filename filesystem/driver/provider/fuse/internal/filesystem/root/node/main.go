@@ -27,6 +27,10 @@ type node struct {
 
 	logger interfaces_logger.Logger
 
+	tree interfaces_fuse.Tree
+
+	identifier uint64
+
 	mu sync.RWMutex
 
 	closed atomic.Bool
@@ -41,6 +45,8 @@ func New(
 	loggerFactory interfaces_logger.LoggerFactory,
 	directoryNodeService interfaces_fuse.DirectoryNodeService,
 	logger interfaces_logger.Logger,
+	tree interfaces_fuse.Tree,
+	identifier uint64,
 ) (*node, error) {
 	return &node{
 		fileSystemProviderRepository: fileSystemProviderRepository,
@@ -51,12 +57,16 @@ func New(
 		loggerFactory:        loggerFactory,
 		directoryNodeService: directoryNodeService,
 
+		tree: tree,
+
 		logger: logger,
+
+		identifier: identifier,
 	}, nil
 }
 
 func (node *node) GetIdentifier() uint64 {
-	return 0
+	return node.identifier
 }
 
 func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
@@ -105,12 +115,14 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return nil, err
 	}
 
-	directoryNodeService, err := node.directoryNodeServiceFactory.New(client)
+	directoryNodeService, err := node.directoryNodeServiceFactory.New(client, node.tree)
 	if err != nil {
+		message := fmt.Sprintf("failed to create directory node service for client %s", lookupRequest.Name)
+		node.logger.Error(message, err)
 		return nil, err
 	}
 
-	return directoryNodeService.New(root.GetId())
+	return directoryNodeService.New(nil, root.GetId())
 }
 
 func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {

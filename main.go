@@ -40,7 +40,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fileSystem := filesystem_server_service.New(mountpoint, volumeName, fuseService)
+
+	fileSystem, err := filesystem_server_service.New(mountpoint, volumeName, fuseService)
+	if err != nil {
+		panic(err)
+	}
 
 	go fileSystem.Serve()
 

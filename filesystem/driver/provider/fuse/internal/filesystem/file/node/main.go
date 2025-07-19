@@ -27,6 +27,7 @@ type Node struct {
 	logger  interfaces_logger.Logger
 
 	identifier uint64
+	remoteIdentifier uint64
 	size       uint64
 
 	handles []interfaces_fuse.FileHandle
@@ -45,6 +46,7 @@ func New(
 	metric *metrics.FileNodeMetrics,
 	logger interfaces_logger.Logger,
 	identifier uint64,
+	remoteIdentifier uint64,
 	size uint64,
 ) *Node {
 	node := &Node{
@@ -57,6 +59,7 @@ func New(
 		logger:  logger,
 
 		identifier: identifier,
+		remoteIdentifier: remoteIdentifier,
 		size:       size,
 	}
 
@@ -65,6 +68,10 @@ func New(
 
 func (node *Node) GetIdentifier() uint64 {
 	return node.identifier
+}
+
+func (node *Node) GetRemoteIdentifier() uint64 {
+	return node.remoteIdentifier
 }
 
 func (node *Node) GetSize() uint64 {

@@ -22,7 +22,7 @@ func New(loggerFactory interfaces_logger.LoggerFactory) *Factory {
 	}
 }
 
-func (factory *Factory) New(client interfaces_filesystem_client.Client) (interfaces_fuse.StreamableNodeService, error) {
+func (factory *Factory) New(client interfaces_filesystem_client.Client, tree interfaces_fuse.Tree) (interfaces_fuse.StreamableNodeService, error) {
 	streamableNodeService, err := factory.loggerFactory.NewLogger("Streamable Node Service")
 	if err != nil {
 		return nil, err
@@ -30,5 +30,5 @@ func (factory *Factory) New(client interfaces_filesystem_client.Client) (interfa
 
 	streamableHandleServiceFactory := factory_streamable_handle.New(factory.loggerFactory)
 
-	return service_streamable_handle.New(client, streamableNodeService, factory.loggerFactory, streamableHandleServiceFactory)
+	return service_streamable_handle.New(client, streamableHandleServiceFactory, factory.loggerFactory, streamableNodeService, tree)
 }

@@ -44,7 +44,7 @@ type DirectoryHandleService interface {
 }
 
 type DirectoryHandle interface {
-	useIntentifier
+	useIdentifier
 
 	Handle
 
@@ -65,7 +65,7 @@ type StreamableHandleService interface {
 }
 
 type StreamableHandle interface {
-	useIntentifier
+	useIdentifier
 
 	Handle
 
@@ -87,7 +87,7 @@ type FileHandleService interface {
 }
 
 type FileHandle interface {
-	useIntentifier
+	useIdentifier
 
 	Handle
 

@@ -38,7 +38,7 @@ func GetInstance(client interfaces_filesystem_client.Client) *Registry {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	instance := &Registry{
-		nodes:  []interfaces_fuse.Node{},
+		nodes:  make([]interfaces_fuse.Node, 0),
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -49,6 +49,18 @@ func GetInstance(client interfaces_filesystem_client.Client) *Registry {
 }
 
 func (registry *Registry) Add(node interfaces_fuse.Node) {
+	if node == nil {
+		return
+	}
+
+	if registry == nil {
+		return
+	}
+
+	if registry.nodes == nil {
+		registry.nodes = make([]interfaces_fuse.Node, 0)
+	}
+
 	registry.nodes = append(registry.nodes, node)
 }
 
@@ -64,8 +76,6 @@ func (registry *Registry) CloseNodes() {
 			node = nil
 		}()
 	}
-
-	registry.nodes = nil
 
 	wg.Wait()
 }

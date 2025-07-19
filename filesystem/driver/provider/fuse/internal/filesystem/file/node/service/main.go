@@ -17,11 +17,11 @@ import (
 )
 
 type Service struct {
-	client interfaces_filesystem_client.Client
-	logger interfaces_logger.Logger
-
-	loggerFactory            interfaces_logger.LoggerFactory
+	client                   interfaces_filesystem_client.Client
 	fileHandleServiceFactory interfaces_fuse.FileHandleServiceFactory
+	loggerFactory            interfaces_logger.LoggerFactory
+	logger                   interfaces_logger.Logger
+	tree                     interfaces_fuse.Tree
 
 	registry *registry.Registry
 
@@ -36,24 +36,25 @@ var clients = []api.FileSystemServiceClient{}
 
 func New(
 	client interfaces_filesystem_client.Client,
-	logger interfaces_logger.Logger,
-	loggerFactory interfaces_logger.LoggerFactory,
 	fileHandleFactory interfaces_fuse.FileHandleServiceFactory,
+	loggerFactory interfaces_logger.LoggerFactory,
+	logger interfaces_logger.Logger,
+	tree interfaces_fuse.Tree,
 ) (interfaces_fuse.FileNodeService, error) {
 	registry := registry.GetInstance(client)
 
 	return &Service{
-		client: client,
-		logger: logger,
-
-		loggerFactory:            loggerFactory,
+		client:                   client,
 		fileHandleServiceFactory: fileHandleFactory,
+		loggerFactory:            loggerFactory,
+		logger:                   logger,
+		tree:                     tree,
 
 		registry: registry,
 	}, nil
 }
 
-func (service *Service) New(identifier uint64) (interfaces_fuse.FileNode, error) {
+func (service *Service) New(parentDirectoryNode interfaces_fuse.DirectoryNode, remoteIdentifier uint64) (interfaces_fuse.FileNode, error) {
 	if service.IsClosed() {
 		return nil, fmt.Errorf("service is closed")
 	}
@@ -61,7 +62,7 @@ func (service *Service) New(identifier uint64) (interfaces_fuse.FileNode, error)
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
-	metrics := metrics.NewFileNodeMetrics(identifier)
+	metrics := metrics.NewFileNodeMetrics(remoteIdentifier)
 	fileSystem := service.client.GetFileSystem()
 	fileHandleService := service.fileHandleServiceFactory.New()
 
@@ -71,14 +72,18 @@ func (service *Service) New(identifier uint64) (interfaces_fuse.FileNode, error)
 		return nil, err
 	}
 
-	size, err := fileSystem.GetFileInfo(identifier)
+	size, err := fileSystem.GetFileInfo(remoteIdentifier)
 	if err != nil {
-		message := fmt.Sprintf("failed to get video size for %d", identifier)
+		message := fmt.Sprintf("failed to get video size for %d", remoteIdentifier)
 		service.logger.Error(message, err)
 		return nil, err
 	}
 
-	newNode := file_node.New(service.client, service.loggerFactory, fileHandleService, metrics, fileNodeLogger, identifier, size)
+	identifier := service.tree.GetNextIdentifier()
+
+	newNode := file_node.New(service.client, service.loggerFactory, fileHandleService, metrics, fileNodeLogger, identifier, remoteIdentifier, size)
+
+	service.tree.RegisterNodeOnIdentifier(identifier, newNode)
 
 	service.registry.Add(newNode)
 

@@ -16,11 +16,13 @@ import (
 )
 
 type Node struct {
+	handleService interfaces_fuse.StreamableHandleService
+
 	client     interfaces_filesystem_client.Client
 	identifier uint64
+	remoteIdentifier uint64
 	size       uint64
 
-	handleService interfaces_fuse.StreamableHandleService
 
 	handles []interfaces_fuse.StreamableHandle
 
@@ -35,9 +37,10 @@ var _ interfaces_fuse.StreamableNode = &Node{}
 
 func New(
 	client interfaces_filesystem_client.Client,
-	logger interfaces_logger.Logger,
 	streamableHandleServiceFactory interfaces_fuse.StreamableHandleServiceFactory,
+	logger interfaces_logger.Logger,
 	identifier uint64,
+	remoteIdentifier uint64,
 	size uint64,
 ) (*Node, error) {
 	node := &Node{
@@ -45,6 +48,7 @@ func New(
 		logger: logger,
 
 		identifier: identifier,
+		remoteIdentifier: remoteIdentifier,
 		size:       size,
 	}
 
@@ -61,6 +65,10 @@ func New(
 
 func (node *Node) GetIdentifier() uint64 {
 	return node.identifier
+}
+
+func (node *Node) GetRemoteIdentifier() uint64 {
+	return node.remoteIdentifier
 }
 
 func (node *Node) GetSize() uint64 {

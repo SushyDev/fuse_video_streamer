@@ -1,7 +1,7 @@
 package factory
 
 import (
-	interfacesfilesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
@@ -23,7 +23,7 @@ func New(loggerFactorr interfaces_logger.LoggerFactory) *Factory {
 	}
 }
 
-func (factory *Factory) New(client interfacesfilesystem_client.Client) (interfaces_fuse.DirectoryNodeService, error) {
+func (factory *Factory) New(client interfaces_filesystem_client.Client, tree interfaces_fuse.Tree) (interfaces_fuse.DirectoryNodeService, error) {
 	directoryNodeServiceFactory := New(factory.loggerFactory)
 	streamableNodeServiceFactory := factory_streamable_node_service.New(factory.loggerFactory)
 	fileNodeServiceFactory := factory_file_node_service.New(factory.loggerFactory)
@@ -33,5 +33,13 @@ func (factory *Factory) New(client interfacesfilesystem_client.Client) (interfac
 		return nil, err
 	}
 
-	return service_directory_node.New(client, directoryNodeServiceFactory, streamableNodeServiceFactory, fileNodeServiceFactory, factory.loggerFactory, logger)
+	return service_directory_node.New(
+		client,
+		directoryNodeServiceFactory,
+		streamableNodeServiceFactory,
+		fileNodeServiceFactory,
+		factory.loggerFactory,
+		logger,
+		tree,
+	)
 }

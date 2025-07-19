@@ -61,9 +61,9 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 
 	fileSystem := handle.directory.GetClient().GetFileSystem()
 
-	nodes, err := fileSystem.ReadDirAll(handle.directory.GetIdentifier())
+	nodes, err := fileSystem.ReadDirAll(handle.directory.GetRemoteIdentifier())
 	if err != nil && err != syscall.ENOENT {
-		message := fmt.Sprintf("failed to read directory %d", handle.directory.GetIdentifier())
+		message := fmt.Sprintf("failed to read directory %d", handle.directory.GetRemoteIdentifier())
 		handle.logger.Error(message, err)
 		return nil, err
 	}

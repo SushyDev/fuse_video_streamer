@@ -49,7 +49,7 @@ func New(loggerFactory interfaces_logger.LoggerFactory) (*ServiceFactory, error)
 	}, nil
 }
 
-func (factory *ServiceFactory) New() (interfaces_fuse.RootNodeService, error) {
+func (factory *ServiceFactory) New(tree interfaces_fuse.Tree) (interfaces_fuse.RootNodeService, error) {
 	nodeServiceLogger, err := factory.loggerFactory.NewLogger("Root Node Service")
 	if err != nil {
 		return nil, err
@@ -60,6 +60,7 @@ func (factory *ServiceFactory) New() (interfaces_fuse.RootNodeService, error) {
 		factory.directoryNodeServiceFactory,
 		factory.directoryHandleServiceFactory,
 		factory.loggerFactory,
+		tree,
 		nodeServiceLogger,
 	), nil
 }

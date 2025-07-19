@@ -1,10 +1,10 @@
 package interfaces
 
 type FileSystemServerService interface {
-	New(mountpoint string, volumeName string) FileSystemServer
+	New(mountpoint string, volumeName string) (FileSystemServer, error)
 }
 
 type FileSystemServer interface {
-	Serve()
+	Serve() error
 	Close() error
 }
