@@ -68,7 +68,7 @@ func (service *Service) New(identifier uint64) (interfaces_fuse.DirectoryNode, e
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
-	logger, err := service.loggerFactory.NewLogger("Root Node")
+	logger, err := service.loggerFactory.NewLogger("Directory Node")
 	if err != nil {
 		service.logger.Error("failed to create logger for new directory node", err)
 		return nil, err

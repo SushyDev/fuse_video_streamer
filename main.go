@@ -36,11 +36,11 @@ func main() {
 
 	zapLoggerFactory := zap_logger.NewFactory()
 
-	fileSystemProvider, err := filesystem_server_provider_fuse.New(zapLoggerFactory)
+	fuseService, err := filesystem_server_provider_fuse.New(zapLoggerFactory)
 	if err != nil {
 		panic(err)
 	}
-	fileSystem := filesystem_server_service.New(mountpoint, volumeName, fileSystemProvider)
+	fileSystem := filesystem_server_service.New(mountpoint, volumeName, fuseService)
 
 	go fileSystem.Serve()
 

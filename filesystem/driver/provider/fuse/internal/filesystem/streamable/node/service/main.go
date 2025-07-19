@@ -62,7 +62,7 @@ func (service *Service) New(identifier uint64) (interfaces_fuse.StreamableNode, 
 		return nil, err
 	}
 
-	logger, err := service.loggerFactory.NewLogger("Root Node")
+	logger, err := service.loggerFactory.NewLogger("Streamable Node")
 	if err != nil {
 		message := fmt.Sprintf("failed to create logger for streamable node with identifier %d", identifier)
 		service.logger.Error(message, err)

@@ -46,7 +46,7 @@ func (s *ApplicationState) String() []byte {
 		}
 
 		if i.StreamId != j.StreamId {
-			return strings.Compare(i.StreamId, j.StreamId)
+			return int(i.StreamId - j.StreamId)
 		}
 		return strings.Compare(i.UUID, j.UUID)
 	})

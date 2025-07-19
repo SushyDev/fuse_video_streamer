@@ -9,7 +9,7 @@ import (
 type StreamTransferMetrics struct {
 	uuid string // Unique identifier for the stream transfer metrics
 
-	streamId   string
+	streamId   int64
 	streamUrl  string
 	streamSize int64
 
@@ -22,7 +22,7 @@ type StreamTransferMetrics struct {
 
 type streamTransferMetricsJson struct {
 	UUID               string `json:"uid"`
-	StreamId           string `json:"stream_id"`
+	StreamId           int64  `json:"stream_id"`
 	StreamUrl          string `json:"stream_url"`
 	StreamSize         int64  `json:"stream_size"`
 	TransferOperations int64  `json:"transfer_operations"`
@@ -31,7 +31,7 @@ type streamTransferMetricsJson struct {
 	Finished           bool   `json:"finished"`
 }
 
-func (service *MetricsCollection) NewStreamTransferMetrics(streamId string, streamUrl string, streamSize int64) *StreamTransferMetrics {
+func (service *MetricsCollection) NewStreamTransferMetrics(streamId int64, streamUrl string, streamSize int64) *StreamTransferMetrics {
 	metrics := &StreamTransferMetrics{
 		uuid:       uuid.New().String(),
 		streamId:   streamId,

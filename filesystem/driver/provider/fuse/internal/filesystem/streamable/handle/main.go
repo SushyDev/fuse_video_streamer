@@ -10,10 +10,9 @@ import (
 
 	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
+	interfaces_stream "fuse_video_streamer/stream/interfaces"
 
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/pool"
-
-	"fuse_video_streamer/stream"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -28,7 +27,7 @@ type Handle struct {
 
 	id uint64
 
-	stream *stream.Stream
+	stream interfaces_stream.Stream
 
 	logger interfaces_logger.Logger
 
@@ -41,7 +40,7 @@ var _ interfaces_fuse.StreamableHandle = &Handle{}
 
 var incrementId uint64
 
-func New(node interfaces_fuse.StreamableNode, stream *stream.Stream, logger interfaces_logger.Logger) *Handle {
+func New(node interfaces_fuse.StreamableNode, stream interfaces_stream.Stream, logger interfaces_logger.Logger) *Handle {
 	incrementId++
 
 	return &Handle{

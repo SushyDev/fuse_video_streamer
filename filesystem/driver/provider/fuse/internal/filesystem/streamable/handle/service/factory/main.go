@@ -5,7 +5,7 @@ import (
 	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
-	stream_factory "fuse_video_streamer/stream/factory"
+	stream_factory "fuse_video_streamer/stream/drivers/http_ring_buffer/factory"
 
 	service_streamable_service "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/streamable/handle/service"
 )

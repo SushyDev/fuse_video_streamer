@@ -8,7 +8,7 @@ import (
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
-	"fuse_video_streamer/stream"
+	"fuse_video_streamer/stream/drivers/http_ring_buffer"
 )
 
 type CacheItem struct {
@@ -32,12 +32,11 @@ func New(
 ) *Factory {
 	return &Factory{
 		client: client,
-
 		loggerFactory: loggerFactory,
 	}
 }
 
-func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*stream.Stream, error) {
+func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*http_ring_buffer.Stream, error) {
 	if factory.isClosed() {
 		return nil, fmt.Errorf("factory is closed")
 	}
@@ -47,7 +46,7 @@ func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*stream.S
 		return nil, err
 	}
 
-	return stream.New(factory.loggerFactory, url, int64(size))
+	return http_ring_buffer.New(factory.loggerFactory, url, int64(size))
 }
 
 func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
@@ -59,7 +58,7 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 
 	url, err := fileSystem.GetStreamUrl(identifier)
 	if err != nil {
-		return "", fmt.Errorf("failed to get video url for node with id %d. %v", identifier, err.Error())
+		return "", fmt.Errorf("failed to get video url for node with id %d. reason: %v", identifier, err.Error())
 	}
 
 	factory.cachedItem = CacheItem{
@@ -70,16 +69,15 @@ func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
 	return url, nil
 }
 
-func (factory *Factory) Close() {
+func (factory *Factory) Close() error {
 	if !factory.closed.CompareAndSwap(false, true) {
-		return
+		return nil
 	}
 
-	return
+	return nil
 }
 
 func (factory *Factory) isClosed() bool {
 	return factory.closed.Load()
 }
 
-// TODO - Wont be needed probably

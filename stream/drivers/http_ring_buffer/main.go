@@ -1,19 +1,20 @@
-package stream
+package http_ring_buffer
 
 import (
 	"context"
 	"fmt"
-
-	interfaces_logger "fuse_video_streamer/logger/interfaces"
-
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
-	"fuse_video_streamer/stream/connection"
-	"fuse_video_streamer/stream/transfer"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
+
+	interfaces_logger "fuse_video_streamer/logger/interfaces"
+	interfaces_stream "fuse_video_streamer/stream/interfaces"
+
+	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
+	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/connection"
+	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/transfer"
 )
 
 const (
@@ -31,7 +32,7 @@ const (
 )
 
 type Stream struct {
-	id   string
+	identifier   int64
 	url  string
 	size int64
 
@@ -48,6 +49,8 @@ type Stream struct {
 
 	closed atomic.Bool
 }
+
+var _ interfaces_stream.Stream = &Stream{}
 
 func calculateBufferSize(fileSize int64) int64 {
 	return min(fileSize, SmallVideoBuffer)
@@ -80,7 +83,7 @@ func calculatePreloadSize(bufferSize int64) int64 {
 }
 
 func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) (*Stream, error) {
-	id := fmt.Sprintf("%d", time.Now().UnixNano())
+	identifier := time.Now().UnixNano()
 
 	bufferSize := calculateBufferSize(int64(size))
 
@@ -89,7 +92,7 @@ func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	stream := &Stream{
-		id: id,
+		identifier: identifier,
 
 		size: size,
 		url:  url,
@@ -105,12 +108,20 @@ func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) 
 	return stream, nil
 }
 
-func (stream *Stream) Id() string {
-	return stream.id
+func (stream *Stream) Identifier() int64 {
+	return stream.identifier
+}
+
+func (stream *Stream) Size() int64 {
+	return stream.size
+}
+
+func (stream *Stream) Url() string {
+	return stream.url
 }
 
 func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
-	if stream.isClosed() {
+	if stream.IsClosed() {
 		return 0, fmt.Errorf("stream is closed")
 	}
 
@@ -137,7 +148,7 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 		defer cancel()
 
 		ok := stream.buffer.WaitForPosition(ctx, requestedPosition)
-		if !ok && !stream.isClosed() {
+		if !ok && !stream.IsClosed() {
 			return 0, fmt.Errorf("timeout waiting for the buffer to fill")
 		}
 	}
@@ -147,7 +158,7 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 
 func (stream *Stream) Close() error {
 	if !stream.closed.CompareAndSwap(false, true) {
-		return nil // Already closed
+		return nil
 	}
 
 	stream.cancel()
@@ -173,12 +184,12 @@ func (stream *Stream) Close() error {
 	return nil
 }
 
-func (stream *Stream) isClosed() bool {
+func (stream *Stream) IsClosed() bool {
 	return stream.closed.Load()
 }
 
 func (stream *Stream) newTransfer(startPosition int64) error {
-	if stream.isClosed() {
+	if stream.IsClosed() {
 		return fmt.Errorf("stream is closed")
 	}
 
@@ -205,7 +216,7 @@ func (stream *Stream) newTransfer(startPosition int64) error {
 
 	debugger := metrics.GetMetricsCollection()
 
-	streamMetrics := debugger.NewStreamTransferMetrics(stream.id, stream.url, stream.size)
+	streamMetrics := debugger.NewStreamTransferMetrics(stream.identifier, stream.url, stream.size)
 
 	logger, err := stream.loggerFactory.NewLogger("Stream Transfer")
 	if err != nil {

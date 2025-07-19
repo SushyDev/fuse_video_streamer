@@ -7,12 +7,12 @@ import (
 	"sync"
 	"sync/atomic"
 
+	ring_buffer "github.com/sushydev/ring_buffer_go"
+
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
-	"fuse_video_streamer/stream/connection"
-
-	ring_buffer "github.com/sushydev/ring_buffer_go"
+	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/connection"
 )
 
 type Transfer struct {
