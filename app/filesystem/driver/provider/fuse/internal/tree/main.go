@@ -11,7 +11,6 @@ type Tree struct {
 	increment uint64
 
 	nodes map[uint64]interfaces_fuse.Node
-
 }
 
 var _ interfaces_fuse.Tree = &Tree{}

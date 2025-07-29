@@ -30,11 +30,10 @@ type Node struct {
 
 	loggerFactory interfaces_logger.LoggerFactory
 
-	client     interfaces_filesystem_client.Client
+	client interfaces_filesystem_client.Client
 
-	identifier uint64
+	identifier       uint64
 	remoteIdentifier uint64
-
 
 	handles []interfaces_fuse.DirectoryHandle
 
@@ -68,8 +67,8 @@ func New(
 
 		loggerFactory: loggerFactory,
 
-		client:     client,
-		identifier: identifier,
+		client:           client,
+		identifier:       identifier,
 		remoteIdentifier: remoteIdentifier,
 
 		logger: logger,
@@ -132,6 +131,20 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
+	switch lookupRequest.Name {
+	case "", ".":
+		node.logger.Debug("lookup request for current directory or empty name, returning self")
+		return node, nil
+	case "..":
+		node.logger.Debug("lookup request for parent directory, returning parent node")
+		parentNode, err := node.directoryNodeService.New(node, node.GetRemoteIdentifier())
+		if err != nil {
+			node.logger.Error("failed to create parent node", err)
+			return nil, err
+		}
+		return parentNode, nil
+	}
+
 	client_filesystem := node.client.GetFileSystem()
 	foundNode, err := client_filesystem.Lookup(node.GetRemoteIdentifier(), lookupRequest.Name)
 
@@ -186,7 +199,7 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 
 	fileSystem := node.client.GetFileSystem()
 
-	err := fileSystem.Remove(node.identifier, removeRequest.Name)
+	err := fileSystem.Remove(node.GetRemoteIdentifier(), removeRequest.Name)
 	if err != nil {
 		message := fmt.Sprintf("failed to remove %s", removeRequest.Name)
 		node.logger.Error(message, err)

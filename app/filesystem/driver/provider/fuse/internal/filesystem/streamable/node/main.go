@@ -18,11 +18,10 @@ import (
 type Node struct {
 	handleService interfaces_fuse.StreamableHandleService
 
-	client     interfaces_filesystem_client.Client
-	identifier uint64
+	client           interfaces_filesystem_client.Client
+	identifier       uint64
 	remoteIdentifier uint64
-	size       uint64
-
+	size             uint64
 
 	handles []interfaces_fuse.StreamableHandle
 
@@ -47,9 +46,9 @@ func New(
 		client: client,
 		logger: logger,
 
-		identifier: identifier,
+		identifier:       identifier,
 		remoteIdentifier: remoteIdentifier,
-		size:       size,
+		size:             size,
 	}
 
 	fileHandleService, err := streamableHandleServiceFactory.New(node, client)

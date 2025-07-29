@@ -32,9 +32,9 @@ const (
 )
 
 type Stream struct {
-	identifier   int64
-	url  string
-	size int64
+	identifier int64
+	url        string
+	size       int64
 
 	loggerFactory interfaces_logger.LoggerFactory
 

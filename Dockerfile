@@ -17,11 +17,11 @@ ENV GOFLAGS="-mod=readonly"
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
+COPY app/go.mod app/go.sum ./
 
 RUN go mod download
 
-COPY . .
+COPY app .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o main main.go
 
@@ -29,16 +29,12 @@ FROM alpine:latest
 
 WORKDIR /app
 
-RUN apk add --no-cache fuse
+RUN apk add --no-cache fuse su-exec
 
 COPY --from=builder /app/main /app/main
 
-RUN adduser -D app
+COPY build/entrypoint.sh /app/entrypoint.sh
 
-RUN chown app /app/main
+RUN chmod +x /app/entrypoint.sh
 
-RUN mkdir -p /mnt/fvs && chown app /mnt/fvs
-
-USER app
-
-ENTRYPOINT ["/app/main"]
+ENTRYPOINT ["/app/entrypoint.sh"]

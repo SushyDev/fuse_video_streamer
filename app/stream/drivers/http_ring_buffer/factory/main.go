@@ -31,7 +31,7 @@ func New(
 	loggerFactory interfaces_logger.LoggerFactory,
 ) *Factory {
 	return &Factory{
-		client: client,
+		client:        client,
 		loggerFactory: loggerFactory,
 	}
 }
@@ -80,4 +80,3 @@ func (factory *Factory) Close() error {
 func (factory *Factory) isClosed() bool {
 	return factory.closed.Load()
 }
-

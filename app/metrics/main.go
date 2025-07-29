@@ -8,14 +8,13 @@ type Metrics struct {
 	fileSystemServer interfaces_filesystem.FileSystemServer
 }
 
-func New (
+func New(
 	fileSystemServer interfaces_filesystem.FileSystemServer,
 ) Metrics {
 	return Metrics{
 		fileSystemServer: fileSystemServer,
 	}
 }
-
 
 func (m Metrics) Serve() {
 

@@ -26,9 +26,9 @@ type Node struct {
 	metrics *metrics.FileNodeMetrics
 	logger  interfaces_logger.Logger
 
-	identifier uint64
+	identifier       uint64
 	remoteIdentifier uint64
-	size       uint64
+	size             uint64
 
 	handles []interfaces_fuse.FileHandle
 
@@ -58,9 +58,9 @@ func New(
 		metrics: metric,
 		logger:  logger,
 
-		identifier: identifier,
+		identifier:       identifier,
 		remoteIdentifier: remoteIdentifier,
-		size:       size,
+		size:             size,
 	}
 
 	return node
