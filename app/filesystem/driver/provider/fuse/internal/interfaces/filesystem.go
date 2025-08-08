@@ -9,7 +9,7 @@ type FuseFileSystemService interface {
 }
 
 type FuseFileSystem interface {
-	useClosable
+	UseClosable
 
 	fs.FS
 	fs.FSDestroyer

@@ -1,11 +1,12 @@
 package fuse
 
 import (
-	interfaces_fuse_filesystem "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 	interfaces_filesystem "fuse_video_streamer/filesystem/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
-	factory_root_node_service "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/root/node/service/factory"
+	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
+
+	node_root "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node/root"
 
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/server"
@@ -15,7 +16,7 @@ import (
 )
 
 type FuseService struct {
-	rootNodeServiceFactory interfaces_fuse_filesystem.RootNodeServiceFactory
+	rootNodeServiceFactory interfaces_node.RootNodeServiceFactory
 
 	loggerFactory interfaces_logger.LoggerFactory
 }
@@ -23,7 +24,7 @@ type FuseService struct {
 var _ interfaces_filesystem.FileSystemServerService = &FuseService{}
 
 func New(loggerFactory interfaces_logger.LoggerFactory) (*FuseService, error) {
-	rootNodeServiceFactory, err := factory_root_node_service.New(loggerFactory)
+	rootNodeServiceFactory, err := node_root.NewFactory(loggerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +63,7 @@ func (service *FuseService) New(mountpoint string, volumeName string) (interface
 
 	tree := tree.New()
 
-	rootNodeService, err := service.rootNodeServiceFactory.New(tree)
+	rootNodeService, err := service.rootNodeServiceFactory.NewService(tree)
 	if err != nil {
 		return nil, err
 	}
