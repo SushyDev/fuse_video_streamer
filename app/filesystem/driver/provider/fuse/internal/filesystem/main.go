@@ -6,6 +6,7 @@ import (
 
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
+	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
 	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
@@ -15,9 +16,9 @@ import (
 )
 
 type FileSystem struct {
-	tree interfaces_fuse.Tree
+	tree interfaces_node.Tree
 
-	rootNode interfaces_fuse.RootNode
+	rootNode interfaces_node.RootNode
 
 	logger interfaces_logger.Logger
 
@@ -26,7 +27,7 @@ type FileSystem struct {
 
 var _ interfaces_fuse.FuseFileSystem = &FileSystem{}
 
-func New(tree interfaces_fuse.Tree, rootNodeService interfaces_fuse.RootNodeService, logger interfaces_logger.Logger) (interfaces_fuse.FuseFileSystem, error) {
+func New(tree interfaces_node.Tree, rootNodeService interfaces_node.RootNodeService, logger interfaces_logger.Logger) (interfaces_fuse.FuseFileSystem, error) {
 	metricsCollection := metrics.GetMetricsCollection()
 	go metricsCollection.StartWebDebugger()
 
@@ -38,7 +39,7 @@ func New(tree interfaces_fuse.Tree, rootNodeService interfaces_fuse.RootNodeServ
 		return nil, fmt.Errorf("root Node Service cannot be nil")
 	}
 
-	rootNode, err := rootNodeService.New()
+	rootNode, err := rootNodeService.NewNode()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create root node: %w", err)
 	}
