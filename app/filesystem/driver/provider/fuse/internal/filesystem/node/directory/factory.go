@@ -16,9 +16,9 @@ type Factory struct {
 
 var _ interfaces_node.DirectoryNodeServiceFactory = &Factory{}
 
-func NewFactory(loggerFactorr interfaces_logger.LoggerFactory) *Factory {
+func NewFactory(loggerFactory interfaces_logger.LoggerFactory) *Factory {
 	return &Factory{
-		loggerFactory: loggerFactorr,
+		loggerFactory: loggerFactory,
 	}
 }
 

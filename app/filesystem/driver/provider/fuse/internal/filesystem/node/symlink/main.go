@@ -8,20 +8,20 @@ import (
 	"path/filepath"
 	"syscall"
 
-	intefaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
+	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"github.com/anacrolix/fuse"
 )
 
 type Symlink struct {
-	client     intefaces_filesystem_client.Client
+	client     interfaces_filesystem_client.Client
 	identifier uint64
 
 	logger interfaces_logger.Logger
 }
 
-func NewNode(client intefaces_filesystem_client.Client, logger interfaces_logger.Logger, identifier uint64) *Symlink {
+func NewNode(client interfaces_filesystem_client.Client, logger interfaces_logger.Logger, identifier uint64) *Symlink {
 	return &Symlink{
 		client:     client,
 		identifier: identifier,
