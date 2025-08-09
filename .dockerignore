@@ -1,0 +1,5 @@
+# Ignore any directory named 'mnt' at any depth
+mnt
+mnt/**
+**/mnt
+**/mnt/**
