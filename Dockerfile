@@ -1,3 +1,4 @@
+# --- Build app
 FROM nixos/nix:latest AS app
 
 RUN nix-env -iA nixpkgs.go nixpkgs.git
@@ -12,9 +13,10 @@ WORKDIR /src/app
 COPY app/go.mod app/go.sum ./
 RUN go mod download
 
-COPY app .
+COPY app ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -extldflags '-static'" -o /out/main main.go
 
+# --- Build dependencies
 FROM nixos/nix:latest AS dependencies
 
 RUN mkdir -p /root/.config/nix && \
@@ -22,15 +24,11 @@ RUN mkdir -p /root/.config/nix && \
 
 WORKDIR /src
 
-COPY . .
+COPY build ./
 
-# Build the flake.
-# 'nix build' will find the flake in ./build and execute it.
-# The output is a symlink named 'result' pointing to a directory in the Nix store
-# that contains the 'bin', 'lib', and 'etc' folders we created in the flake.
-RUN nix build ./build --out-link /out
+RUN nix build ./ --out-link /out
 
-# --- Final minimal image ---
+# --- Construct final image
 FROM scratch
 
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
@@ -39,10 +37,9 @@ ENV PATH=/bin
 
 WORKDIR /app
 
-COPY --from=app /out/main /app/main
+COPY --from=app /out/main /bin/main
 COPY --from=dependencies /out/etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=dependencies /out/bin/fusermount /bin/fusermount
-COPY --from=dependencies /out/lib /lib
 
 # Run the application directly (no shell available in scratch)
-ENTRYPOINT ["/app/main"]
+ENTRYPOINT ["/bin/main"]
