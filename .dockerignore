@@ -1,5 +1,5 @@
-# Ignore any directory named 'mnt' at any depth
-mnt
+.git
+
 mnt/**
 **/mnt
 **/mnt/**
