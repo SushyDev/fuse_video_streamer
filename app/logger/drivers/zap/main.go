@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"fuse_video_streamer/logger/interfaces"
+	"fuse_video_streamer/config"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -63,6 +64,8 @@ func getLogger(fileName string) (*zap.SugaredLogger, error) {
 type Logger struct {
 	logger  *zap.SugaredLogger
 	service string
+
+	debugLogsEnabled bool
 }
 
 var _ interfaces.Logger = &Logger{}
@@ -75,9 +78,15 @@ func NewLogger(service string) (*Logger, error) {
 		return nil, err
 	}
 
+	debug, err := config.GetDebug()
+	if err != nil {
+		return nil, fmt.Errorf("error getting debug config: %v", err)
+	}
+
 	return &Logger{
 		logger:  logger,
 		service: service,
+		debugLogsEnabled: debug,
 	}, nil
 }
 
@@ -114,6 +123,10 @@ func (instance *Logger) Fatal(message string, err error) {
 }
 
 func (instance *Logger) Debug(message string) {
+	if !instance.debugLogsEnabled {
+		return
+	}
+
 	loggerMessage := strings.ReplaceAll(message, "\t", " ")
 	instance.logger.Debug(loggerMessage)
 

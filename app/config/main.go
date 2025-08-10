@@ -15,6 +15,7 @@ type FileSystemProvider struct {
 type Config struct {
 	MountPoint  string               `toml:"mount_point"`
 	VolumeName  string               `toml:"volume_name"`
+	Debug       bool                 `toml:"debug"`
 	FileServers []FileSystemProvider `toml:"file_servers"`
 }
 
@@ -74,6 +75,15 @@ func GetVolumeName() (string, error) {
 	}
 
 	return cfg.VolumeName, nil
+}
+
+func GetDebug() (bool, error) {
+	cfg, err := get()
+	if err != nil {
+		return false, err
+	}
+
+	return cfg.Debug, nil
 }
 
 func GetFileServers() ([]FileSystemProvider, error) {

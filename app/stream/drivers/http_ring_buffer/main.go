@@ -1,9 +1,9 @@
+// Package http_ring_buffer implements a streaming solution using a ring buffer
 package http_ring_buffer
 
 import (
 	"context"
 	"fmt"
-	//"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,13 +40,15 @@ type Stream struct {
 
 	loggerFactory interfaces_logger.LoggerFactory
 
-	buffer ring_buffer.LockingRingBufferInterface
+	buffer    ring_buffer.LockingRingBufferInterface
 	diskCache *disk_cache.DiskCache
 
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	transfer *transfer.Transfer
+
+	logger interfaces_logger.Logger
 
 	mu sync.Mutex
 
@@ -55,30 +57,34 @@ type Stream struct {
 
 var _ interfaces_stream.Stream = &Stream{}
 
+// calculateBufferSize determines the buffer size based on the file size.
+// Its 10% of the fileSize with a max of 128MB
 func calculateBufferSize(fileSize int64) int64 {
-	return min(fileSize, SmallVideoBuffer)
+	return min(128*1024*1024, fileSize/10)
 }
 
 func calculatePreloadSize(bufferSize int64) int64 {
-	return min(bufferSize/2, MaxPreloadSize)
+	return bufferSize / 4
 }
 
 func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) (*Stream, error) {
-	fmt.Printf("Creating new stream for URL: %s with size: %d bytes\n", url, size)
-
 	identifier := time.Now().UnixNano()
 
 	bufferSize := calculateBufferSize(int64(size))
 
-	buffer := ring_buffer.NewLockingRingBuffer(bufferSize, 0)
+	buffer := ring_buffer.NewLockingRingBuffer(bufferSize, -1)
 
 	diskCache, err := disk_cache.NewDiskCache(url, size)
 	if err != nil {
 		return nil, fmt.Errorf("error creating disk cache: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	logger, err := loggerFactory.NewLogger("Stream")
+	if err != nil {
+		return nil, fmt.Errorf("error creating logger: %v", err)
+	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 
 	stream := &Stream{
 		identifier: identifier,
@@ -88,11 +94,13 @@ func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) 
 
 		loggerFactory: loggerFactory,
 
-		buffer: buffer,
+		buffer:    buffer,
 		diskCache: diskCache,
 
 		ctx:    ctx,
 		cancel: cancel,
+
+		logger: logger,
 	}
 
 	return stream, nil
@@ -119,16 +127,21 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	defer stream.mu.Unlock()
 
 	requestedBytes := int64(len(p))
-	percentage := float64(requestedBytes) / float64(stream.size) * 100
-	fmt.Printf("Reading %d bytes at position %d. percentage: %v\n", requestedBytes, seekPosition, percentage)
+	absolutePosition := seekPosition + requestedBytes
+	percentage := float64(absolutePosition) / float64(stream.size) * 100
 
-	if stream.diskCache != nil { 
+	message := fmt.Sprintf("Reading %d bytes at position %d. percentage: %v\n", requestedBytes, seekPosition, percentage)
+	stream.logger.Debug(message)
+
+	if stream.diskCache != nil {
 		isPositionOnDisk, diskErr := stream.diskCache.IsPositionOnDisk(seekPosition, seekPosition+requestedBytes)
 		if diskErr == nil && isPositionOnDisk {
-			fmt.Printf("DISK %d bytes at position %d. percentage: %v\n", requestedBytes, seekPosition, percentage)
+			message := fmt.Sprintf("DISK READ %d bytes at position %d - %v percentage\n", requestedBytes, seekPosition, percentage)
+			stream.logger.Debug(message)
 			return stream.diskCache.ReadAt(p, seekPosition)
-		} else if (diskErr != nil) {
-			fmt.Printf("Error checking disk cache: %v\n", diskErr)
+		} else if diskErr != nil {
+			message := fmt.Sprintf("DISK ERROR checking disk cache: %v", diskErr)
+			stream.logger.Debug(message)
 		}
 	}
 
@@ -146,7 +159,8 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 			return read, fmt.Errorf("error writing to disk cache: %v", writeErr)
 		}
 
-		fmt.Printf("Wrote %d bytes to disk cache at position %d - %v percent \n", read, seekPosition, percentage)
+		message :=fmt.Sprintf("DISK WRITE %d bytes at position %d - %v percent \n", read, seekPosition, percentage)
+		stream.logger.Debug(message)
 	}
 
 	return read, err
@@ -159,16 +173,11 @@ func (stream *Stream) Close() error {
 
 	stream.cancel()
 
-	// log trace golang debug
-	//debug.PrintStack()
-
 	if stream.diskCache != nil {
-		fmt.Println("Closing disk cache...")
 		err := stream.diskCache.Close()
 		if err != nil {
 			return fmt.Errorf("error closing disk cache: %v", err)
 		}
-		fmt.Println("Disk cache closed successfully.")
 
 		stream.diskCache = nil
 	}
@@ -185,7 +194,7 @@ func (stream *Stream) Close() error {
 	if stream.transfer != nil {
 		err := stream.transfer.Close()
 		if err != nil {
-			fmt.Println("error closing transfer:", err)
+			return fmt.Errorf("error closing transfer: %v", err)
 		}
 
 		stream.transfer = nil
@@ -210,19 +219,17 @@ func (stream *Stream) readFromBuffer(p []byte, seekPosition int64) (int, error) 
 	requestedBytes := int64(len(p))
 	requestedPosition := min(seekPosition+requestedBytes, stream.size)
 
-	if !stream.buffer.IsPositionAvailable(seekPosition) {
-		err := stream.newTransfer(seekPosition)
-		if err != nil {
-			return 0, err
-		}
+	err := stream.beforeReadAt(seekPosition)
+	if err != nil {
+		return 0, fmt.Errorf("error before read at: %v", err)
 	}
 
 	if !stream.buffer.IsPositionAvailable(requestedPosition) {
-		ctx, cancel := context.WithTimeout(stream.ctx, 2*time.Second)
+		ctx, cancel := context.WithTimeout(stream.ctx, 60*time.Second)
 		defer cancel()
 
 		ok := stream.buffer.WaitForPosition(ctx, requestedPosition)
-		if !ok && !stream.IsClosed() {
+		if !ok {
 			return 0, fmt.Errorf("timeout waiting for the buffer to fill")
 		}
 	}
@@ -230,6 +237,31 @@ func (stream *Stream) readFromBuffer(p []byte, seekPosition int64) (int, error) 
 	return stream.buffer.ReadAt(p, seekPosition)
 }
 
+// beforeReadAt checks if a new transfer needs to be created based on the seek position.
+func (stream *Stream) beforeReadAt(seekPosition int64) error {
+	shouldCreateNewTransfer := false
+	if stream.transfer == nil {
+		shouldCreateNewTransfer = true
+	} else {
+		// const tolerance int64 = 1024 * 1024 * 1024 // 100MB
+		const tolerance int64 = 0
+
+		if !stream.buffer.IsPositionInCapacity(seekPosition, tolerance) {
+			shouldCreateNewTransfer = true
+		}
+	}
+
+	if shouldCreateNewTransfer {
+		err := stream.newTransfer(seekPosition)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// newTransfer creates a new transfer for the stream at the specified seek position.
 func (stream *Stream) newTransfer(seekPosition int64) error {
 	if stream.IsClosed() {
 		return fmt.Errorf("stream is closed")
@@ -239,24 +271,20 @@ func (stream *Stream) newTransfer(seekPosition int64) error {
 		return fmt.Errorf("buffer is closed")
 	}
 
-	fmt.Printf("Creating new transfer for stream %d at position %d at url %s\n", stream.identifier, seekPosition, stream.url)
+	message := fmt.Sprintf("Creating new transfer at position %d at url %s\n", seekPosition, stream.url)
+	stream.logger.Debug(message)
 
 	if stream.transfer != nil {
 		stream.transfer.Close()
 		stream.transfer = nil
 	}
 
-	bufferSize := calculateBufferSize(stream.size)
-	preloadSize := calculatePreloadSize(bufferSize)
-
-	streamStartPosition := max(0, seekPosition-preloadSize)
-
-	connection, err := connection.NewConnection(stream.url, streamStartPosition)
+	connection, err := connection.NewConnection(stream.url, seekPosition)
 	if err != nil {
 		return err
 	}
 
-	stream.buffer.ResetToPosition(streamStartPosition)
+	stream.buffer.ResetToPosition(seekPosition)
 
 	debugger := metrics.GetMetricsCollection()
 
