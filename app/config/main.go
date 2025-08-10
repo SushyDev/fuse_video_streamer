@@ -13,10 +13,11 @@ type FileSystemProvider struct {
 }
 
 type Config struct {
-	MountPoint  string               `toml:"mount_point"`
-	VolumeName  string               `toml:"volume_name"`
-	Debug       bool                 `toml:"debug"`
-	FileServers []FileSystemProvider `toml:"file_servers"`
+	MountPoint      string               `toml:"mount_point"`
+	VolumeName      string               `toml:"volume_name"`
+	Debug           bool                 `toml:"debug"`
+	EnableDiskCache bool                 `toml:"enable_disk_cache"`
+	FileServers     []FileSystemProvider `toml:"file_servers"`
 }
 
 var config *Config
@@ -84,6 +85,15 @@ func GetDebug() (bool, error) {
 	}
 
 	return cfg.Debug, nil
+}
+
+func GetEnableDiskCache() (bool, error) {
+	cfg, err := get()
+	if err != nil {
+		return false, err
+	}
+
+	return cfg.EnableDiskCache, nil
 }
 
 func GetFileServers() ([]FileSystemProvider, error) {

@@ -10,6 +10,7 @@ import (
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 
+	"fuse_video_streamer/config"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 	interfaces_stream "fuse_video_streamer/stream/interfaces"
 
@@ -74,11 +75,6 @@ func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) 
 
 	buffer := ring_buffer.NewLockingRingBuffer(bufferSize, -1)
 
-	diskCache, err := disk_cache.NewDiskCache(url, size)
-	if err != nil {
-		return nil, fmt.Errorf("error creating disk cache: %v", err)
-	}
-
 	logger, err := loggerFactory.NewLogger("Stream")
 	if err != nil {
 		return nil, fmt.Errorf("error creating logger: %v", err)
@@ -94,13 +90,26 @@ func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) 
 
 		loggerFactory: loggerFactory,
 
-		buffer:    buffer,
-		diskCache: diskCache,
+		buffer: buffer,
 
 		ctx:    ctx,
 		cancel: cancel,
 
 		logger: logger,
+	}
+
+	enableDiskCache, err := config.GetEnableDiskCache()
+	if err != nil {
+		return nil, fmt.Errorf("error getting enable disk cache config: %v", err)
+	}
+
+	if enableDiskCache {
+		diskCache, err := disk_cache.NewDiskCache(url, size)
+		if err != nil {
+			return nil, fmt.Errorf("error creating disk cache: %v", err)
+		}
+
+		stream.diskCache = diskCache
 	}
 
 	return stream, nil
@@ -150,7 +159,7 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 		return read, err
 	}
 
-	if read > 0 && stream.diskCache != nil {
+	if stream.diskCache != nil && read > 0 {
 		copyOfP := make([]byte, read)
 		copy(copyOfP, p[:read])
 
@@ -159,7 +168,7 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 			return read, fmt.Errorf("error writing to disk cache: %v", writeErr)
 		}
 
-		message :=fmt.Sprintf("DISK WRITE %d bytes at position %d - %v percent \n", read, seekPosition, percentage)
+		message := fmt.Sprintf("DISK WRITE %d bytes at position %d - %v percent \n", read, seekPosition, percentage)
 		stream.logger.Debug(message)
 	}
 

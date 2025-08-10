@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"fuse_video_streamer/logger/interfaces"
 	"fuse_video_streamer/config"
+	"fuse_video_streamer/logger/interfaces"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -84,8 +84,8 @@ func NewLogger(service string) (*Logger, error) {
 	}
 
 	return &Logger{
-		logger:  logger,
-		service: service,
+		logger:           logger,
+		service:          service,
 		debugLogsEnabled: debug,
 	}, nil
 }
