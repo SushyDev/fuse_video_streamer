@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/BurntSushi/toml v1.5.0
-	github.com/anacrolix/fuse v0.4.0
+	github.com/anacrolix/fuse v0.3.2
 	github.com/google/uuid v1.6.0
 	github.com/sushydev/ring_buffer_go v0.1.9
 	github.com/sushydev/stream_mount_api v1.2.0
@@ -13,6 +13,11 @@ require (
 )
 
 require (
+	github.com/anacrolix/missinggo v1.3.0 // indirect
+	github.com/anacrolix/missinggo/perf v1.0.0 // indirect
+	github.com/anacrolix/missinggo/v2 v2.10.0 // indirect
+	github.com/anacrolix/sync v0.5.4 // indirect
+	github.com/huandu/xstrings v1.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20241204233417-43b7b7cde48d // indirect
 	golang.org/x/net v0.43.0 // indirect
