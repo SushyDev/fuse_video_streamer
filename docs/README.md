@@ -68,8 +68,8 @@ Fuse Video Streamer uses a `config.toml` file  with the following properties
 
 Example `config.toml`.
 ```toml
-mount_point: "/mnt/fvs"
-volume_name: "fvs"
+mount_point = "/mnt/fvs"
+volume_name = "fvs"
 [[file_servers]]
   name = "debrid_drive"
   target = "localhost:xxxx"
