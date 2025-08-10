@@ -70,6 +70,7 @@ Example `config.toml`.
 ```toml
 mount_point = "/mnt/fvs"
 volume_name = "fvs"
+
 [[file_servers]]
   name = "debrid_drive"
   target = "localhost:xxxx"
