@@ -4,42 +4,46 @@ import (
 	"fmt"
 	"os"
 
-	"gopkg.in/yaml.v3"
+	"github.com/BurntSushi/toml"
 )
 
 type FileSystemProvider struct {
-	Name   string `yaml:"name"`
-	Target string `yaml:"target"`
+	Name   string `toml:"name"`
+	Target string `toml:"target"`
 }
 
 type Config struct {
-	MountPoint  string               `yaml:"mount_point"`
-	VolumeName  string               `yaml:"volume_name"`
-	FileServers []FileSystemProvider `yaml:"file_servers"`
+	MountPoint  string               `toml:"mount_point"`
+	VolumeName  string               `toml:"volume_name"`
+	FileServers []FileSystemProvider `toml:"file_servers"`
 }
 
-func get() (Config, error) {
-	file, err := os.Open("config.yml")
+var config *Config
+
+func get() (*Config, error) {
+	if config != nil {
+		return config, nil
+	}
+
+	configData, err := os.ReadFile("config.toml")
 	if err != nil {
-		return Config{}, err
-	}
-	defer file.Close()
-
-	decoder := yaml.NewDecoder(file)
-	var cfg Config
-	if err := decoder.Decode(&cfg); err != nil {
-		return Config{}, err
+		return nil, err
 	}
 
-	return cfg, nil
+	_, err = toml.Decode(string(configData), &config)
+	if err != nil {
+		return nil, err
+	}
+
+	err = validate(*config)
+	if err != nil {
+		return nil, err
+	}
+
+	return config, nil
 }
 
-func Validate() error {
-	cfg, err := get()
-	if err != nil {
-		return err
-	}
-
+func validate(cfg Config) error {
 	if cfg.MountPoint == "" {
 		return fmt.Errorf("mount_point is required")
 	}
@@ -49,7 +53,7 @@ func Validate() error {
 	}
 
 	if len(cfg.FileServers) == 0 {
-		return fmt.Errorf("file_servers is required")
+		return fmt.Errorf("at least one file server is required")
 	}
 
 	return nil
@@ -68,6 +72,7 @@ func GetVolumeName() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return cfg.VolumeName, nil
 }
 
@@ -76,5 +81,9 @@ func GetFileServers() ([]FileSystemProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	return cfg.FileServers, nil
+
+	servers := make([]FileSystemProvider, len(cfg.FileServers))
+	copy(servers, cfg.FileServers)
+
+	return servers, nil
 }

@@ -36,7 +36,7 @@ fuse_video_streamer:
   restart: unless-stopped
   network_mode: host  # Preferable if using a specific network
   volumes:
-    - ./fuse_video_streamer.yml:/app/config.yml  # Bind configuration
+    - ./fuse_video_streamer.toml:/app/config.toml  # Bind configuration
     - ./fvs:/mnt/fvs:rshared # Bind the mount
     - ./logs/fuse_video_streamer:/app/logs  # Store logs
   cap_add:
@@ -64,15 +64,15 @@ To build the project manually, you can use the following Go commands:
 
 ### Configuration
 
-Fuse Video Streamer uses a `config.yml` file (Very important its `yml` and not `yaml`) with the following properties
+Fuse Video Streamer uses a `config.toml` file  with the following properties
 
-Example `config.yml`.
-```yaml
+Example `config.toml`.
+```toml
 mount_point: "/mnt/fvs"
 volume_name: "fvs"
-file_servers:
-  - name: debrid_drive
-    target: "localhost:xxxx"
+[[file_servers]]
+  name = "debrid_drive"
+  target = "localhost:xxxx"
 ```
 
 #### Done

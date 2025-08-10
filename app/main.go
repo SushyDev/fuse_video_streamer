@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+
 	"fuse_video_streamer/config"
 
 	filesystem_server_provider_fuse "fuse_video_streamer/filesystem/driver/provider/fuse"
@@ -18,11 +19,6 @@ import (
 
 func main() {
 	// go debug()
-
-	err := config.Validate()
-	if err != nil {
-		panic(err)
-	}
 
 	mountpoint, err := config.GetMountPoint()
 	if err != nil {

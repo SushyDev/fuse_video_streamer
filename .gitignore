@@ -2,4 +2,5 @@
 logs
 mnt
 *.db
-config.yml
+config.toml
+.cache

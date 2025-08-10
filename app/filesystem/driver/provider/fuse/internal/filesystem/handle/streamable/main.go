@@ -78,6 +78,12 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		return syscall.ENOENT
 	}
 
+	if stream.IsClosed() {
+		message := fmt.Sprintf("video stream for handle %d is closed, cannot read from video stream", handle.id)
+		handle.logger.Error(message, nil)
+		handle.Close()
+	}
+
 	handle.mu.Lock()
 	defer handle.mu.Unlock()
 
