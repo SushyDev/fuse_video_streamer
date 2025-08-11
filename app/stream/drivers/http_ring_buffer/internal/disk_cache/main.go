@@ -233,9 +233,6 @@ func (diskCache *DiskCache) WriteAt(p []byte, seekPosition int64) (int, error) {
 		return n, err
 	}
 
-	if err := diskCache.file.Sync(); err != nil {
-		return n, fmt.Errorf("failed to sync file after write: %w", err)
-	}
 
 	if err := diskCache.recordRange(seekPosition, seekPosition+int64(n)); err != nil {
 		return n, fmt.Errorf("failed to update lockfile: %w", err)

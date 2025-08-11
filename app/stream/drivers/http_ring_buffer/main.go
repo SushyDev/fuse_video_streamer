@@ -51,7 +51,7 @@ type Stream struct {
 
 	logger interfaces_logger.Logger
 
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	closed atomic.Bool
 }
@@ -131,9 +131,6 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 	if stream.IsClosed() {
 		return 0, fmt.Errorf("stream is closed")
 	}
-
-	stream.mu.Lock()
-	defer stream.mu.Unlock()
 
 	requestedBytes := int64(len(p))
 	absolutePosition := seekPosition + requestedBytes
@@ -225,19 +222,18 @@ func (stream *Stream) readFromBuffer(p []byte, seekPosition int64) (int, error) 
 		return 0, fmt.Errorf("buffer is closed")
 	}
 
-	requestedBytes := int64(len(p))
-	requestedPosition := min(seekPosition+requestedBytes, stream.size)
-
 	err := stream.beforeReadAt(seekPosition)
 	if err != nil {
 		return 0, fmt.Errorf("error before read at: %v", err)
 	}
 
-	if !stream.buffer.IsPositionAvailable(requestedPosition) {
+	readPos := min(max(1, seekPosition+1), stream.size-1)
+
+	if !stream.buffer.IsPositionAvailable(readPos) {
 		ctx, cancel := context.WithTimeout(stream.ctx, 60*time.Second)
 		defer cancel()
 
-		ok := stream.buffer.WaitForPosition(ctx, requestedPosition)
+		ok := stream.buffer.WaitForPosition(ctx, readPos)
 		if !ok {
 			return 0, fmt.Errorf("timeout waiting for the buffer to fill")
 		}
