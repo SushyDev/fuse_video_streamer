@@ -73,7 +73,7 @@ func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) 
 
 	bufferSize := calculateBufferSize(int64(size))
 
-	buffer := ring_buffer.NewLockingRingBuffer(bufferSize, -1)
+	buffer := ring_buffer.NewLockingRingBuffer(bufferSize, 0)
 
 	logger, err := loggerFactory.NewLogger("Stream")
 	if err != nil {
@@ -134,20 +134,20 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 
 	requestedBytes := int64(len(p))
 	absolutePosition := seekPosition + requestedBytes
-	percentage := float64(absolutePosition) / float64(stream.size) * 100
+	_ = absolutePosition
 
-	message := fmt.Sprintf("Reading %d bytes at position %d. percentage: %v\n", requestedBytes, seekPosition, percentage)
-	stream.logger.Debug(message)
+	// message := fmt.Sprintf("Reading %d bytes at position %d. percentage: %v\n", requestedBytes, seekPosition, percentage)
+	// stream.logger.Debug(message)
 
 	if stream.diskCache != nil {
 		isPositionOnDisk, diskErr := stream.diskCache.IsPositionOnDisk(seekPosition, seekPosition+requestedBytes)
 		if diskErr == nil && isPositionOnDisk {
-			message := fmt.Sprintf("DISK READ %d bytes at position %d - %v percentage\n", requestedBytes, seekPosition, percentage)
-			stream.logger.Debug(message)
+			// message := fmt.Sprintf("DISK READ %d bytes at position %d - %v percentage\n", requestedBytes, seekPosition, percentage)
+			// stream.logger.Debug(message)
 			return stream.diskCache.ReadAt(p, seekPosition)
 		} else if diskErr != nil {
-			message := fmt.Sprintf("DISK ERROR checking disk cache: %v", diskErr)
-			stream.logger.Debug(message)
+			// message := fmt.Sprintf("DISK ERROR checking disk cache: %v", diskErr)
+			// stream.logger.Debug(message)
 		}
 	}
 
@@ -165,8 +165,8 @@ func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
 			return read, fmt.Errorf("error writing to disk cache: %v", writeErr)
 		}
 
-		message := fmt.Sprintf("DISK WRITE %d bytes at position %d - %v percent \n", read, seekPosition, percentage)
-		stream.logger.Debug(message)
+		// message := fmt.Sprintf("DISK WRITE %d bytes at position %d - %v percent \n", read, seekPosition, percentage)
+		// stream.logger.Debug(message)
 	}
 
 	return read, err
@@ -222,48 +222,26 @@ func (stream *Stream) readFromBuffer(p []byte, seekPosition int64) (int, error) 
 		return 0, fmt.Errorf("buffer is closed")
 	}
 
-	err := stream.beforeReadAt(seekPosition)
-	if err != nil {
-		return 0, fmt.Errorf("error before read at: %v", err)
-	}
-
-	readPos := min(max(1, seekPosition+1), stream.size-1)
-
-	if !stream.buffer.IsPositionAvailable(readPos) {
-		ctx, cancel := context.WithTimeout(stream.ctx, 60*time.Second)
-		defer cancel()
-
-		ok := stream.buffer.WaitForPosition(ctx, readPos)
-		if !ok {
-			return 0, fmt.Errorf("timeout waiting for the buffer to fill")
-		}
-	}
-
-	return stream.buffer.ReadAt(p, seekPosition)
-}
-
-// beforeReadAt checks if a new transfer needs to be created based on the seek position.
-func (stream *Stream) beforeReadAt(seekPosition int64) error {
-	shouldCreateNewTransfer := false
-	if stream.transfer == nil {
-		shouldCreateNewTransfer = true
-	} else {
-		// const tolerance int64 = 1024 * 1024 * 1024 // 100MB
-		const tolerance int64 = 0
-
-		if !stream.buffer.IsPositionInCapacity(seekPosition, tolerance) {
-			shouldCreateNewTransfer = true
-		}
-	}
-
-	if shouldCreateNewTransfer {
+	if stream.transfer == nil || !stream.buffer.IsPositionInCapacity(seekPosition, 16*1024*1024) {
 		err := stream.newTransfer(seekPosition)
 		if err != nil {
-			return err
+			return 0, fmt.Errorf("error before read at: %v", err)
 		}
 	}
 
-	return nil
+	// Emulate slow disk: do not return until the full requested span is available
+	// (unless EOF/closed), blocking on the buffer with the stream context.
+	end := min(seekPosition + int64(len(p)), stream.size)
+	if end > 0 {
+		ctx := stream.ctx
+		ok := stream.buffer.WaitForPosition(ctx, end)
+		if !ok && !stream.buffer.IsPositionAvailable(end) {
+			// Likely EOF before full span available; proceed to read what we have.
+		}
+	}
+	// Once available or at EOF, read. Underlying buffer may return (n, io.EOF),
+	// which the FUSE layer treats as a valid partial read.
+	return stream.buffer.ReadAt(p, seekPosition)
 }
 
 // newTransfer creates a new transfer for the stream at the specified seek position.
@@ -272,12 +250,15 @@ func (stream *Stream) newTransfer(seekPosition int64) error {
 		return fmt.Errorf("stream is closed")
 	}
 
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+
 	if stream.buffer == nil {
 		return fmt.Errorf("buffer is closed")
 	}
 
-	message := fmt.Sprintf("Creating new transfer at position %d at url %s\n", seekPosition, stream.url)
-	stream.logger.Debug(message)
+	// message := fmt.Sprintf("Creating new transfer at position %d at url %s\n", seekPosition, stream.url)
+	// stream.logger.Debug(message)
 
 	if stream.transfer != nil {
 		stream.transfer.Close()
