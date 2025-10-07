@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/BurntSushi/toml v1.5.0
-	github.com/anacrolix/fuse v0.4.0
+	github.com/anacrolix/fuse v0.3.1
 	github.com/google/uuid v1.6.0
 	github.com/sushydev/ring_buffer_go v0.1.9
 	github.com/sushydev/stream_mount_api v1.2.0

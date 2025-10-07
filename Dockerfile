@@ -1,7 +1,10 @@
 # --- Build app
 FROM nixos/nix:latest AS app
 
-RUN nix-env -iA nixpkgs.go nixpkgs.git
+RUN mkdir -p /root/.config/nix && \
+    echo "experimental-features = nix-command flakes" > /root/.config/nix/nix.conf
+
+RUN nix profile add nixpkgs#go
 
 ENV GO111MODULE=on \
     GOPROXY=direct \
