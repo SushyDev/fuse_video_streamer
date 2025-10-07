@@ -41,5 +41,4 @@ COPY --from=app /out/main /bin/main
 COPY --from=dependencies /out/etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=dependencies /out/bin/fusermount /bin/fusermount
 
-# Run the application directly (no shell available in scratch)
 ENTRYPOINT ["/bin/main"]

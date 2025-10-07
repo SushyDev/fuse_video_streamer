@@ -2,13 +2,13 @@ package grpc
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"fuse_video_streamer/config"
+	"fuse_video_streamer/filesystem/client/provider/grpc/internal/filesystem"
 
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
-
-	"fuse_video_streamer/filesystem/client/provider/grpc/internal/filesystem"
 
 	api "github.com/sushydev/stream_mount_api"
 
@@ -19,6 +19,8 @@ import (
 )
 
 type provider struct {
+	config *config.Config
+
 	name       string
 	target     string
 	fileSystem interfaces_filesystem_client.FileSystem
@@ -26,7 +28,7 @@ type provider struct {
 
 var _ interfaces_filesystem_client.Client = &provider{}
 
-func New(entry config.FileSystemProvider, loggerFactory interfaces_logger.LoggerFactory) (interfaces_filesystem_client.Client, error) {
+func New(entry config.FileSystemProvider, config *config.Config, loggerFactory interfaces_logger.LoggerFactory) (interfaces_filesystem_client.Client, error) {
 	connectParams := grpc.ConnectParams{
 		Backoff: backoff.DefaultConfig,
 	}
@@ -39,13 +41,11 @@ func New(entry config.FileSystemProvider, loggerFactory interfaces_logger.Logger
 
 	insecureCredentials := insecure.NewCredentials()
 
-	connection, err := grpc.NewClient(
-		entry.Target,
+	connection, err := grpc.NewClient(entry.Target,
 		grpc.WithConnectParams(connectParams),
 		grpc.WithKeepaliveParams(keepAliveParams),
 		grpc.WithTransportCredentials(insecureCredentials),
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -63,16 +63,21 @@ func New(entry config.FileSystemProvider, loggerFactory interfaces_logger.Logger
 	logger.Info(fmt.Sprintf("Connected to file system provider:	%s", entry.Name))
 
 	return &provider{
+		config:     config,
 		name:       entry.Name,
 		target:     entry.Target,
 		fileSystem: fileSystem,
 	}, nil
 }
 
-func (p *provider) GetName() string {
-	return p.name
+func (provider *provider) GetName() string {
+	return provider.name
 }
 
-func (p *provider) GetFileSystem() interfaces_filesystem_client.FileSystem {
-	return p.fileSystem
+func (provider *provider) GetDirectory() string {
+	return filepath.Join(provider.config.GetMountPoint(), provider.name)
+}
+
+func (provider *provider) GetFileSystem() interfaces_filesystem_client.FileSystem {
+	return provider.fileSystem
 }

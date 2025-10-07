@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"fuse_video_streamer/config"
 	"fuse_video_streamer/logger/interfaces"
 
 	"go.uber.org/zap"
@@ -78,10 +77,12 @@ func NewLogger(service string) (*Logger, error) {
 		return nil, err
 	}
 
-	debug, err := config.GetDebug()
-	if err != nil {
-		return nil, fmt.Errorf("error getting debug config: %v", err)
-	}
+	// debug, err := config.GetDebug()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error getting debug config: %v", err)
+	// }
+
+	debug := true;
 
 	return &Logger{
 		logger:           logger,

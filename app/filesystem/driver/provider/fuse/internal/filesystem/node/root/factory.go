@@ -1,6 +1,8 @@
 package root
 
 import (
+	"fuse_video_streamer/config"
+
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
@@ -24,19 +26,19 @@ type ServiceFactory struct {
 
 var _ interfaces_node.RootNodeServiceFactory = &ServiceFactory{}
 
-func NewFactory(loggerFactory interfaces_logger.LoggerFactory) (*ServiceFactory, error) {
+func NewFactory(config *config.Config, loggerFactory interfaces_logger.LoggerFactory) (*ServiceFactory, error) {
 	filesystemClientRepositoryLogger, err := loggerFactory.NewLogger("Filesystem Client Repository")
 	if err != nil {
 		return nil, err
 	}
 
-	filesystemClientRepository, err := filesystem_client_repository.New(loggerFactory, filesystemClientRepositoryLogger)
+	filesystemClientRepository, err := filesystem_client_repository.New(config, loggerFactory, filesystemClientRepositoryLogger)
 	if err != nil {
 		return nil, err
 	}
 
 	directoryHandleServiceFactory := handle_directory.NewFactory(loggerFactory)
-	directoryNodeServiceFactory := node_directory.NewFactory(loggerFactory)
+	directoryNodeServiceFactory := node_directory.NewFactory(config, loggerFactory)
 
 	return &ServiceFactory{
 		filesystemClientRepository: filesystemClientRepository,

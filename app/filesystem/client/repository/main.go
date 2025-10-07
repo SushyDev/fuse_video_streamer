@@ -20,15 +20,12 @@ type clientRepository struct {
 
 var _ interfaces_fuse.ClientRepository = &clientRepository{}
 
-func New(loggerFactory interfaces_logger.LoggerFactory, logger interfaces_logger.Logger) (interfaces_fuse.ClientRepository, error) {
-	fileSystemProviders, err := config.GetFileServers()
-	if err != nil {
-		return nil, err
-	}
+func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory, logger interfaces_logger.Logger) (interfaces_fuse.ClientRepository, error) {
+	fileSystemProviders := config.GetFileServers()
 
 	var providers []interfaces_fuse.Client
 	for _, fileSystemProvider := range fileSystemProviders {
-		provider, err := grpc.New(fileSystemProvider, loggerFactory)
+		provider, err := grpc.New(fileSystemProvider, config, loggerFactory)
 		if err != nil {
 			return nil, err
 		}

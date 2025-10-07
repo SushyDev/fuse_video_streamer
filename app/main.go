@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"fuse_video_streamer/config"
+	config_model "fuse_video_streamer/config"
 
 	filesystem_server_provider_fuse "fuse_video_streamer/filesystem/driver/provider/fuse"
 	filesystem_server_service "fuse_video_streamer/filesystem/driver/service"
@@ -20,19 +20,17 @@ import (
 func main() {
 	// go debug()
 
-	mountpoint, err := config.GetMountPoint()
+	config, err := config_model.Get()
 	if err != nil {
 		panic(err)
 	}
 
-	volumeName, err := config.GetVolumeName()
-	if err != nil {
-		panic(err)
-	}
+	mountpoint := config.GetMountPoint()
+	volumeName := config.GetVolumeName()
 
 	zapLoggerFactory := zap_logger.NewFactory()
 
-	fuseService, err := filesystem_server_provider_fuse.New(zapLoggerFactory)
+	fuseService, err := filesystem_server_provider_fuse.New(config, zapLoggerFactory)
 	if err != nil {
 		panic(err)
 	}

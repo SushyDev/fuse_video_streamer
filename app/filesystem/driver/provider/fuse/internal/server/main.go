@@ -32,19 +32,19 @@ func New(mountpoint string, connection *fuse.Conn, fileSystem interfaces_fuse.Fu
 	}
 }
 
-func (server *Server) Serve() error {
+func (instance *Server) Serve() error {
 	config := &fs.Config{}
 
-	fileSystemServer := fs.New(server.connection, config)
+	fileSystemServer := fs.New(instance.connection, config)
 
-	server.logger.Info("Serving filesystem")
+	instance.logger.Info("Serving filesystem")
 
-	err := fileSystemServer.Serve(server.fileSystem)
+	err := fileSystemServer.Serve(instance.fileSystem)
 	if err != nil {
 		return fmt.Errorf("failed to serve filesystem: %w", err)
 	}
 
-	server.logger.Info("Filesystem shutdown")
+	instance.logger.Info("Filesystem shutdown")
 
 	return nil
 }

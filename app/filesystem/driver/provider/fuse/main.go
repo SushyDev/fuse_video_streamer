@@ -1,6 +1,8 @@
 package fuse
 
 import (
+	"fuse_video_streamer/config"
+
 	interfaces_filesystem "fuse_video_streamer/filesystem/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
@@ -23,8 +25,8 @@ type FuseService struct {
 
 var _ interfaces_filesystem.FileSystemServerService = &FuseService{}
 
-func New(loggerFactory interfaces_logger.LoggerFactory) (*FuseService, error) {
-	rootNodeServiceFactory, err := node_root.NewFactory(loggerFactory)
+func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory) (*FuseService, error) {
+	rootNodeServiceFactory, err := node_root.NewFactory(config, loggerFactory)
 	if err != nil {
 		return nil, err
 	}

@@ -5,44 +5,28 @@
 
 	outputs = { self, nixpkgs }:
 		let
-		supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
+			supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
 
-		mkDepsBundle = (system:
-			let
-			pkgs = import nixpkgs { inherit system; };
-			pkgsMusl = import nixpkgs {
-				inherit system;
-				crossSystem = {
-					config = "${pkgs.stdenv.targetPlatform.parsed.cpu.name}-unknown-linux-musl";
-					isStatic = true;
-				};
-			};
+			mkDepsBundle = (system:
+				let
+					pkgs = import nixpkgs { inherit system; };
+				in
+				pkgs.stdenv.mkDerivation {
+					name = "dependencies-bundle";
+					dontUnpack = true;
 
-			in
-			pkgs.stdenv.mkDerivation {
-				name = "dependencies-bundle";
-				dontUnpack = true;
+					nativeBuildInputs = [
+						pkgs.pkgsStatic.fuse
+						pkgs.cacert
+					];
 
-				# We only need the statically built fuse and cacert.
-				nativeBuildInputs = [
-					pkgs.pkgsStatic.fuse
-					pkgs.cacert
-				];
-
-				# With a truly static binary, the install phase is minimal.
-				installPhase = ''
-					mkdir -p $out/bin $out/etc/ssl/certs
-
-					# 1. Copy the single, self-contained fusermount binary.
-					cp ${pkgs.pkgsStatic.fuse}/bin/fusermount $out/bin/
-
-					# No /lib directory or linker is needed.
-
-					# 2. Copy the CA certificate bundle.
-					cp -L ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt $out/etc/ssl/certs/ca-certificates.crt
-				'';
-			}
-		);
+					installPhase = ''
+						mkdir -p $out/bin $out/etc/ssl/certs
+						cp ${pkgs.pkgsStatic.fuse}/bin/fusermount $out/bin/
+						cp -L ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt $out/etc/ssl/certs/ca-certificates.crt
+					'';
+				}
+			);
 		in
 		{
 			packages = nixpkgs.lib.genAttrs supportedSystems (system: {

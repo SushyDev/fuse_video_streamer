@@ -68,7 +68,7 @@ func calculatePreloadSize(bufferSize int64) int64 {
 	return bufferSize / 4
 }
 
-func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) (*Stream, error) {
+func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory, url string, size int64) (*Stream, error) {
 	identifier := time.Now().UnixNano()
 
 	bufferSize := calculateBufferSize(int64(size))
@@ -98,12 +98,7 @@ func New(loggerFactory interfaces_logger.LoggerFactory, url string, size int64) 
 		logger: logger,
 	}
 
-	enableDiskCache, err := config.GetEnableDiskCache()
-	if err != nil {
-		return nil, fmt.Errorf("error getting enable disk cache config: %v", err)
-	}
-
-	if enableDiskCache {
+	if config.GetEnableDiskCache() {
 		diskCache, err := disk_cache.NewDiskCache(url, size)
 		if err != nil {
 			return nil, fmt.Errorf("error creating disk cache: %v", err)

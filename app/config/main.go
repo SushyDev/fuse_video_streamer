@@ -20,18 +20,13 @@ type Config struct {
 	FileServers     []FileSystemProvider `toml:"file_servers"`
 }
 
-var config *Config
-
-func get() (*Config, error) {
-	if config != nil {
-		return config, nil
-	}
-
+func Get() (*Config, error) {
 	configData, err := os.ReadFile("config.toml")
 	if err != nil {
 		return nil, err
 	}
 
+	var config *Config = &Config{}
 	_, err = toml.Decode(string(configData), &config)
 	if err != nil {
 		return nil, err
@@ -61,49 +56,25 @@ func validate(cfg Config) error {
 	return nil
 }
 
-func GetMountPoint() (string, error) {
-	cfg, err := get()
-	if err != nil {
-		return "", err
-	}
-	return cfg.MountPoint, nil
+func (config *Config) GetMountPoint() string {
+	return config.MountPoint
 }
 
-func GetVolumeName() (string, error) {
-	cfg, err := get()
-	if err != nil {
-		return "", err
-	}
-
-	return cfg.VolumeName, nil
+func (config *Config) GetVolumeName() string {
+	return config.VolumeName
 }
 
-func GetDebug() (bool, error) {
-	cfg, err := get()
-	if err != nil {
-		return false, err
-	}
-
-	return cfg.Debug, nil
+func (config *Config) GetDebug() bool {
+	return config.Debug
 }
 
-func GetEnableDiskCache() (bool, error) {
-	cfg, err := get()
-	if err != nil {
-		return false, err
-	}
-
-	return cfg.EnableDiskCache, nil
+func (config *Config) GetEnableDiskCache() bool {
+	return config.EnableDiskCache
 }
 
-func GetFileServers() ([]FileSystemProvider, error) {
-	cfg, err := get()
-	if err != nil {
-		return nil, err
-	}
+func (config *Config) GetFileServers() []FileSystemProvider {
+	servers := make([]FileSystemProvider, len(config.FileServers))
+	copy(servers, config.FileServers)
 
-	servers := make([]FileSystemProvider, len(cfg.FileServers))
-	copy(servers, cfg.FileServers)
-
-	return servers, nil
+	return servers
 }

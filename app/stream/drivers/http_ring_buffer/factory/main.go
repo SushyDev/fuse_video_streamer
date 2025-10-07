@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sync/atomic"
 	"time"
+	"math"
 
+	"fuse_video_streamer/config"
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
@@ -17,6 +19,7 @@ type CacheItem struct {
 }
 
 type Factory struct {
+	config *config.Config
 	client interfaces_filesystem_client.Client
 
 	loggerFactory interfaces_logger.LoggerFactory
@@ -27,10 +30,12 @@ type Factory struct {
 }
 
 func New(
+	config *config.Config,
 	client interfaces_filesystem_client.Client,
 	loggerFactory interfaces_logger.LoggerFactory,
 ) *Factory {
 	return &Factory{
+		config:        config,
 		client:        client,
 		loggerFactory: loggerFactory,
 	}
@@ -41,24 +46,38 @@ func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*http_rin
 		return nil, fmt.Errorf("factory is closed")
 	}
 
-	url, err := factory.getStreamUrl(nodeIdentifier)
+	url, err := factory.getStreamURL(nodeIdentifier, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	return http_ring_buffer.New(factory.loggerFactory, url, int64(size))
+	return http_ring_buffer.New(factory.config, factory.loggerFactory, url, int64(size))
 }
 
-func (factory *Factory) getStreamUrl(identifier uint64) (string, error) {
+func (factory *Factory) getStreamURL(identifier uint64, tries int) (string, error) {
+	const maxRetries = 30
+	const maxBackoff = 30 * time.Second
+	
 	if factory.cachedItem.url != "" && factory.cachedItem.expiration.After(time.Now()) {
 		return factory.cachedItem.url, nil
+	}
+
+	if tries >= maxRetries {
+		return "", fmt.Errorf("failed to get video url for node with id %d after %d retries", identifier, maxRetries)
 	}
 
 	fileSystem := factory.client.GetFileSystem()
 
 	url, err := fileSystem.GetStreamUrl(identifier)
 	if err != nil {
-		return "", fmt.Errorf("failed to get video url for node with id %d. reason: %v", identifier, err.Error())
+		backoffDuration := min(
+			time.Duration(100*math.Pow(2, float64(tries))) * time.Millisecond,
+			maxBackoff,
+		)
+
+		time.Sleep(backoffDuration)
+		
+		return factory.getStreamURL(identifier, tries+1)
 	}
 
 	factory.cachedItem = CacheItem{

@@ -3,7 +3,6 @@ package symlink
 import (
 	"context"
 	"fmt"
-	"fuse_video_streamer/config"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -21,7 +20,11 @@ type Symlink struct {
 	logger interfaces_logger.Logger
 }
 
-func NewNode(client interfaces_filesystem_client.Client, logger interfaces_logger.Logger, identifier uint64) *Symlink {
+func NewNode(
+	client interfaces_filesystem_client.Client,
+	logger interfaces_logger.Logger,
+	identifier uint64,
+) *Symlink {
 	return &Symlink{
 		client:     client,
 		identifier: identifier,
@@ -47,15 +50,10 @@ func (symlink *Symlink) Readlink(ctx context.Context, req *fuse.ReadlinkRequest)
 		return "", syscall.ENOENT
 	}
 
-	mountPath, err := config.GetMountPoint()
+	path, err := filepath.Abs(filepath.Join(symlink.client.GetDirectory(), linkPath))
 	if err != nil {
-		symlink.logger.Error("failed to get mount point", err)
-		return "", syscall.ENOENT
-	}
-
-	path, err := filepath.Abs(filepath.Join(mountPath, symlink.client.GetName(), linkPath))
-	if err != nil {
-		symlink.logger.Error("failed to get absolute path for symlink", err)
+		message := fmt.Sprintf("failed to get absolute path for symlink with identifier %d and path %s", symlink.identifier, linkPath)
+		symlink.logger.Error(message, err)
 
 		return "", syscall.ENOENT
 	}

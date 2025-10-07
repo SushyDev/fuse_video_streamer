@@ -11,6 +11,7 @@ type ClientRepository interface {
 
 type Client interface {
 	GetName() string
+	GetDirectory() string
 	GetFileSystem() FileSystem
 }
 
