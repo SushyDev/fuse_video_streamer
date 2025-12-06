@@ -57,6 +57,43 @@ func (n *node) GetStreamable() bool {
 	return n.streamable
 }
 
+// convertUnixModeToGoMode converts raw Unix mode bits to Go's io/fs.FileMode
+func convertUnixModeToGoMode(unixMode uint32) io_fs.FileMode {
+	var mode io_fs.FileMode
+
+	// Extract permission bits (lower 9 bits)
+	mode = io_fs.FileMode(unixMode & 0777)
+
+	// Extract and convert file type bits
+	switch unixMode & 0170000 { // S_IFMT mask
+	case 0040000: // S_IFDIR
+		mode |= io_fs.ModeDir
+	case 0020000: // S_IFCHR
+		mode |= io_fs.ModeDevice | io_fs.ModeCharDevice
+	case 0060000: // S_IFBLK
+		mode |= io_fs.ModeDevice
+	case 0010000: // S_IFIFO
+		mode |= io_fs.ModeNamedPipe
+	case 0140000: // S_IFSOCK
+		mode |= io_fs.ModeSocket
+		// Note: Hardlinks are regular files and don't have a special mode bit
+		// S_IFLNK (0120000) is for symlinks, which we're not using
+	}
+
+	// Extract special bits
+	if unixMode&0004000 != 0 { // S_ISUID
+		mode |= io_fs.ModeSetuid
+	}
+	if unixMode&0002000 != 0 { // S_ISGID
+		mode |= io_fs.ModeSetgid
+	}
+	if unixMode&0001000 != 0 { // S_ISVTX
+		mode |= io_fs.ModeSticky
+	}
+
+	return mode
+}
+
 func New(api api.FileSystemServiceClient, logger interfaces_logger.Logger) *filesystem {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -84,7 +121,7 @@ func (fs *filesystem) Root(name string) (interfaces_fuse.Node, error) {
 	return newNode(
 		root.GetId(),
 		root.GetName(),
-		io_fs.FileMode(root.GetMode()),
+		convertUnixModeToGoMode(root.GetMode()),
 		root.GetStreamable(),
 	), nil
 }
@@ -106,7 +143,7 @@ func (fs *filesystem) ReadDirAll(nodeId uint64) ([]interfaces_fuse.Node, error) 
 		node := newNode(
 			node.GetId(),
 			node.GetName(),
-			io_fs.FileMode(node.GetMode()),
+			convertUnixModeToGoMode(node.GetMode()),
 			node.GetStreamable(),
 		)
 
@@ -135,7 +172,7 @@ func (fs *filesystem) Lookup(parentNodeId uint64, name string) (interfaces_fuse.
 	return newNode(
 		foundNode.GetId(),
 		foundNode.GetName(),
-		io_fs.FileMode(foundNode.GetMode()),
+		convertUnixModeToGoMode(foundNode.GetMode()),
 		foundNode.GetStreamable(),
 	), nil
 }
@@ -197,7 +234,7 @@ func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces_fuse.N
 	return newNode(
 		response.Node.GetId(),
 		response.Node.GetName(),
-		io_fs.FileMode(response.Node.GetMode()),
+		convertUnixModeToGoMode(response.Node.GetMode()),
 		response.Node.GetStreamable(),
 	), nil
 }
@@ -215,22 +252,7 @@ func (fs *filesystem) Link(parentNodeId uint64, name string, targetNodeId uint64
 	return api.FromResponseError(err)
 }
 
-func (fs *filesystem) ReadLink(nodeId uint64) (string, error) {
-	requestCtx, cancel := context.WithTimeout(fs.ctx, 10*time.Second)
-	defer cancel()
-
-	response, err := fs.api.ReadLink(requestCtx, &api.ReadLinkRequest{
-		NodeId: nodeId,
-	})
-
-	if err != nil {
-		return "", api.FromResponseError(err)
-	}
-
-	return response.GetPath(), nil
-}
-
-func (fs *filesystem) GetFileInfo(nodeId uint64) (uint64, error) {
+func (fs *filesystem) GetFileInfo(nodeId uint64) (uint64, io_fs.FileMode, error) {
 	requestCtx, cancel := context.WithTimeout(fs.ctx, 10*time.Second)
 	defer cancel()
 
@@ -239,10 +261,10 @@ func (fs *filesystem) GetFileInfo(nodeId uint64) (uint64, error) {
 	})
 
 	if err != nil {
-		return 0, api.FromResponseError(err)
+		return 0, 0, api.FromResponseError(err)
 	}
 
-	return response.GetSize(), nil
+	return response.GetSize(), convertUnixModeToGoMode(response.GetMode()), nil
 }
 
 func (fs *filesystem) GetStreamUrl(nodeId uint64) (string, error) {

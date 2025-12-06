@@ -25,12 +25,10 @@ type FileSystem interface {
 	MkDir(parentNodeId uint64, name string) (Node, error)
 	Link(parentNodeId uint64, name string, targetNodeId uint64) error
 
-	ReadLink(nodeId uint64) (string, error)
-
 	ReadFile(nodeId uint64, offset uint64, size uint64) ([]byte, error)
 	WriteFile(nodeId uint64, offset uint64, data []byte) (uint64, error)
 
-	GetFileInfo(nodeId uint64) (size uint64, error error)
+	GetFileInfo(nodeId uint64) (size uint64, mode fs.FileMode, error error)
 	GetStreamUrl(nodeId uint64) (url string, error error)
 }
 

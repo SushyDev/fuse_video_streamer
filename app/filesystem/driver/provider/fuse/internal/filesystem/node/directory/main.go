@@ -16,7 +16,6 @@ import (
 	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
 
 	handle_directory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/handle/directory"
-	node_symlink "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node/symlink"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -26,6 +25,7 @@ type Node struct {
 	client           interfaces_filesystem_client.Client
 	identifier       uint64
 	remoteIdentifier uint64
+	mode             os.FileMode
 
 	logger interfaces_logger.Logger
 
@@ -58,6 +58,7 @@ func NewNode(
 		client:           abstractNode.GetClient(),
 		identifier:       abstractNode.GetIdentifier(),
 		remoteIdentifier: abstractNode.GetRemoteIdentifier(),
+		mode:             abstractNode.GetMode(),
 
 		directoryHandleService: directoryHandleServiceFactory.NewService(),
 		directoryNodeService:   directoryNodeService,
@@ -83,6 +84,10 @@ func (node *Node) GetClient() interfaces_filesystem_client.Client {
 	return node.client
 }
 
+func (node *Node) GetMode() os.FileMode {
+	return node.mode
+}
+
 func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	if node.IsClosed() {
 		return syscall.ENOENT
@@ -91,7 +96,7 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	attr.Mode = os.ModeDir
+	attr.Mode = node.mode
 
 	return nil
 }
@@ -130,7 +135,7 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return node, nil
 	case "..":
 		node.logger.Debug("lookup request for parent directory, returning parent node")
-		parentNode, err := node.directoryNodeService.NewNode(node, node.GetRemoteIdentifier())
+		parentNode, err := node.directoryNodeService.NewNode(node, node.GetRemoteIdentifier(), node.GetMode())
 		if err != nil {
 			node.logger.Error("failed to create parent node", err)
 			return nil, err
@@ -158,25 +163,22 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	// node.logger.Debug(fmt.Sprintf("found node: %s with ID: %d in directory with ID: %d", foundNode.GetName(), foundNode.GetId(), node.GetRemoteIdentifier()))
 
-	switch foundNode.GetMode() {
-	case io_fs.ModeDir:
-		return node.directoryNodeService.NewNode(node, foundNode.GetId())
-	case io_fs.FileMode(0):
+	// Check file type using mode bits, not exact equality
+	// Modes include both type bits and permission bits
+	mode := foundNode.GetMode()
+
+	if mode.IsDir() {
+		return node.directoryNodeService.NewNode(node, foundNode.GetId(), mode)
+	} else if mode.IsRegular() || mode == 0 {
+		// Regular files, including hardlinks
+		// Hardlinks don't have a special mode - they're just regular files pointing to the same inode
 		if foundNode.GetStreamable() {
 			return node.streamableNodeService.NewNode(node, foundNode.GetId())
 		} else {
 			return node.fileNodeService.NewNode(node, foundNode.GetId())
 		}
-	case io_fs.ModeSymlink:
-		symlinkLogger, err := node.loggerFactory.NewLogger("Symlink node")
-		if err != nil {
-			node.logger.Error("failed to create logger for symlink node", err)
-			return nil, err
-		}
-
-		return node_symlink.NewNode(node.client, symlinkLogger, foundNode.GetId()), nil
-	default:
-		message := fmt.Sprintf("Unknown file mode: %s", foundNode.GetName())
+	} else {
+		message := fmt.Sprintf("Unknown file mode: %d (0x%x) for file: %s", mode, mode, foundNode.GetName())
 		node.logger.Error(message, nil)
 		return nil, syscall.ENOENT
 	}
@@ -285,7 +287,7 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 		return nil, err
 	}
 
-	return node.directoryNodeService.NewNode(node, remoteDirectoryNode.GetId())
+	return node.directoryNodeService.NewNode(node, remoteDirectoryNode.GetId(), remoteDirectoryNode.GetMode())
 }
 
 func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode fs.Node) (fs.Node, error) {
@@ -296,23 +298,64 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
-	oldFile, ok := oldNode.(interfaces_node.StreamableNode)
-	if !ok {
-		message := fmt.Sprintf("not a streamable node: %s", oldNode)
+	// Accept both FileNode and StreamableNode (both have GetRemoteIdentifier)
+	var targetNodeId uint64
+
+	if streamableNode, ok := oldNode.(interfaces_node.StreamableNode); ok {
+		targetNodeId = streamableNode.GetRemoteIdentifier()
+		node.logger.Info(fmt.Sprintf("Link: creating hard link '%s' -> streamable node %d", request.NewName, targetNodeId))
+	} else if fileNode, ok := oldNode.(interfaces_node.FileNode); ok {
+		targetNodeId = fileNode.GetRemoteIdentifier()
+		node.logger.Info(fmt.Sprintf("Link: creating hard link '%s' -> file node %d", request.NewName, targetNodeId))
+	} else {
+		message := fmt.Sprintf("cannot link: not a file or streamable node: %s", oldNode)
 		node.logger.Error(message, nil)
 		return nil, syscall.ENOSYS
 	}
 
 	fileSystem := node.client.GetFileSystem()
 
-	err := fileSystem.Link(node.GetRemoteIdentifier(), request.NewName, oldFile.GetRemoteIdentifier())
+	// Create the hard link via gRPC
+	err := fileSystem.Link(node.GetRemoteIdentifier(), request.NewName, targetNodeId)
 	if err != nil {
 		message := fmt.Sprintf("failed to link %s", request.NewName)
 		node.logger.Error(message, err)
 		return nil, err
 	}
 
-	return oldFile, nil
+	// Lookup the newly created hard link to get its node info
+	foundNode, err := fileSystem.Lookup(node.GetRemoteIdentifier(), request.NewName)
+	if err != nil {
+		message := fmt.Sprintf("failed to lookup newly created hard link %s", request.NewName)
+		node.logger.Error(message, err)
+		return nil, err
+	}
+
+	node.logger.Info(fmt.Sprintf("Link: looked up hard link %s -> node_id=%d, streamable=%v, mode=%d", 
+		request.NewName, foundNode.GetId(), foundNode.GetStreamable(), foundNode.GetMode()))
+
+	// Create appropriate node type based on streamable flag
+	mode := foundNode.GetMode()
+
+	if mode.IsDir() {
+		// This shouldn't happen for hard links, but handle it gracefully
+		node.logger.Warn(fmt.Sprintf("Link: unexpected directory mode for hard link %s", request.NewName))
+		return node.directoryNodeService.NewNode(node, foundNode.GetId(), mode)
+	} else if mode.IsRegular() || mode == 0 {
+		if foundNode.GetStreamable() {
+			// Hard link to streamable file
+			node.logger.Info(fmt.Sprintf("Link: creating StreamableNode for hard link %s (node_id=%d)", request.NewName, foundNode.GetId()))
+			return node.streamableNodeService.NewNode(node, foundNode.GetId())
+		} else {
+			// Hard link to regular file
+			node.logger.Info(fmt.Sprintf("Link: creating FileNode for hard link %s (node_id=%d)", request.NewName, foundNode.GetId()))
+			return node.fileNodeService.NewNode(node, foundNode.GetId())
+		}
+	} else {
+		message := fmt.Sprintf("Unknown file mode: %d for hard link: %s", mode, request.NewName)
+		node.logger.Error(message, nil)
+		return nil, syscall.ENOENT
+	}
 }
 
 func (node *Node) Close() error {

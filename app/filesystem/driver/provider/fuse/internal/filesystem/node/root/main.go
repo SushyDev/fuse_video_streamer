@@ -70,7 +70,8 @@ func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	attr.Mode = os.ModeDir
+	// Root directory with 0755 permissions
+	attr.Mode = os.ModeDir | 0755
 
 	return nil
 }
@@ -115,7 +116,7 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 		return nil, err
 	}
 
-	return directoryNodeService.NewNode(nil, root.GetId())
+	return directoryNodeService.NewNode(nil, root.GetId(), root.GetMode())
 }
 
 func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {

@@ -102,6 +102,12 @@ func (handle *Handle) Write(ctx context.Context, writeRequest *fuse.WriteRequest
 
 	writeResponse.Size = int(bytesWritten)
 
+	// Refresh the file size after write
+	newSize, _, err := fileSystem.GetFileInfo(handle.node.GetRemoteIdentifier())
+	if err == nil {
+		handle.node.UpdateSize(newSize)
+	}
+
 	return nil
 }
 

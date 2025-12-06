@@ -3,7 +3,6 @@ package directory
 import (
 	"context"
 	"fmt"
-	io_fs "io/fs"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -70,28 +69,22 @@ func (handle *Handle) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	var entries []fuse.Dirent
 
 	for _, entry := range nodes {
-		switch entry.GetMode() {
-		// --- Symlink
-		case io_fs.ModeSymlink:
-			entries = append(entries, fuse.Dirent{
-				Name: entry.GetName(),
-				Type: fuse.DT_Link,
-			})
-		// --- File
-		case io_fs.FileMode(0):
-			entries = append(entries, fuse.Dirent{
-				Name: entry.GetName(),
-				Type: fuse.DT_File,
-			})
-		// --- Directory
-		case io_fs.ModeDir:
+		mode := entry.GetMode()
+
+		// Check file type using mode bits, not exact equality
+		if mode.IsDir() {
 			entries = append(entries, fuse.Dirent{
 				Name: entry.GetName(),
 				Type: fuse.DT_Dir,
 			})
-		// --- Unknown
-		default:
-			message := fmt.Sprintf("unknown file mode %s for file %s", entry.GetMode(), entry.GetName())
+		} else if mode.IsRegular() || mode == 0 {
+			// Regular files, including hardlinks
+			entries = append(entries, fuse.Dirent{
+				Name: entry.GetName(),
+				Type: fuse.DT_File,
+			})
+		} else {
+			message := fmt.Sprintf("unknown file mode %d (0x%x) for file %s", mode, mode, entry.GetName())
 			handle.logger.Error(message, nil)
 		}
 	}

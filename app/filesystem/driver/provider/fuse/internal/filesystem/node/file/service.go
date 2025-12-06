@@ -73,16 +73,16 @@ func (service *Service) NewNode(parentDirectoryNode interfaces_node.DirectoryNod
 		return nil, err
 	}
 
-	size, err := fileSystem.GetFileInfo(remoteIdentifier)
+	size, mode, err := fileSystem.GetFileInfo(remoteIdentifier)
 	if err != nil {
-		message := fmt.Sprintf("failed to get video size for %d", remoteIdentifier)
+		message := fmt.Sprintf("failed to get file info for %d", remoteIdentifier)
 		service.logger.Error(message, err)
 		return nil, err
 	}
 
 	identifier := service.tree.GetNextIdentifier()
 
-	newNode := NewNode(service.client, service.loggerFactory, fileHandleService, metrics, fileNodeLogger, identifier, remoteIdentifier, size)
+	newNode := NewNode(service.client, service.loggerFactory, fileHandleService, metrics, fileNodeLogger, identifier, remoteIdentifier, size, mode)
 
 	service.tree.RegisterNode(newNode)
 

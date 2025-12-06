@@ -31,6 +31,7 @@ type Node struct {
 	identifier       uint64
 	remoteIdentifier uint64
 	size             uint64
+	mode             os.FileMode
 
 	handles []interfaces_handle.FileHandle
 
@@ -50,6 +51,7 @@ func NewNode(
 	identifier uint64,
 	remoteIdentifier uint64,
 	size uint64,
+	mode os.FileMode,
 ) *Node {
 	node := &Node{
 		client:        client,
@@ -63,6 +65,7 @@ func NewNode(
 		identifier:       identifier,
 		remoteIdentifier: remoteIdentifier,
 		size:             size,
+		mode:             mode,
 	}
 
 	return node
@@ -84,12 +87,22 @@ func (node *Node) GetClient() interfaces_filesystem_client.Client {
 	return node.client
 }
 
+func (node *Node) GetMode() os.FileMode {
+	return node.mode
+}
+
+func (node *Node) UpdateSize(newSize uint64) {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	node.size = newSize
+}
+
 func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	if node.IsClosed() {
 		return syscall.ENOENT
 	}
 
-	attr.Mode = os.FileMode(0)
+	attr.Mode = node.mode
 	attr.Size = node.size
 
 	return nil

@@ -2,6 +2,7 @@ package directory
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 
@@ -59,7 +60,7 @@ func NewService(
 	return service, nil
 }
 
-func (service *Service) NewNode(parentDirectoryNode interfaces_node.DirectoryNode, remoteIdentifier uint64) (interfaces_node.DirectoryNode, error) {
+func (service *Service) NewNode(parentDirectoryNode interfaces_node.DirectoryNode, remoteIdentifier uint64, mode os.FileMode) (interfaces_node.DirectoryNode, error) {
 	if service.IsClosed() {
 		return nil, fmt.Errorf("service is closed")
 	}
@@ -71,6 +72,7 @@ func (service *Service) NewNode(parentDirectoryNode interfaces_node.DirectoryNod
 		service.client,
 		service.tree.GetNextIdentifier(),
 		remoteIdentifier,
+		mode,
 	)
 
 	logger, err := service.loggerFactory.NewLogger("Directory Node")

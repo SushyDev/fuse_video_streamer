@@ -1,6 +1,8 @@
 package node
 
 import (
+	"os"
+
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 
@@ -21,6 +23,7 @@ type AbstractNode interface {
 	interfaces_fuse.UseClosable
 	interfaces_fuse.UseIdentifier
 	interfaces_fuse.UseRemoteIdentifier
+	interfaces_fuse.UseMode
 }
 
 type RootNode interface {
@@ -73,7 +76,7 @@ type RootNodeService interface {
 type DirectoryNodeService interface {
 	interfaces_fuse.UseClosable
 
-	NewNode(parentDirectoryNode DirectoryNode, remoteIdentifier uint64) (DirectoryNode, error)
+	NewNode(parentDirectoryNode DirectoryNode, remoteIdentifier uint64, mode os.FileMode) (DirectoryNode, error)
 }
 
 type FileNodeService interface {

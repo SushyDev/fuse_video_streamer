@@ -1,6 +1,8 @@
 package abstract
 
 import (
+	"os"
+
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 
 	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
@@ -10,6 +12,7 @@ type Node struct {
 	client           interfaces_filesystem_client.Client
 	identifier       uint64
 	remoteIdentifier uint64
+	mode             os.FileMode
 }
 
 var _ interfaces_node.AbstractNode = &Node{}
@@ -18,11 +21,13 @@ func NewNode(
 	client interfaces_filesystem_client.Client,
 	identifier uint64,
 	remoteIdentifier uint64,
+	mode os.FileMode,
 ) *Node {
 	return &Node{
 		client:           client,
 		identifier:       identifier,
 		remoteIdentifier: remoteIdentifier,
+		mode:             mode,
 	}
 }
 
@@ -36,6 +41,10 @@ func (node *Node) GetIdentifier() uint64 {
 
 func (node *Node) GetRemoteIdentifier() uint64 {
 	return node.remoteIdentifier
+}
+
+func (node *Node) GetMode() os.FileMode {
+	return node.mode
 }
 
 func (node *Node) Close() error {

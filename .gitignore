@@ -4,3 +4,4 @@ mnt
 *.db
 config.toml
 .cache
+.direnv

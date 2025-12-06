@@ -58,7 +58,7 @@ func (service *Service) NewNode(parentDirectoryNode node.DirectoryNode, remoteId
 
 	fileSystem := service.client.GetFileSystem()
 
-	size, err := fileSystem.GetFileInfo(remoteIdentifier)
+	size, mode, err := fileSystem.GetFileInfo(remoteIdentifier)
 	if err != nil {
 		message := fmt.Sprintf("failed to get video size for %d", remoteIdentifier)
 		service.logger.Error(message, err)
@@ -74,7 +74,7 @@ func (service *Service) NewNode(parentDirectoryNode node.DirectoryNode, remoteId
 
 	identifier := service.tree.GetNextIdentifier()
 
-	newNode, err := NewNode(service.client, service.streamableHandleServiceFactory, logger, identifier, remoteIdentifier, size)
+	newNode, err := NewNode(service.client, service.streamableHandleServiceFactory, logger, identifier, remoteIdentifier, size, mode)
 	if err != nil {
 		message := fmt.Sprintf("failed to create new streamable node with identifier %d", identifier)
 		service.logger.Error(message, err)
