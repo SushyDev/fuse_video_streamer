@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 	io_fs "io/fs"
+	"syscall"
 	"time"
 
 	interfaces_fuse "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
-	api "github.com/sushydev/stream_mount_api"
+	api "sushydev.github.io/stream_mount_api/go"
 )
 
 type filesystem struct {
@@ -113,7 +114,7 @@ func (fs *filesystem) Root(name string) (interfaces_fuse.Node, error) {
 
 	response, err := fs.api.Root(requestCtx, &api.RootRequest{})
 	if err != nil {
-		return nil, api.FromResponseError(err)
+		return nil, fromResponseError(err)
 	}
 
 	root := response.GetRoot()
@@ -135,7 +136,7 @@ func (fs *filesystem) ReadDirAll(nodeId uint64) ([]interfaces_fuse.Node, error) 
 	})
 
 	if err != nil {
-		return nil, api.FromResponseError(err)
+		return nil, fromResponseError(err)
 	}
 
 	var nodes []interfaces_fuse.Node
@@ -164,10 +165,13 @@ func (fs *filesystem) Lookup(parentNodeId uint64, name string) (interfaces_fuse.
 	})
 
 	if err != nil {
-		return nil, api.FromResponseError(err)
+		return nil, fromResponseError(err)
 	}
 
 	foundNode := response.GetNode()
+	if foundNode == nil {
+		return nil, syscall.ENOENT
+	}
 
 	return newNode(
 		foundNode.GetId(),
@@ -186,7 +190,7 @@ func (fs *filesystem) Remove(parentNodeId uint64, name string) error {
 		Name:         name,
 	})
 
-	return api.FromResponseError(err)
+	return fromResponseError(err)
 }
 
 func (fs *filesystem) Rename(oldParentNodeId uint64, oldName string, newParentNodeId uint64, newName string) error {
@@ -200,7 +204,7 @@ func (fs *filesystem) Rename(oldParentNodeId uint64, oldName string, newParentNo
 		NewName:         newName,
 	})
 
-	return api.FromResponseError(err)
+	return fromResponseError(err)
 }
 
 func (fs *filesystem) Create(parentNodeId uint64, name string, mode io_fs.FileMode) error {
@@ -213,7 +217,7 @@ func (fs *filesystem) Create(parentNodeId uint64, name string, mode io_fs.FileMo
 		Mode:         uint32(mode),
 	})
 
-	return api.FromResponseError(err)
+	return fromResponseError(err)
 }
 
 func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces_fuse.Node, error) {
@@ -228,7 +232,7 @@ func (fs *filesystem) MkDir(parentNodeId uint64, name string) (interfaces_fuse.N
 	})
 
 	if err != nil {
-		return nil, api.FromResponseError(err)
+		return nil, fromResponseError(err)
 	}
 
 	return newNode(
@@ -249,7 +253,7 @@ func (fs *filesystem) Link(parentNodeId uint64, name string, targetNodeId uint64
 		Name:         name,
 	})
 
-	return api.FromResponseError(err)
+	return fromResponseError(err)
 }
 
 func (fs *filesystem) GetFileInfo(nodeId uint64) (uint64, io_fs.FileMode, error) {
@@ -261,7 +265,7 @@ func (fs *filesystem) GetFileInfo(nodeId uint64) (uint64, io_fs.FileMode, error)
 	})
 
 	if err != nil {
-		return 0, 0, api.FromResponseError(err)
+		return 0, 0, fromResponseError(err)
 	}
 
 	return response.GetSize(), convertUnixModeToGoMode(response.GetMode()), nil
@@ -276,7 +280,7 @@ func (fs *filesystem) GetStreamUrl(nodeId uint64) (string, error) {
 	})
 
 	if err != nil {
-		return "", api.FromResponseError(err)
+		return "", fromResponseError(err)
 	}
 
 	return response.GetUrl(), nil
@@ -293,7 +297,7 @@ func (fs *filesystem) ReadFile(nodeId uint64, offset uint64, size uint64) ([]byt
 	})
 
 	if err != nil {
-		return nil, api.FromResponseError(err)
+		return nil, fromResponseError(err)
 	}
 
 	return response.GetData(), nil
@@ -310,7 +314,7 @@ func (fs *filesystem) WriteFile(nodeId uint64, offset uint64, data []byte) (uint
 	})
 
 	if err != nil {
-		return 0, api.FromResponseError(err)
+		return 0, fromResponseError(err)
 	}
 
 	return response.GetBytesWritten(), nil

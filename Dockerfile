@@ -9,7 +9,7 @@ RUN nix profile add nixpkgs#go
 ENV GO111MODULE=on \
     GOPROXY=direct \
     GOFLAGS=-mod=readonly \
-    GOTOOLCHAIN=go1.24.0+auto
+    GOTOOLCHAIN=go1.25.4+auto
 
 WORKDIR /src/app
 

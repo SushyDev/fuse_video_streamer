@@ -10,7 +10,7 @@ import (
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
-	api "github.com/sushydev/stream_mount_api"
+	api "sushydev.github.io/stream_mount_api/go"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"

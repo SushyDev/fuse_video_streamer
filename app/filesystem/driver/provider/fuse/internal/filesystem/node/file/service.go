@@ -14,7 +14,7 @@ import (
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 
-	api "github.com/sushydev/stream_mount_api"
+	api "sushydev.github.io/stream_mount_api/go"
 )
 
 type Service struct {
