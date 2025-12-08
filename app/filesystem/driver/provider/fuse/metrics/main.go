@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 )
 
@@ -14,7 +15,8 @@ type MetricsCollection struct {
 
 	started atomic.Bool
 
-	streamTransfers map[uint64]*StreamTransferMetrics
+	streamTransfersMu sync.RWMutex
+	streamTransfers   map[uint64]*StreamTransferMetrics
 }
 
 type MetricsCollectionJson struct {
@@ -33,9 +35,11 @@ func NewFileNodeMetrics(identifier uint64) *FileNodeMetrics {
 func (s *ApplicationState) String() []byte {
 	metricsJson := &MetricsCollectionJson{}
 
+	webDebugger.streamTransfersMu.RLock()
 	for _, transfer := range webDebugger.streamTransfers {
 		metricsJson.StreamTransfers = append(metricsJson.StreamTransfers, transfer.ToJson())
 	}
+	webDebugger.streamTransfersMu.RUnlock()
 
 	slices.SortFunc(metricsJson.StreamTransfers, func(i, j *streamTransferMetricsJson) int {
 		if i.Finished != j.Finished {

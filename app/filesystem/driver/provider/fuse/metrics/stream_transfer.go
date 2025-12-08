@@ -39,6 +39,9 @@ func (service *MetricsCollection) NewStreamTransferMetrics(streamId int64, strea
 		streamSize: streamSize,
 	}
 
+	service.streamTransfersMu.Lock()
+	defer service.streamTransfersMu.Unlock()
+
 	if service.streamTransfers == nil {
 		service.streamTransfers = make(map[uint64]*StreamTransferMetrics)
 	}
