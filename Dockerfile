@@ -45,3 +45,7 @@ COPY --from=dependencies /out/etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/c
 COPY --from=dependencies /out/bin/fusermount /bin/fusermount
 
 ENTRYPOINT ["/bin/main"]
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["/bin/main", "-health-check"]
+
