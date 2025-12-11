@@ -32,6 +32,8 @@ type node struct {
 
 	tree interfaces_node.Tree
 
+	healthCheckNode *healthcheck.HealthCheckFileNode
+
 	mu sync.RWMutex
 
 	closed atomic.Bool
@@ -58,6 +60,8 @@ func NewNode(
 		directoryNodeService: directoryNodeService,
 
 		tree: tree,
+
+		healthCheckNode: healthcheck.NewHealthCheckFileNode(),
 
 		logger: logger,
 	}, nil
@@ -98,17 +102,12 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 
 	// Check if looking up the health check file
 	if lookupRequest.Name == healthcheck.HealthCheckFileName {
-		return healthcheck.NewHealthCheckFileNode(), nil
+		return node.healthCheckNode, nil
 	}
 
 	client, err := node.fileSystemProviderRepository.GetClientByName(lookupRequest.Name)
 	if err != nil {
 		return nil, err
-	}
-
-	// Return ENOENT if the remote is not connected
-	if !client.IsConnected() {
-		return nil, syscall.ENOENT
 	}
 
 	fileSystem := client.GetFileSystem()
@@ -117,7 +116,7 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	if err != nil {
 		message := fmt.Sprintf("failed to get root for client %s", lookupRequest.Name)
 		node.logger.Error(message, err)
-		return nil, syscall.ENOENT
+		return nil, err
 	}
 
 	directoryNodeService, err := node.directoryNodeServiceFactory.NewService(client, node.tree)
@@ -171,6 +170,11 @@ func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 func (node *node) Close() error {
 	if !node.closed.CompareAndSwap(false, true) {
 		return nil
+	}
+
+	if node.healthCheckNode != nil {
+		node.healthCheckNode.Close()
+		node.healthCheckNode = nil
 	}
 
 	node.directoryNodeService.Close()
