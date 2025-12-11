@@ -13,6 +13,7 @@ import (
 
 	interfaces_handle "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/handle"
 	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
+	"fuse_video_streamer/healthcheck"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -95,9 +96,19 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
+	// Check if looking up the health check file
+	if lookupRequest.Name == healthcheck.HealthCheckFileName {
+		return healthcheck.NewHealthCheckFileNode(), nil
+	}
+
 	client, err := node.fileSystemProviderRepository.GetClientByName(lookupRequest.Name)
 	if err != nil {
 		return nil, err
+	}
+
+	// Return ENOENT if the remote is not connected
+	if !client.IsConnected() {
+		return nil, syscall.ENOENT
 	}
 
 	fileSystem := client.GetFileSystem()
@@ -106,7 +117,7 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	if err != nil {
 		message := fmt.Sprintf("failed to get root for client %s", lookupRequest.Name)
 		node.logger.Error(message, err)
-		return nil, err
+		return nil, syscall.ENOENT
 	}
 
 	directoryNodeService, err := node.directoryNodeServiceFactory.NewService(client, node.tree)
@@ -133,7 +144,21 @@ func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	}
 
 	var entries []fuse.Dirent
+
+	// Add health check file
+	entries = append(entries, fuse.Dirent{
+		Name: healthcheck.HealthCheckFileName,
+		Type: fuse.DT_File,
+	})
+
 	for _, client := range clients {
+		fileSystem := client.GetFileSystem()
+		_, err := fileSystem.Root(client.GetName())
+		if err != nil {
+			// Skip disconnected clients
+			continue
+		}
+
 		entries = append(entries, fuse.Dirent{
 			Name: client.GetName(),
 			Type: fuse.DT_Dir,

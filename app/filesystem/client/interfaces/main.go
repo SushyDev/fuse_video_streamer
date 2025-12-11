@@ -13,6 +13,7 @@ type Client interface {
 	GetName() string
 	GetDirectory() string
 	GetFileSystem() FileSystem
+	IsConnected() bool
 }
 
 type FileSystem interface {

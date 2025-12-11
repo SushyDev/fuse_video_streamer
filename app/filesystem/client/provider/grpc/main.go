@@ -23,6 +23,7 @@ type provider struct {
 
 	name       string
 	target     string
+	connection *grpc.ClientConn
 	fileSystem interfaces_filesystem_client.FileSystem
 }
 
@@ -66,6 +67,7 @@ func New(entry config.FileSystemProvider, config *config.Config, loggerFactory i
 		config:     config,
 		name:       entry.Name,
 		target:     entry.Target,
+		connection: connection,
 		fileSystem: fileSystem,
 	}, nil
 }
@@ -80,4 +82,13 @@ func (provider *provider) GetDirectory() string {
 
 func (provider *provider) GetFileSystem() interfaces_filesystem_client.FileSystem {
 	return provider.fileSystem
+}
+
+func (provider *provider) IsConnected() bool {
+	if provider.connection == nil {
+		return false
+	}
+	state := provider.connection.GetState()
+	// Check if connection is in READY state
+	return state.String() == "READY"
 }

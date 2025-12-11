@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	config_model "fuse_video_streamer/config"
+	"fuse_video_streamer/flags"
+	"fuse_video_streamer/healthcheck"
 
 	filesystem_server_provider_fuse "fuse_video_streamer/filesystem/driver/provider/fuse"
 	filesystem_server_service "fuse_video_streamer/filesystem/driver/service"
@@ -12,13 +15,18 @@ import (
 
 	"net/http"
 	_ "net/http/pprof"
-	"os"
 	"os/signal"
 	"syscall"
 )
 
 func main() {
 	// go debug()
+
+	// Handle health check flag
+	if *flags.GetHealthCheck() {
+		performHealthCheck()
+		return
+	}
 
 	config, err := config_model.Get()
 	if err != nil {
@@ -50,6 +58,25 @@ func main() {
 	<-ctx.Done()
 
 	fileSystem.Close()
+}
+
+func performHealthCheck() {
+	config, err := config_model.Get()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read config: %v\n", err)
+		os.Exit(1)
+	}
+
+	mountpoint := config.GetMountPoint()
+	healthChecker := healthcheck.New(mountpoint)
+
+	err = healthChecker.Check()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	os.Exit(0)
 }
 
 func waitForExit(cancel context.CancelFunc) {
