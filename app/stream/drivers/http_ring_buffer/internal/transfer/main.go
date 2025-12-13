@@ -82,7 +82,7 @@ func (transfer *Transfer) start() {
 		case nil:
 			break
 		default:
-			if strings.HasPrefix(err.Error(), "Buffer is closed") {
+			if strings.HasPrefix(err.Error(), "Buffer is closed") || strings.Contains(err.Error(), "file already closed") {
 				break
 			}
 			transfer.logger.Error("Error copying from connection", err)
