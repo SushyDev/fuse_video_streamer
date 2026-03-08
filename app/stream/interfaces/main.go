@@ -1,11 +1,13 @@
 package interfaces
 
+import "context"
+
 type Stream interface {
 	Identifier() int64
 	Size() int64
 	URL() string
 
-	ReadAt(p []byte, seekPosition int64) (int, error)
+	ReadAt(ctx context.Context, p []byte, seekPosition int64) (int, error)
 
 	Close() error
 	IsClosed() bool

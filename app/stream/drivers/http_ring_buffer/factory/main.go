@@ -2,9 +2,9 @@ package factory
 
 import (
 	"fmt"
+	"math"
 	"sync/atomic"
 	"time"
-	"math"
 
 	"fuse_video_streamer/config"
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
@@ -57,7 +57,7 @@ func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*http_rin
 func (factory *Factory) getStreamURL(identifier uint64, tries int) (string, error) {
 	const maxRetries = 30
 	const maxBackoff = 30 * time.Second
-	
+
 	if factory.cachedItem.url != "" && factory.cachedItem.expiration.After(time.Now()) {
 		return factory.cachedItem.url, nil
 	}
@@ -71,12 +71,12 @@ func (factory *Factory) getStreamURL(identifier uint64, tries int) (string, erro
 	url, err := fileSystem.GetStreamUrl(identifier)
 	if err != nil {
 		backoffDuration := min(
-			time.Duration(100*math.Pow(2, float64(tries))) * time.Millisecond,
+			time.Duration(100*math.Pow(2, float64(tries)))*time.Millisecond,
 			maxBackoff,
 		)
 
 		time.Sleep(backoffDuration)
-		
+
 		return factory.getStreamURL(identifier, tries+1)
 	}
 

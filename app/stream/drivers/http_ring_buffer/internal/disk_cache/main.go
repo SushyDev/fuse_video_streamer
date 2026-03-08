@@ -1,5 +1,9 @@
 // Package disk_cache provides functionality to manage a disk cache for HTTP streaming,
-// now with a persistent .lock file that tracks written ranges for reliable detection.
+// with a persistent .lock file that tracks written ranges for reliable detection.
+//
+// Ranges are maintained in-memory as a sorted, merged interval list and flushed
+// to the .lock file on mutations. This avoids O(n) file reads on every operation
+// and eliminates file-cursor races that occurred under concurrent RLock access.
 package disk_cache
 
 import (
@@ -22,6 +26,10 @@ type DiskCache struct {
 	file     *os.File
 	lockFile *os.File
 
+	// ranges is the in-memory representation of written byte ranges.
+	// It is always kept sorted and merged.
+	ranges []Range
+
 	mu sync.RWMutex
 
 	closed atomic.Bool
@@ -40,9 +48,17 @@ func NewDiskCache(url string, size int64) (*DiskCache, error) {
 		return nil, err
 	}
 
+	// Load existing ranges from the lockfile into memory.
+	ranges, err := readRangesFromFile(lockFile)
+	if err != nil {
+		// Non-fatal: start with empty ranges if the lockfile is corrupt.
+		ranges = nil
+	}
+
 	return &DiskCache{
 		file:     file,
 		lockFile: lockFile,
+		ranges:   ranges,
 	}, nil
 }
 
@@ -135,29 +151,41 @@ func fileCreate(url string, size int64) (*os.File, error) {
 
 // -------- Lockfile Management --------
 
-func readRanges(f *os.File) ([]Range, error) {
-	_, _ = f.Seek(0, 0)
+// readRangesFromFile reads range entries from a lockfile on disk.
+// Only called once at startup. Ranges are normalized (sorted and merged) via
+// insertRange so that the in-memory slice is always in canonical order.
+func readRangesFromFile(f *os.File) ([]Range, error) {
+	if _, err := f.Seek(0, 0); err != nil {
+		return nil, err
+	}
 	var ranges []Range
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		var s, e int64
 		if _, err := fmt.Sscanf(scanner.Text(), "%d %d", &s, &e); err == nil {
-			ranges = append(ranges, Range{Start: s, End: e})
+			ranges = insertRange(ranges, Range{Start: s, End: e})
 		}
 	}
 	return ranges, scanner.Err()
 }
 
-func writeRanges(f *os.File, ranges []Range) error {
-	if err := f.Truncate(0); err != nil {
+// flushRangesToFile writes the in-memory ranges to the lockfile.
+// Must be called under write lock.
+func (diskCache *DiskCache) flushRangesToFile() error {
+	if diskCache.lockFile == nil {
+		return os.ErrClosed
+	}
+	if err := diskCache.lockFile.Truncate(0); err != nil {
 		return err
 	}
-	if _, err := f.Seek(0, 0); err != nil {
+	if _, err := diskCache.lockFile.Seek(0, 0); err != nil {
 		return err
 	}
-	w := bufio.NewWriter(f)
-	for _, r := range ranges {
-		fmt.Fprintf(w, "%d %d\n", r.Start, r.End)
+	w := bufio.NewWriter(diskCache.lockFile)
+	for _, r := range diskCache.ranges {
+		if _, err := fmt.Fprintf(w, "%d %d\n", r.Start, r.End); err != nil {
+			return err
+		}
 	}
 	return w.Flush()
 }
@@ -168,7 +196,7 @@ func insertRange(ranges []Range, newRange Range) []Range {
 		return ranges[i].Start < ranges[j].Start
 	})
 
-	merged := []Range{}
+	var merged []Range
 	for _, r := range ranges {
 		if len(merged) == 0 {
 			merged = append(merged, r)
@@ -187,30 +215,26 @@ func insertRange(ranges []Range, newRange Range) []Range {
 	return merged
 }
 
-func (diskCache *DiskCache) recordRange(start, end int64) error {
-	ranges, _ := readRanges(diskCache.lockFile)
-	ranges = insertRange(ranges, Range{Start: start, End: end})
-	return writeRanges(diskCache.lockFile, ranges)
-}
-
 // -------- Public Methods --------
 
+// IsPositionOnDisk checks whether the byte range [start, end] is fully covered
+// by a previously written range. Uses the in-memory range list (no disk I/O).
 func (diskCache *DiskCache) IsPositionOnDisk(start, end int64) (bool, error) {
 	diskCache.mu.RLock()
 	defer diskCache.mu.RUnlock()
 
-	if diskCache.file == nil || diskCache.lockFile == nil {
+	if diskCache.closed.Load() {
 		return false, os.ErrClosed
 	}
 
-	ranges, err := readRanges(diskCache.lockFile)
-	if err != nil {
-		return false, err
-	}
-
-	for _, r := range ranges {
+	for _, r := range diskCache.ranges {
 		if r.Start <= start && r.End >= end {
 			return true, nil
+		}
+		// Since ranges are sorted, if this range starts after our start
+		// position, no subsequent range can cover [start, end].
+		if r.Start > start {
+			break
 		}
 	}
 	return false, nil
@@ -233,9 +257,10 @@ func (diskCache *DiskCache) WriteAt(p []byte, seekPosition int64) (int, error) {
 		return n, err
 	}
 
-
-	if err := diskCache.recordRange(seekPosition, seekPosition+int64(n)); err != nil {
-		return n, fmt.Errorf("failed to update lockfile: %w", err)
+	// Update in-memory ranges and flush to lockfile.
+	diskCache.ranges = insertRange(diskCache.ranges, Range{Start: seekPosition, End: seekPosition + int64(n)})
+	if flushErr := diskCache.flushRangesToFile(); flushErr != nil {
+		return n, fmt.Errorf("failed to update lockfile: %w", flushErr)
 	}
 
 	return n, nil
@@ -261,6 +286,9 @@ func (diskCache *DiskCache) Close() error {
 		return nil
 	}
 
+	diskCache.mu.Lock()
+	defer diskCache.mu.Unlock()
+
 	if diskCache.file != nil {
 		if err := diskCache.file.Close(); err != nil {
 			return err
@@ -274,6 +302,8 @@ func (diskCache *DiskCache) Close() error {
 		}
 		diskCache.lockFile = nil
 	}
+
+	diskCache.ranges = nil
 
 	return nil
 }

@@ -12,7 +12,6 @@ import (
 	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
 
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 
 	api "sushydev.github.io/stream_mount_api/go"
 )
@@ -63,7 +62,6 @@ func (service *Service) NewNode(parentDirectoryNode interfaces_node.DirectoryNod
 	service.mu.Lock()
 	defer service.mu.Unlock()
 
-	metrics := metrics.NewFileNodeMetrics(remoteIdentifier)
 	fileSystem := service.client.GetFileSystem()
 	fileHandleService := service.fileHandleServiceFactory.NewService()
 
@@ -82,7 +80,7 @@ func (service *Service) NewNode(parentDirectoryNode interfaces_node.DirectoryNod
 
 	identifier := service.tree.GetNextIdentifier()
 
-	newNode := NewNode(service.client, service.loggerFactory, fileHandleService, metrics, fileNodeLogger, identifier, remoteIdentifier, size, mode)
+	newNode := NewNode(service.client, service.loggerFactory, fileHandleService, fileNodeLogger, identifier, remoteIdentifier, size, mode)
 
 	service.tree.RegisterNode(newNode)
 

@@ -67,12 +67,14 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		return syscall.ENOENT
 	}
 
+	// Use RLock to allow concurrent FUSE reads. The stream's internal
+	// synchronization handles concurrent ReadAt calls safely.
 	handle.mu.RLock()
 	stream := handle.stream
 	handle.mu.RUnlock()
 
 	if stream == nil {
-		message := fmt.Sprintf("no video stream for handle %d, closing video stream", handle.id)
+		message := fmt.Sprintf("no video stream for handle %d", handle.id)
 		handle.logger.Error(message, nil)
 		handle.Close()
 		return syscall.ENOENT
@@ -82,23 +84,18 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 		message := fmt.Sprintf("video stream for handle %d is closed, cannot read from video stream", handle.id)
 		handle.logger.Error(message, nil)
 		handle.Close()
-	}
-
-	handle.mu.Lock()
-	defer handle.mu.Unlock()
-
-	if handle.IsClosed() {
-		message := fmt.Sprintf("handle %d is closed, cannot read from video stream", handle.id)
-		handle.logger.Error(message, nil)
 		return syscall.ENOENT
 	}
 
 	fileSize := handle.node.GetSize()
+	_ = fileSize
 
-	buffer := pool.GetBuffer(int64(fileSize))
+	buffer := pool.GetBuffer(int64(readRequest.Size))
 	defer pool.PutBuffer(buffer)
 
-	bytesRead, err := stream.ReadAt(buffer[:readRequest.Size], readRequest.Offset)
+	// Pass the FUSE request context so cancellation propagates all the way
+	// down to WaitForPosition and network reads.
+	bytesRead, err := stream.ReadAt(ctx, buffer[:readRequest.Size], readRequest.Offset)
 
 	switch err {
 
@@ -109,6 +106,10 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	case io.EOF:
 		readResponse.Data = buffer[:bytesRead]
 		return nil
+
+	case context.Canceled, context.DeadlineExceeded:
+		// FUSE client abandoned the read; don't kill the stream.
+		return syscall.EINTR
 
 	default:
 		message := fmt.Sprintf("failed to read video stream for handle %d, closing video stream", handle.id)

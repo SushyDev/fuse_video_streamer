@@ -6,14 +6,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	interfaces_handle "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/handle"
 	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
-
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
@@ -25,8 +24,7 @@ type Node struct {
 
 	handleService interfaces_handle.FileHandleService
 
-	metrics *metrics.FileNodeMetrics
-	logger  interfaces_logger.Logger
+	logger interfaces_logger.Logger
 
 	identifier       uint64
 	remoteIdentifier uint64
@@ -46,7 +44,6 @@ func NewNode(
 	client interfaces_filesystem_client.Client,
 	loggerFactory interfaces_logger.LoggerFactory,
 	fileHandleService interfaces_handle.FileHandleService,
-	metric *metrics.FileNodeMetrics,
 	logger interfaces_logger.Logger,
 	identifier uint64,
 	remoteIdentifier uint64,
@@ -59,8 +56,7 @@ func NewNode(
 
 		handleService: fileHandleService,
 
-		metrics: metric,
-		logger:  logger,
+		logger: logger,
 
 		identifier:       identifier,
 		remoteIdentifier: remoteIdentifier,
@@ -104,6 +100,8 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 
 	attr.Mode = node.mode
 	attr.Size = node.size
+	attr.Inode = node.identifier
+	attr.Valid = 30 * time.Second
 
 	return nil
 }
@@ -123,6 +121,8 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		node.logger.Error(message, err)
 		return nil, err
 	}
+
+	openResponse.Flags |= fuse.OpenDirectIO
 
 	node.handles = append(node.handles, handle)
 
