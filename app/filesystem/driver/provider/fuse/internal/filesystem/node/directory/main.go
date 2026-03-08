@@ -98,7 +98,7 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	defer node.mu.RUnlock()
 
 	attr.Mode = node.mode
-	attr.Inode = node.remoteIdentifier
+	attr.Inode = node.identifier
 	attr.Valid = 30 * time.Second
 
 	return nil
