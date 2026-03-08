@@ -8,7 +8,6 @@ type Stream interface {
 	URL() string
 
 	ReadAt(ctx context.Context, p []byte, seekPosition int64) (int, error)
-	SeekTo(position int64) error
 
 	Close() error
 	IsClosed() bool
