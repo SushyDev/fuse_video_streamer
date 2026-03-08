@@ -32,7 +32,7 @@ var sharedTransport = &http.Transport{
 		KeepAlive: 30 * time.Second,
 	}).DialContext,
 	TLSHandshakeTimeout:   10 * time.Second,
-	ResponseHeaderTimeout:  60 * time.Second,
+	ResponseHeaderTimeout: 60 * time.Second,
 }
 
 // readTimeout is the maximum time to wait for a single Read() call on the

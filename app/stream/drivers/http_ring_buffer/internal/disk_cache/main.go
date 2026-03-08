@@ -182,7 +182,9 @@ func (diskCache *DiskCache) flushRangesToFile() error {
 	}
 	w := bufio.NewWriter(diskCache.lockFile)
 	for _, r := range diskCache.ranges {
-		fmt.Fprintf(w, "%d %d\n", r.Start, r.End)
+		if _, err := fmt.Fprintf(w, "%d %d\n", r.Start, r.End); err != nil {
+			return err
+		}
 	}
 	return w.Flush()
 }

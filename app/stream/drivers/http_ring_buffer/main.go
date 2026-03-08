@@ -200,26 +200,6 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 		return 0, fmt.Errorf("stream is closed")
 	}
 
-	// Take a local reference to the buffer under read lock to avoid TOCTOU
-	// races with Close() which may nil out stream.buffer.
-	stream.mu.RLock()
-	buf := stream.buffer
-	currentTransfer := stream.transfer
-	stream.mu.RUnlock()
-
-	if buf == nil {
-		return 0, fmt.Errorf("buffer is closed")
-	}
-
-	if currentTransfer == nil || !buf.IsPositionInCapacity(seekPosition, 16*1024*1024) {
-		err := stream.newTransfer(seekPosition)
-		if err != nil {
-			return 0, fmt.Errorf("error before read at: %v", err)
-		}
-		// Re-read buffer reference after newTransfer (buffer is the same object,
-		// but transfer may have changed). The buffer itself is not replaced.
-	}
-
 	// Use a merged context: cancelled if either the per-request FUSE context
 	// or the stream-lifetime context is cancelled. This ensures that if the
 	// FUSE client abandons a read, WaitForPosition unblocks promptly.
@@ -233,11 +213,38 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 	}()
 	defer mergedCancel()
 
+	// Serialise all reads: the ring buffer has a monotonically advancing read
+	// cursor (lastReadPosition), so concurrent ReadAt calls would corrupt each
+	// other's position accounting. Hold the write lock for the entire
+	// WaitForPosition + ReadAt sequence.
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+
+	if stream.buffer == nil {
+		return 0, fmt.Errorf("buffer is closed")
+	}
+
+	if stream.transfer == nil || !stream.buffer.IsPositionInCapacity(seekPosition, 16*1024*1024) {
+		if err := stream.newTransferLocked(seekPosition); err != nil {
+			return 0, fmt.Errorf("error before read at: %v", err)
+		}
+	}
+
+	buf := stream.buffer
+
 	end := min(seekPosition+int64(len(p)), stream.size)
 	if end > 0 {
+		// Release the stream lock while waiting so that Close() and other
+		// operations are not blocked for the duration of the network wait.
+		stream.mu.Unlock()
 		ok := buf.WaitForPosition(mergedCtx, end)
+		stream.mu.Lock()
+
+		if stream.buffer == nil {
+			return 0, fmt.Errorf("buffer is closed")
+		}
+
 		if !ok && !buf.IsPositionAvailable(end) {
-			// Likely EOF before full span available, or context cancelled.
 			if mergedCtx.Err() != nil {
 				return 0, mergedCtx.Err()
 			}
@@ -264,6 +271,11 @@ func (stream *Stream) newTransfer(seekPosition int64) error {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
 
+	return stream.newTransferLocked(seekPosition)
+}
+
+// newTransferLocked creates a new transfer. Caller must hold stream.mu (write lock).
+func (stream *Stream) newTransferLocked(seekPosition int64) error {
 	if stream.buffer == nil {
 		return fmt.Errorf("buffer is closed")
 	}
