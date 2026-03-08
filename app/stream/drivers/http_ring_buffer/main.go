@@ -255,6 +255,21 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 	return buf.ReadAt(p, seekPosition)
 }
 
+// SeekTo restarts the underlying HTTP transfer from the given byte position.
+// It is safe for concurrent use. This is the mechanism by which a media
+// player's backward-seek (which causes ErrOutOfRange from the ring buffer)
+// is recovered without closing the stream entirely.
+func (stream *Stream) SeekTo(position int64) error {
+	if stream.IsClosed() {
+		return fmt.Errorf("stream is closed")
+	}
+
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+
+	return stream.newTransferLocked(position)
+}
+
 // newTransferLocked creates a new transfer. Caller must hold stream.mu (write lock).
 func (stream *Stream) newTransferLocked(seekPosition int64) error {
 	if stream.buffer == nil {

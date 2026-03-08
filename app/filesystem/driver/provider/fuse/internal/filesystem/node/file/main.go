@@ -100,7 +100,7 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 
 	attr.Mode = node.mode
 	attr.Size = node.size
-	attr.Inode = node.identifier
+	attr.Inode = node.remoteIdentifier
 	attr.Valid = 30 * time.Second
 
 	return nil
