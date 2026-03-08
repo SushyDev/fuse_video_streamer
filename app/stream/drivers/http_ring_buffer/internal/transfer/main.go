@@ -72,8 +72,20 @@ func (transfer *Transfer) start() {
 
 	select {
 	case <-transfer.context.Done():
+		// Close the connection to unblock any in-progress body.Read in copyData,
+		// then wait for the copier to finish before marking EOF.
 		if transfer.connection != nil {
 			transfer.connection.Close()
+		}
+		err := <-done
+		switch err {
+		case io.EOF, context.Canceled, nil:
+			break
+		default:
+			if strings.HasPrefix(err.Error(), "Buffer is closed") || strings.Contains(err.Error(), "file already closed") {
+				break
+			}
+			transfer.logger.Error("Error copying from connection", err)
 		}
 	case err := <-done:
 		switch err {

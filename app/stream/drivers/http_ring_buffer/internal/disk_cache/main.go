@@ -152,7 +152,8 @@ func fileCreate(url string, size int64) (*os.File, error) {
 // -------- Lockfile Management --------
 
 // readRangesFromFile reads range entries from a lockfile on disk.
-// Only called once at startup.
+// Only called once at startup. Ranges are normalized (sorted and merged) via
+// insertRange so that the in-memory slice is always in canonical order.
 func readRangesFromFile(f *os.File) ([]Range, error) {
 	if _, err := f.Seek(0, 0); err != nil {
 		return nil, err
@@ -162,7 +163,7 @@ func readRangesFromFile(f *os.File) ([]Range, error) {
 	for scanner.Scan() {
 		var s, e int64
 		if _, err := fmt.Sscanf(scanner.Text(), "%d %d", &s, &e); err == nil {
-			ranges = append(ranges, Range{Start: s, End: e})
+			ranges = insertRange(ranges, Range{Start: s, End: e})
 		}
 	}
 	return ranges, scanner.Err()

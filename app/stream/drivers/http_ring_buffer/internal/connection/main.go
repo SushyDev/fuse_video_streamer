@@ -109,11 +109,19 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	response, err := client.Do(request)
 	if err != nil {
-		return 0, fmt.Errorf("failed to do request: %v", err)
+		return 0, fmt.Errorf("failed to do request: %w", err)
 	}
 
-	// Some systems like zurg use 200 status code for partial content
-	if response.StatusCode != http.StatusPartialContent && response.StatusCode != http.StatusOK {
+	// When requesting from a non-zero position, the server must respond with
+	// 206 Partial Content. A 200 OK means the server ignored the Range header
+	// and is serving from byte 0, which would silently rewind the stream.
+	// For startPosition == 0 we accept both 200 and 206.
+	if connection.startPosition > 0 {
+		if response.StatusCode != http.StatusPartialContent {
+			response.Body.Close()
+			return 0, fmt.Errorf("expected 206 Partial Content for range request at offset %d, got %d", connection.startPosition, response.StatusCode)
+		}
+	} else if response.StatusCode != http.StatusPartialContent && response.StatusCode != http.StatusOK {
 		response.Body.Close()
 		return 0, fmt.Errorf("failed to get partial content: %d", response.StatusCode)
 	}

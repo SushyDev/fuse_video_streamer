@@ -186,13 +186,8 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 	// or the stream-lifetime context is cancelled. This ensures that if the
 	// FUSE client abandons a read, WaitForPosition unblocks promptly.
 	mergedCtx, mergedCancel := context.WithCancel(ctx)
-	go func() {
-		select {
-		case <-stream.ctx.Done():
-			mergedCancel()
-		case <-mergedCtx.Done():
-		}
-	}()
+	stop := context.AfterFunc(stream.ctx, mergedCancel)
+	defer stop()
 	defer mergedCancel()
 
 	// Serialise all reads: the ring buffer has a monotonically advancing read

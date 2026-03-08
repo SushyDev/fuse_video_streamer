@@ -98,7 +98,7 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	defer node.mu.RUnlock()
 
 	attr.Mode = node.mode
-	attr.Inode = node.remoteIdentifier
+	attr.Inode = node.identifier
 	attr.Valid = 30 * time.Second
 
 	return nil
@@ -334,7 +334,7 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 		return nil, err
 	}
 
-	node.logger.Info(fmt.Sprintf("Link: looked up hard link %s -> node_id=%d, streamable=%v, mode=%d", 
+	node.logger.Info(fmt.Sprintf("Link: looked up hard link %s -> node_id=%d, streamable=%v, mode=%d",
 		request.NewName, foundNode.GetId(), foundNode.GetStreamable(), foundNode.GetMode()))
 
 	// Create appropriate node type based on streamable flag

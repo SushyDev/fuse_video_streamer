@@ -25,6 +25,7 @@ func (noopLogger) Debug(string)        {}
 // Close() before start() had a chance to run could cause wg.Wait() to return
 // while start() later called wg.Done() on a counter of 0, which panics.
 func TestNewTransfer_ImmediateClose(t *testing.T) {
+	t.Parallel()
 	buf := ring_buffer.NewLockingRingBuffer(64*1024, 0)
 	defer buf.Close()
 
@@ -50,6 +51,7 @@ func TestNewTransfer_ImmediateClose(t *testing.T) {
 // TestNewTransfer_CloseIsIdempotent verifies that calling Close() twice does not
 // panic or return an error.
 func TestNewTransfer_CloseIsIdempotent(t *testing.T) {
+	t.Parallel()
 	buf := ring_buffer.NewLockingRingBuffer(64*1024, 0)
 	defer buf.Close()
 
