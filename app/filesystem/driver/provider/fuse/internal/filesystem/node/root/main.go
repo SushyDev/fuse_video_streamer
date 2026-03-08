@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
@@ -77,6 +78,8 @@ func (node *node) Attr(ctx context.Context, attr *fuse.Attr) error {
 
 	// Root directory with 0755 permissions
 	attr.Mode = os.ModeDir | 0755
+	attr.Inode = 1
+	attr.Valid = 30 * time.Second
 
 	return nil
 }

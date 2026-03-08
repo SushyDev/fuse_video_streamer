@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
@@ -100,6 +101,8 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 
 	attr.Mode = node.mode
 	attr.Size = node.size
+	attr.Inode = node.remoteIdentifier
+	attr.Valid = 30 * time.Second
 
 	return nil
 }
@@ -118,6 +121,8 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		node.logger.Error(message, err)
 		return nil, err
 	}
+
+	openResponse.Flags |= fuse.OpenDirectIO
 
 	node.handles = append(node.handles, handle)
 

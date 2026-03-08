@@ -69,7 +69,7 @@ func (factory *Factory) getStreamURL(identifier uint64, tries int) (string, erro
 	fileSystem := factory.client.GetFileSystem()
 
 	url, err := fileSystem.GetStreamUrl(identifier)
-	if err != nil {
+	if err != nil || url == "" {
 		backoffDuration := min(
 			time.Duration(100*math.Pow(2, float64(tries))) * time.Millisecond,
 			maxBackoff,

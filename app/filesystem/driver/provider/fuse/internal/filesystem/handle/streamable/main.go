@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	ring_buffer "github.com/sushydev/ring_buffer_go"
+
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 	interfaces_stream "fuse_video_streamer/stream/interfaces"
 
@@ -109,6 +111,29 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	case context.Canceled, context.DeadlineExceeded:
 		// FUSE client abandoned the read; don't kill the stream.
 		return syscall.EINTR
+
+	case ring_buffer.ErrOutOfRange:
+		// The media player seeked backward past what the ring buffer still
+		// holds. Restart the transfer from the requested offset and retry
+		// the read once — the new transfer will fill the buffer from that
+		// position and the retry will succeed.
+		handle.logger.Warn(fmt.Sprintf(
+			"handle %d: backward seek past ring buffer window at offset %d, restarting transfer",
+			handle.id, readRequest.Offset,
+		))
+		if seekErr := stream.SeekTo(readRequest.Offset); seekErr != nil {
+			handle.logger.Error(fmt.Sprintf("handle %d: failed to seek stream", handle.id), seekErr)
+			stream.Close()
+			return seekErr
+		}
+		bytesRead, err = stream.ReadAt(ctx, buffer[:readRequest.Size], readRequest.Offset)
+		if err != nil && err != io.EOF {
+			handle.logger.Error(fmt.Sprintf("handle %d: read failed after seek", handle.id), err)
+			stream.Close()
+			return err
+		}
+		readResponse.Data = buffer[:bytesRead]
+		return nil
 
 	default:
 		message := fmt.Sprintf("failed to read video stream for handle %d, closing video stream", handle.id)

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
@@ -97,6 +98,8 @@ func (node *Node) Attr(ctx context.Context, attr *fuse.Attr) error {
 	defer node.mu.RUnlock()
 
 	attr.Mode = node.mode
+	attr.Inode = node.remoteIdentifier
+	attr.Valid = 30 * time.Second
 
 	return nil
 }
