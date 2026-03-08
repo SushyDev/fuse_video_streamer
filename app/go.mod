@@ -6,13 +6,13 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/anacrolix/fuse v0.3.2
 	github.com/google/uuid v1.6.0
-	github.com/sushydev/ring_buffer_go v0.1.9
+	github.com/sushydev/ring_buffer_go v0.1.10
 	go.uber.org/zap v1.27.1
 	google.golang.org/grpc v1.77.0
 	sushydev.github.io/stream_mount_api/go v0.0.0-20251207124320-a0ace8ebc642
 )
 
-// replace github.com/sushydev/ring_buffer_go => ../../ring_buffer_go
+// replace github.com/sushydev/ring_buffer_go => ../../../ring_buffer_go
 
 require (
 	github.com/anacrolix/envpprof v1.4.1-0.20251201125402-e8b52d50f714 // indirect

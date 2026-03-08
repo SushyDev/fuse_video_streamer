@@ -14,7 +14,6 @@ import (
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 	interfaces_stream "fuse_video_streamer/stream/interfaces"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/connection"
 	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/disk_cache"
 	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/transfer"
@@ -122,46 +121,35 @@ func (stream *Stream) URL() string {
 	return stream.url
 }
 
-func (stream *Stream) ReadAt(p []byte, seekPosition int64) (int, error) {
+func (stream *Stream) ReadAt(ctx context.Context, p []byte, seekPosition int64) (int, error) {
 	if stream.IsClosed() {
 		return 0, fmt.Errorf("stream is closed")
 	}
 
 	requestedBytes := int64(len(p))
-	absolutePosition := seekPosition + requestedBytes
-	_ = absolutePosition
-
-	// message := fmt.Sprintf("Reading %d bytes at position %d. percentage: %v\n", requestedBytes, seekPosition, percentage)
-	// stream.logger.Debug(message)
 
 	if stream.diskCache != nil {
 		isPositionOnDisk, diskErr := stream.diskCache.IsPositionOnDisk(seekPosition, seekPosition+requestedBytes)
 		if diskErr == nil && isPositionOnDisk {
-			// message := fmt.Sprintf("DISK READ %d bytes at position %d - %v percentage\n", requestedBytes, seekPosition, percentage)
-			// stream.logger.Debug(message)
 			return stream.diskCache.ReadAt(p, seekPosition)
-		} else if diskErr != nil {
-			// message := fmt.Sprintf("DISK ERROR checking disk cache: %v", diskErr)
-			// stream.logger.Debug(message)
 		}
 	}
 
-	read, err := stream.readFromBuffer(p, seekPosition)
+	read, err := stream.readFromBuffer(ctx, p, seekPosition)
 	if err != nil {
 		return read, err
 	}
 
+	// Write-through to disk cache. Failures are logged but not propagated,
+	// because the data was already successfully read from the ring buffer.
 	if stream.diskCache != nil && read > 0 {
 		copyOfP := make([]byte, read)
 		copy(copyOfP, p[:read])
 
 		_, writeErr := stream.diskCache.WriteAt(copyOfP, seekPosition)
 		if writeErr != nil {
-			return read, fmt.Errorf("error writing to disk cache: %v", writeErr)
+			stream.logger.Error("disk cache write failed (non-fatal)", writeErr)
 		}
-
-		// message := fmt.Sprintf("DISK WRITE %d bytes at position %d - %v percent \n", read, seekPosition, percentage)
-		// stream.logger.Debug(message)
 	}
 
 	return read, err
@@ -174,13 +162,16 @@ func (stream *Stream) Close() error {
 
 	stream.cancel()
 
-	if stream.diskCache != nil {
-		err := stream.diskCache.Close()
-		if err != nil {
-			return fmt.Errorf("error closing disk cache: %v", err)
-		}
+	// Close transfer first so its goroutines stop writing to the buffer.
+	stream.mu.Lock()
+	t := stream.transfer
+	stream.transfer = nil
+	stream.mu.Unlock()
 
-		stream.diskCache = nil
+	if t != nil {
+		if err := t.Close(); err != nil {
+			stream.logger.Error("error closing transfer", err)
+		}
 	}
 
 	if stream.buffer != nil {
@@ -188,17 +179,13 @@ func (stream *Stream) Close() error {
 		if err != nil {
 			return fmt.Errorf("error closing buffer: %v", err)
 		}
-
-		stream.buffer = nil
 	}
 
-	if stream.transfer != nil {
-		err := stream.transfer.Close()
+	if stream.diskCache != nil {
+		err := stream.diskCache.Close()
 		if err != nil {
-			return fmt.Errorf("error closing transfer: %v", err)
+			return fmt.Errorf("error closing disk cache: %v", err)
 		}
-
-		stream.transfer = nil
 	}
 
 	return nil
@@ -208,35 +195,56 @@ func (stream *Stream) IsClosed() bool {
 	return stream.closed.Load()
 }
 
-func (stream *Stream) readFromBuffer(p []byte, seekPosition int64) (int, error) {
+func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition int64) (int, error) {
 	if stream.IsClosed() {
 		return 0, fmt.Errorf("stream is closed")
 	}
 
-	if stream.buffer == nil {
+	// Take a local reference to the buffer under read lock to avoid TOCTOU
+	// races with Close() which may nil out stream.buffer.
+	stream.mu.RLock()
+	buf := stream.buffer
+	currentTransfer := stream.transfer
+	stream.mu.RUnlock()
+
+	if buf == nil {
 		return 0, fmt.Errorf("buffer is closed")
 	}
 
-	if stream.transfer == nil || !stream.buffer.IsPositionInCapacity(seekPosition, 16*1024*1024) {
+	if currentTransfer == nil || !buf.IsPositionInCapacity(seekPosition, 16*1024*1024) {
 		err := stream.newTransfer(seekPosition)
 		if err != nil {
 			return 0, fmt.Errorf("error before read at: %v", err)
 		}
+		// Re-read buffer reference after newTransfer (buffer is the same object,
+		// but transfer may have changed). The buffer itself is not replaced.
 	}
 
-	// Emulate slow disk: do not return until the full requested span is available
-	// (unless EOF/closed), blocking on the buffer with the stream context.
-	end := min(seekPosition + int64(len(p)), stream.size)
+	// Use a merged context: cancelled if either the per-request FUSE context
+	// or the stream-lifetime context is cancelled. This ensures that if the
+	// FUSE client abandons a read, WaitForPosition unblocks promptly.
+	mergedCtx, mergedCancel := context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-stream.ctx.Done():
+			mergedCancel()
+		case <-mergedCtx.Done():
+		}
+	}()
+	defer mergedCancel()
+
+	end := min(seekPosition+int64(len(p)), stream.size)
 	if end > 0 {
-		ctx := stream.ctx
-		ok := stream.buffer.WaitForPosition(ctx, end)
-		if !ok && !stream.buffer.IsPositionAvailable(end) {
-			// Likely EOF before full span available; proceed to read what we have.
+		ok := buf.WaitForPosition(mergedCtx, end)
+		if !ok && !buf.IsPositionAvailable(end) {
+			// Likely EOF before full span available, or context cancelled.
+			if mergedCtx.Err() != nil {
+				return 0, mergedCtx.Err()
+			}
 		}
 	}
-	// Once available or at EOF, read. Underlying buffer may return (n, io.EOF),
-	// which the FUSE layer treats as a valid partial read.
-	return stream.buffer.ReadAt(p, seekPosition)
+
+	return buf.ReadAt(p, seekPosition)
 }
 
 // newTransfer creates a new transfer for the stream at the specified seek position.
@@ -252,32 +260,31 @@ func (stream *Stream) newTransfer(seekPosition int64) error {
 		return fmt.Errorf("buffer is closed")
 	}
 
-	// message := fmt.Sprintf("Creating new transfer at position %d at url %s\n", seekPosition, stream.url)
-	// stream.logger.Debug(message)
+	// Double-check under lock: another goroutine may have already created
+	// a suitable transfer while we were waiting for the lock.
+	if stream.transfer != nil && stream.buffer.IsPositionInCapacity(seekPosition, 16*1024*1024) {
+		return nil
+	}
 
 	if stream.transfer != nil {
 		stream.transfer.Close()
 		stream.transfer = nil
 	}
 
-	connection, err := connection.NewConnection(stream.url, seekPosition)
+	conn, err := connection.NewConnection(stream.url, seekPosition)
 	if err != nil {
 		return err
 	}
 
 	stream.buffer.ResetToPosition(seekPosition)
 
-	debugger := metrics.GetMetricsCollection()
-
-	streamMetrics := debugger.NewStreamTransferMetrics(stream.identifier, stream.url, stream.size)
-
 	logger, err := stream.loggerFactory.NewLogger("Stream Transfer")
 	if err != nil {
 		return err
 	}
 
-	transfer := transfer.NewTransfer(stream.buffer, connection, streamMetrics, logger)
-	stream.transfer = transfer
+	t := transfer.NewTransfer(stream.buffer, conn, logger)
+	stream.transfer = t
 
 	return nil
 }

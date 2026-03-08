@@ -10,7 +10,6 @@ import (
 	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 
 	"github.com/anacrolix/fuse/fs"
 )
@@ -28,9 +27,6 @@ type FileSystem struct {
 var _ interfaces_fuse.FuseFileSystem = &FileSystem{}
 
 func New(tree interfaces_node.Tree, rootNodeService interfaces_node.RootNodeService, logger interfaces_logger.Logger) (interfaces_fuse.FuseFileSystem, error) {
-	metricsCollection := metrics.GetMetricsCollection()
-	go metricsCollection.StartWebDebugger()
-
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
 	}

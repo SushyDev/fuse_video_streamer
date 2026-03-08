@@ -11,7 +11,6 @@ import (
 
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/metrics"
 	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/connection"
 )
 
@@ -22,8 +21,7 @@ type Transfer struct {
 	context context.Context
 	cancel  context.CancelFunc
 
-	metrics *metrics.StreamTransferMetrics
-	logger  interfaces_logger.Logger
+	logger interfaces_logger.Logger
 
 	wg *sync.WaitGroup
 
@@ -39,8 +37,14 @@ var bufferPool = sync.Pool{
 	},
 }
 
-func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection, metrics *metrics.StreamTransferMetrics, logger interfaces_logger.Logger) *Transfer {
+func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *connection.Connection, logger interfaces_logger.Logger) *Transfer {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	wg := &sync.WaitGroup{}
+
+	// Add to WaitGroup BEFORE launching the goroutine to prevent a race
+	// where Close() calls wg.Wait() before start() has a chance to run.
+	wg.Add(1)
 
 	transfer := &Transfer{
 		buffer:     buffer,
@@ -49,10 +53,9 @@ func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *conn
 		context: ctx,
 		cancel:  cancel,
 
-		wg: &sync.WaitGroup{},
+		wg: wg,
 
-		metrics: metrics,
-		logger:  logger,
+		logger: logger,
 	}
 
 	go transfer.start()
@@ -61,7 +64,6 @@ func NewTransfer(buffer ring_buffer.LockingRingBufferInterface, connection *conn
 }
 
 func (transfer *Transfer) start() {
-	transfer.wg.Add(1)
 	defer transfer.wg.Done()
 
 	done := make(chan error, 1)
@@ -109,16 +111,12 @@ func (transfer *Transfer) copyData(done chan<- error) {
 		if bytesRead > 0 {
 			_, writeErr := transfer.buffer.Write(buf[:bytesRead])
 			if writeErr != nil {
-				transfer.metrics.RecordTransferOperation(int64(bytesRead), true)
 				done <- writeErr
 				return
 			}
-
-			transfer.metrics.RecordTransferOperation(int64(bytesRead), false)
 		}
 
 		if readErr != nil {
-			transfer.metrics.RecordTransferOperation(0, true)
 			done <- readErr
 			return
 		}
@@ -140,8 +138,6 @@ func (transfer *Transfer) Close() error {
 	transfer.cancel()
 
 	transfer.wg.Wait()
-
-	transfer.metrics.Finish()
 
 	return nil
 }
