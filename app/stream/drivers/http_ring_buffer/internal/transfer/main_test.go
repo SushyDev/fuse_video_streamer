@@ -38,10 +38,10 @@ func TestNewTransfer_ImmediateClose(t *testing.T) {
 
 	// Run multiple times to maximise the chance of triggering the race.
 	for i := 0; i < 50; i++ {
-		transfer := NewTransfer(buf, conn, noopLogger{})
+		tr := NewTransfer(buf, conn, noopLogger{})
 
 		// Close immediately — before start() may have executed.
-		if err := transfer.Close(); err != nil {
+		if err := tr.Close(); err != nil {
 			t.Fatalf("Close() returned error: %v", err)
 		}
 	}
@@ -58,12 +58,12 @@ func TestNewTransfer_CloseIsIdempotent(t *testing.T) {
 		t.Fatalf("NewConnection: %v", err)
 	}
 
-	transfer := NewTransfer(buf, conn, noopLogger{})
+	tr := NewTransfer(buf, conn, noopLogger{})
 
-	if err := transfer.Close(); err != nil {
+	if err := tr.Close(); err != nil {
 		t.Fatalf("first Close: %v", err)
 	}
-	if err := transfer.Close(); err != nil {
+	if err := tr.Close(); err != nil {
 		t.Fatalf("second Close: %v", err)
 	}
 }

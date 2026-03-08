@@ -74,7 +74,7 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	handle.mu.RUnlock()
 
 	if stream == nil {
-		message := fmt.Sprintf("no video stream for handle %d, closing video stream", handle.id)
+		message := fmt.Sprintf("no video stream for handle %d", handle.id)
 		handle.logger.Error(message, nil)
 		handle.Close()
 		return syscall.ENOENT
@@ -88,8 +88,9 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	}
 
 	fileSize := handle.node.GetSize()
+	_ = fileSize
 
-	buffer := pool.GetBuffer(int64(fileSize))
+	buffer := pool.GetBuffer(int64(readRequest.Size))
 	defer pool.PutBuffer(buffer)
 
 	// Pass the FUSE request context so cancellation propagates all the way

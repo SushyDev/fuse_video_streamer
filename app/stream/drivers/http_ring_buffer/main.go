@@ -19,20 +19,6 @@ import (
 	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/transfer"
 )
 
-const (
-	SmallVideoBuffer  = int64(64 * 1024 * 1024)   // 64MB for < 1GB files
-	MediumVideoBuffer = int64(256 * 1024 * 1024)  // 256MB for 1-10GB files
-	LargeVideoBuffer  = int64(512 * 1024 * 1024)  // 512MB for 10GB+ files
-	MaxBufferSize     = int64(1024 * 1024 * 1024) // 1GB absolute max
-)
-
-const (
-	SmallVideoPreloadSize  = int64(32 * 1024 * 1024)  // 32MB for < 1GB files
-	MediumVideoPreloadSize = int64(128 * 1024 * 1024) // 128MB for 1-10GB files
-	LargeVideoPreloadSize  = int64(256 * 1024 * 1024) // 256MB for 10GB+ files
-	MaxPreloadSize         = int64(16 * 1024 * 1024)  // 16MB absolute max preload size
-)
-
 type Stream struct {
 	identifier int64
 	url        string
@@ -58,13 +44,9 @@ type Stream struct {
 var _ interfaces_stream.Stream = &Stream{}
 
 // calculateBufferSize determines the buffer size based on the file size.
-// Its 10% of the fileSize with a max of 128MB
+// It's 10% of the fileSize with a max of 128 MB and a minimum of 1 MB.
 func calculateBufferSize(fileSize int64) int64 {
-	return min(128*1024*1024, fileSize/10)
-}
-
-func calculatePreloadSize(bufferSize int64) int64 {
-	return bufferSize / 4
+	return max(1*1024*1024, min(128*1024*1024, fileSize/10))
 }
 
 func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory, url string, size int64) (*Stream, error) {
@@ -248,30 +230,28 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 			if mergedCtx.Err() != nil {
 				return 0, mergedCtx.Err()
 			}
+			// The position is no longer reachable in the current buffer window
+			// (the read cursor has already advanced past it). Start a new transfer
+			// from seekPosition and wait again.
+			if err := stream.newTransferLocked(seekPosition); err != nil {
+				return 0, fmt.Errorf("error restarting transfer: %v", err)
+			}
+			buf = stream.buffer
+			stream.mu.Unlock()
+			ok = buf.WaitForPosition(mergedCtx, end)
+			stream.mu.Lock()
+			if stream.buffer == nil {
+				return 0, fmt.Errorf("buffer is closed")
+			}
+			if !ok {
+				if mergedCtx.Err() != nil {
+					return 0, mergedCtx.Err()
+				}
+			}
 		}
 	}
 
 	return buf.ReadAt(p, seekPosition)
-}
-
-// SeekTo restarts the underlying HTTP transfer from the given byte position.
-// It is safe for concurrent use. This is the mechanism by which a media
-// player's backward-seek (which causes ErrOutOfRange from the ring buffer)
-// is recovered without closing the stream entirely.
-func (stream *Stream) SeekTo(position int64) error {
-	return stream.newTransfer(position)
-}
-
-// newTransfer creates a new transfer for the stream at the specified seek position.
-func (stream *Stream) newTransfer(seekPosition int64) error {
-	if stream.IsClosed() {
-		return fmt.Errorf("stream is closed")
-	}
-
-	stream.mu.Lock()
-	defer stream.mu.Unlock()
-
-	return stream.newTransferLocked(seekPosition)
 }
 
 // newTransferLocked creates a new transfer. Caller must hold stream.mu (write lock).

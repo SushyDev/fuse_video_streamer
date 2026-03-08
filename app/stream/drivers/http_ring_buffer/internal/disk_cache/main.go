@@ -195,7 +195,7 @@ func insertRange(ranges []Range, newRange Range) []Range {
 		return ranges[i].Start < ranges[j].Start
 	})
 
-	merged := []Range{}
+	var merged []Range
 	for _, r := range ranges {
 		if len(merged) == 0 {
 			merged = append(merged, r)

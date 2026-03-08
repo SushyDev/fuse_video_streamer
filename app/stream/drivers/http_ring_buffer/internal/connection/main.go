@@ -16,6 +16,8 @@ var _ io.ReadCloser = &Connection{}
 
 // sharedTransport is a package-level HTTP transport shared across all connections
 // to enable TCP connection pooling and avoid leaking idle connections.
+var sharedClient = &http.Client{Transport: sharedTransport}
+
 var sharedTransport = &http.Transport{
 	TLSClientConfig: &tls.Config{
 		ClientSessionCache: tls.NewLRUClientSessionCache(100),
@@ -103,11 +105,7 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 	rangeHeader := fmt.Sprintf("bytes=%d-", connection.startPosition)
 	request.Header.Set("Range", rangeHeader)
 
-	client := &http.Client{
-		Transport: sharedTransport,
-		// Remove the 4-hour blanket timeout. We use per-read timeouts
-		// and context cancellation instead for finer control.
-	}
+	client := sharedClient
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -148,9 +146,7 @@ func (connection *Connection) readWithTimeout(body io.ReadCloser, buf []byte) (i
 	case <-timer.C:
 		// Read timed out - close connection to unblock the body.Read goroutine.
 		connection.cancel()
-		if body != nil {
-			body.Close()
-		}
+		body.Close()
 		return 0, fmt.Errorf("read timed out after %v", readTimeout)
 	case <-connection.context.Done():
 		return 0, connection.context.Err()
