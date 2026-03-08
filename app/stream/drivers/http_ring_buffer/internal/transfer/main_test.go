@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	mock_logger "fuse_video_streamer/logger/mock"
+
 	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/connection"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"

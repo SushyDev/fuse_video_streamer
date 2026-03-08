@@ -209,6 +209,8 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 		if err := stream.newTransferLocked(seekPosition); err != nil {
 			return 0, fmt.Errorf("error before read at: %v", err)
 		}
+		// Re-read buffer reference after newTransfer (buffer is the same object,
+		// but transfer may have changed). The buffer itself is not replaced.
 	}
 
 	buf := stream.buffer
