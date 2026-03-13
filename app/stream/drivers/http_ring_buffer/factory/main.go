@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"fuse_video_streamer/config"
@@ -76,6 +77,11 @@ func (factory *Factory) getStreamURL(identifier uint64, tries int) (string, erro
 	)
 
 	if err != nil {
+		// Permanent filesystem errors (e.g. ENOENT — node does not exist) must
+		// not be retried; no amount of waiting will make the node appear.
+		if _, isPermanent := err.(syscall.Errno); isPermanent {
+			return "", err
+		}
 		time.Sleep(backoffDuration)
 		return factory.getStreamURL(identifier, tries+1)
 	}
