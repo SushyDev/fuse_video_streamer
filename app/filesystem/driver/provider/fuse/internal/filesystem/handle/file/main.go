@@ -29,10 +29,10 @@ var _ interfaces_handle.FileHandle = &Handle{}
 var incrementId uint64
 
 func NewHandle(node interfaces_node.FileNode, logger interfaces_logger.Logger) *Handle {
-	incrementId++
+	id := atomic.AddUint64(&incrementId, 1)
 
 	return &Handle{
-		id:   incrementId,
+		id:   id,
 		node: node,
 
 		logger: logger,

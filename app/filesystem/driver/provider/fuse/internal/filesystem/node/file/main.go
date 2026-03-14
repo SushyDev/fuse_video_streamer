@@ -112,8 +112,8 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		return nil, syscall.ENOENT
 	}
 
-	node.mu.RLock()
-	defer node.mu.RUnlock()
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
 	handle, err := node.handleService.NewHandle(node)
 	if err != nil {
@@ -134,24 +134,28 @@ func (node *Node) Close() error {
 		return nil
 	}
 
+	node.mu.Lock()
+
 	node.handleService.Close()
 	node.handleService = nil
 
+	handles := node.handles
+	node.handles = nil
+
+	node.mu.Unlock()
+
 	var wg sync.WaitGroup
 
-	for _, handle := range node.handles {
+	for _, handle := range handles {
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
 			handle.Close()
-			handle = nil
 		}()
 	}
 
 	wg.Wait()
-
-	node.handles = nil
 
 	return nil
 }

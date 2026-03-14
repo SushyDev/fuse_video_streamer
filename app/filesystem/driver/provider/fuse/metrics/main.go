@@ -64,18 +64,20 @@ func (s *ApplicationState) String() []byte {
 	return data
 }
 
-var webDebugger *MetricsCollection
+var (
+	metricsOnce sync.Once
+	webDebugger *MetricsCollection
+)
 
 func GetMetricsCollection() *MetricsCollection {
-	if webDebugger != nil {
-		return webDebugger
-	}
+	metricsOnce.Do(func() {
+		const port = 3131
 
-	const port = 3131
-
-	webDebugger = &MetricsCollection{
-		web_port: port,
-	}
+		webDebugger = &MetricsCollection{
+			web_port:        port,
+			streamTransfers: make(map[uint64]*StreamTransferMetrics),
+		}
+	})
 
 	return webDebugger
 }

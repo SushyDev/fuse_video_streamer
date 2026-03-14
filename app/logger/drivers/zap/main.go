@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"fuse_video_streamer/logger/interfaces"
 
@@ -15,6 +16,7 @@ import (
 
 var LogDir = "logs"
 
+var loggersMu sync.RWMutex
 var loggers = make(map[string]*zap.SugaredLogger)
 
 func createLogger(fileName string) (*zap.SugaredLogger, error) {
@@ -46,6 +48,18 @@ func createLogger(fileName string) (*zap.SugaredLogger, error) {
 }
 
 func getLogger(fileName string) (*zap.SugaredLogger, error) {
+	loggersMu.RLock()
+	logger, ok := loggers[fileName]
+	loggersMu.RUnlock()
+
+	if ok {
+		return logger, nil
+	}
+
+	loggersMu.Lock()
+	defer loggersMu.Unlock()
+
+	// Double-check after acquiring write lock.
 	if logger, ok := loggers[fileName]; ok {
 		return logger, nil
 	}
@@ -82,7 +96,7 @@ func NewLogger(service string) (*Logger, error) {
 	// 	return nil, fmt.Errorf("error getting debug config: %v", err)
 	// }
 
-	debug := true;
+	debug := true
 
 	return &Logger{
 		logger:           logger,
@@ -138,5 +152,7 @@ func (instance *Logger) Debug(message string) {
 func (instance *Logger) Close() {
 	instance.logger.Sync()
 
+	loggersMu.Lock()
 	delete(loggers, instance.service)
+	loggersMu.Unlock()
 }

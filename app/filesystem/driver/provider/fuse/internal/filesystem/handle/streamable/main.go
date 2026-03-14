@@ -45,12 +45,12 @@ var _ interfaces_handle.StreamableHandle = &Handle{}
 var incrementId uint64
 
 func NewHandle(node interfaces_node.StreamableNode, stream interfaces_stream.Stream, bufferPool pool.BufferPool, logger interfaces_logger.Logger) *Handle {
-	incrementId++
+	id := atomic.AddUint64(&incrementId, 1)
 
 	return &Handle{
 		node: node,
 
-		id: incrementId,
+		id: id,
 
 		stream: stream,
 

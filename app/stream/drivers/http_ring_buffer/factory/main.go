@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -29,6 +30,7 @@ type Factory struct {
 
 	loggerFactory interfaces_logger.LoggerFactory
 
+	mu         sync.Mutex
 	cachedItem CacheItem
 
 	closed atomic.Bool
@@ -46,12 +48,12 @@ func New(
 	}
 }
 
-func (factory *Factory) NewStream(_ context.Context, nodeIdentifier uint64, size uint64) (interfaces_stream.Stream, error) {
+func (factory *Factory) NewStream(ctx context.Context, nodeIdentifier uint64, size uint64) (interfaces_stream.Stream, error) {
 	if factory.isClosed() {
 		return nil, fmt.Errorf("factory is closed")
 	}
 
-	url, err := factory.getStreamURL(nodeIdentifier, 0)
+	url, err := factory.getStreamURL(ctx, nodeIdentifier)
 	if err != nil {
 		return nil, err
 	}
@@ -59,48 +61,52 @@ func (factory *Factory) NewStream(_ context.Context, nodeIdentifier uint64, size
 	return http_ring_buffer.New(factory.config, factory.loggerFactory, url, int64(size))
 }
 
-func (factory *Factory) getStreamURL(identifier uint64, tries int) (string, error) {
+func (factory *Factory) getStreamURL(ctx context.Context, identifier uint64) (string, error) {
 	const maxRetries = 30
 	const maxBackoff = 30 * time.Second
 
-	if factory.cachedItem.url != "" && factory.cachedItem.expiration.After(time.Now()) {
-		return factory.cachedItem.url, nil
-	}
+	for tries := 0; tries < maxRetries; tries++ {
+		factory.mu.Lock()
+		cached := factory.cachedItem
+		factory.mu.Unlock()
 
-	if tries >= maxRetries {
-		return "", fmt.Errorf("failed to get video url for node with id %d after %d retries", identifier, maxRetries)
-	}
-
-	fileSystem := factory.client.GetFileSystem()
-
-	url, err := fileSystem.GetStreamUrl(identifier)
-
-	backoffDuration := min(
-		time.Duration(100*math.Pow(2, float64(tries)))*time.Millisecond,
-		maxBackoff,
-	)
-
-	if err != nil {
-		// Permanent filesystem errors (e.g. ENOENT — node does not exist) must
-		// not be retried; no amount of waiting will make the node appear.
-		if _, isPermanent := err.(syscall.Errno); isPermanent {
-			return "", err
+		if cached.url != "" && cached.expiration.After(time.Now()) {
+			return cached.url, nil
 		}
-		time.Sleep(backoffDuration)
-		return factory.getStreamURL(identifier, tries+1)
+
+		fileSystem := factory.client.GetFileSystem()
+
+		url, err := fileSystem.GetStreamUrl(identifier)
+		if err != nil {
+			// Permanent filesystem errors (e.g. ENOENT — node does not exist) must
+			// not be retried; no amount of waiting will make the node appear.
+			if _, isPermanent := err.(syscall.Errno); isPermanent {
+				return "", err
+			}
+		} else if url != "" {
+			factory.mu.Lock()
+			factory.cachedItem = CacheItem{
+				url:        url,
+				expiration: time.Now().Add(15 * time.Minute),
+			}
+			factory.mu.Unlock()
+
+			return url, nil
+		}
+
+		backoffDuration := min(
+			time.Duration(100*math.Pow(2, float64(tries)))*time.Millisecond,
+			maxBackoff,
+		)
+
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(backoffDuration):
+		}
 	}
 
-	if url == "" {
-		time.Sleep(backoffDuration)
-		return factory.getStreamURL(identifier, tries+1)
-	}
-
-	factory.cachedItem = CacheItem{
-		url:        url,
-		expiration: time.Now().Add(15 * time.Minute),
-	}
-
-	return url, nil
+	return "", syscall.EAGAIN
 }
 
 func (factory *Factory) Close() error {
