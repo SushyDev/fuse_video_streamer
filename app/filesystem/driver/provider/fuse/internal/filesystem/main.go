@@ -9,8 +9,6 @@ import (
 	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
 	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
 
-	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
-
 	"github.com/anacrolix/fuse/fs"
 )
 
@@ -68,7 +66,6 @@ func (fileSystem *FileSystem) Close() error {
 	fileSystem.logger.Info("Closing")
 
 	fileSystem.rootNode.Close()
-	registry.Close()
 
 	fileSystem.logger.Info("Closed")
 

@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sync/atomic"
@@ -12,7 +13,10 @@ import (
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"fuse_video_streamer/stream/drivers/http_ring_buffer"
+	interfaces_stream "fuse_video_streamer/stream/interfaces"
 )
+
+var _ interfaces_stream.StreamFactory = &Factory{}
 
 type CacheItem struct {
 	url        string
@@ -42,7 +46,7 @@ func New(
 	}
 }
 
-func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*http_ring_buffer.Stream, error) {
+func (factory *Factory) NewStream(_ context.Context, nodeIdentifier uint64, size uint64) (interfaces_stream.Stream, error) {
 	if factory.isClosed() {
 		return nil, fmt.Errorf("factory is closed")
 	}
