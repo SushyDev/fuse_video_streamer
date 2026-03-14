@@ -115,6 +115,13 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
+	// Re-check under the lock: Close() may have run between the atomic check
+	// above and acquiring the mutex, setting handleService to nil.
+	if node.IsClosed() {
+		node.logger.Warn("Node is closed, cannot open file handle")
+		return nil, syscall.ENOENT
+	}
+
 	handle, err := node.handleService.NewHandle(node)
 	if err != nil {
 		message := "failed to create file handle"

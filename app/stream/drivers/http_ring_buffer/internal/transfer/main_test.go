@@ -6,19 +6,11 @@ package transfer
 import (
 	"testing"
 
+	mock_logger "fuse_video_streamer/logger/mock"
 	"fuse_video_streamer/stream/drivers/http_ring_buffer/internal/connection"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
-
-// noopLogger satisfies interfaces_logger.Logger without importing the package.
-type noopLogger struct{}
-
-func (noopLogger) Info(string)         {}
-func (noopLogger) Warn(string)         {}
-func (noopLogger) Error(string, error) {}
-func (noopLogger) Fatal(string, error) {}
-func (noopLogger) Debug(string)        {}
 
 // TestNewTransfer_ImmediateClose verifies that calling Close() immediately after
 // NewTransfer() does not panic or deadlock.  Before the wg.Add(1) fix, calling
@@ -39,7 +31,7 @@ func TestNewTransfer_ImmediateClose(t *testing.T) {
 
 	// Run multiple times to maximise the chance of triggering the race.
 	for i := 0; i < 50; i++ {
-		tr := NewTransfer(buf, conn, noopLogger{})
+		tr := NewTransfer(buf, conn, mock_logger.NoopLogger{})
 
 		// Close immediately — before start() may have executed.
 		if err := tr.Close(); err != nil {
@@ -60,7 +52,7 @@ func TestNewTransfer_CloseIsIdempotent(t *testing.T) {
 		t.Fatalf("NewConnection: %v", err)
 	}
 
-	tr := NewTransfer(buf, conn, noopLogger{})
+	tr := NewTransfer(buf, conn, mock_logger.NoopLogger{})
 
 	if err := tr.Close(); err != nil {
 		t.Fatalf("first Close: %v", err)

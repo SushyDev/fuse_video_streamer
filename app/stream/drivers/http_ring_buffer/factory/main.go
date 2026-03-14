@@ -34,6 +34,11 @@ type Factory struct {
 	cachedItem CacheItem
 
 	closed atomic.Bool
+
+	// newTimer is called to produce the backoff timer channel. In production
+	// this is time.After; tests may inject a zero-duration replacement so the
+	// retry loop completes immediately.
+	newTimer func(d time.Duration) <-chan time.Time
 }
 
 func New(
@@ -45,6 +50,7 @@ func New(
 		config:        config,
 		client:        client,
 		loggerFactory: loggerFactory,
+		newTimer:      time.After,
 	}
 }
 
@@ -102,7 +108,7 @@ func (factory *Factory) getStreamURL(ctx context.Context, identifier uint64) (st
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
-		case <-time.After(backoffDuration):
+		case <-factory.newTimer(backoffDuration):
 		}
 	}
 
@@ -115,6 +121,12 @@ func (factory *Factory) Close() error {
 	}
 
 	return nil
+}
+
+// SetNewTimer replaces the timer function used for backoff delays. Tests use
+// this to inject an instant timer so retry loops complete immediately.
+func (factory *Factory) SetNewTimer(fn func(d time.Duration) <-chan time.Time) {
+	factory.newTimer = fn
 }
 
 func (factory *Factory) isClosed() bool {

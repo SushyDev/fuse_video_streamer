@@ -46,7 +46,7 @@ func NewService(
 	}
 }
 
-func (service *Service) NewHandle() (interfaces_handle.StreamableHandle, error) {
+func (service *Service) NewHandle(ctx context.Context) (interfaces_handle.StreamableHandle, error) {
 	if service.IsClosed() {
 		service.logger.Warn("Attempted to create a new Streamable Handle after service was closed")
 		return nil, nil
@@ -58,7 +58,7 @@ func (service *Service) NewHandle() (interfaces_handle.StreamableHandle, error) 
 		return nil, err
 	}
 
-	stream, err := service.streamFactory.NewStream(context.Background(), service.node.GetRemoteIdentifier(), service.node.GetSize())
+	stream, err := service.streamFactory.NewStream(ctx, service.node.GetRemoteIdentifier(), service.node.GetSize())
 	if err != nil {
 		service.logger.Error("failed to create stream for Streamable Handle", err)
 		return nil, err
