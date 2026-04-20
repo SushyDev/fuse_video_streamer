@@ -56,16 +56,31 @@ func run() error {
 	}
 	defer fileSystem.Close()
 
-	go fileSystem.Serve()
+	// Channel to receive Serve() completion or error
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- fileSystem.Serve()
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go waitForExit(cancel)
 
-	<-ctx.Done()
-
-	return nil
+	// Wait for either signal (ctx.Done) or Serve() to complete
+	select {
+	case <-ctx.Done():
+		// Signal received, Close() will be called by defer
+		// Wait for Serve() to finish gracefully
+		<-serveDone
+		return nil
+	case err := <-serveDone:
+		// Serve() completed on its own (shouldn't normally happen)
+		if err != nil {
+			return fmt.Errorf("filesystem serve error: %w", err)
+		}
+		return nil
+	}
 }
 
 func performHealthCheck() {
