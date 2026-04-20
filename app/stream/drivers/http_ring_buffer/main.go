@@ -205,7 +205,7 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 		return 0, fmt.Errorf("buffer is closed")
 	}
 
-	if stream.transfer == nil || !stream.buffer.IsPositionInCapacity(seekPosition, 16*1024*1024) {
+	if stream.transfer == nil || !stream.buffer.IsPositionInCapacity(seekPosition, 0) {
 		if err := stream.newTransferLocked(seekPosition); err != nil {
 			return 0, fmt.Errorf("error before read at: %v", err)
 		}
@@ -278,7 +278,7 @@ func (stream *Stream) newTransferLocked(seekPosition int64) error {
 
 	// Double-check under lock: another goroutine may have already created
 	// a suitable transfer while we were waiting for the lock.
-	if stream.transfer != nil && stream.buffer.IsPositionInCapacity(seekPosition, 16*1024*1024) {
+	if stream.transfer != nil && stream.buffer.IsPositionInCapacity(seekPosition, 0) {
 		return nil
 	}
 
