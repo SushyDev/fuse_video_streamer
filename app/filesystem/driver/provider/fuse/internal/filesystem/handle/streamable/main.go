@@ -31,6 +31,8 @@ type Handle struct {
 
 	stream interfaces_stream.Stream
 
+	bufferPool pool.BufferPool
+
 	logger interfaces_logger.Logger
 
 	mu sync.RWMutex
@@ -42,15 +44,17 @@ var _ interfaces_handle.StreamableHandle = &Handle{}
 
 var incrementId uint64
 
-func NewHandle(node interfaces_node.StreamableNode, stream interfaces_stream.Stream, logger interfaces_logger.Logger) *Handle {
-	incrementId++
+func NewHandle(node interfaces_node.StreamableNode, stream interfaces_stream.Stream, bufferPool pool.BufferPool, logger interfaces_logger.Logger) *Handle {
+	id := atomic.AddUint64(&incrementId, 1)
 
 	return &Handle{
 		node: node,
 
-		id: incrementId,
+		id: id,
 
 		stream: stream,
+
+		bufferPool: bufferPool,
 
 		logger: logger,
 	}
@@ -90,8 +94,8 @@ func (handle *Handle) Read(ctx context.Context, readRequest *fuse.ReadRequest, r
 	fileSize := handle.node.GetSize()
 	_ = fileSize
 
-	buffer := pool.GetBuffer(int64(readRequest.Size))
-	defer pool.PutBuffer(buffer)
+	buffer := handle.bufferPool.Get(readRequest.Size)
+	defer handle.bufferPool.Put(buffer)
 
 	// Pass the FUSE request context so cancellation propagates all the way
 	// down to WaitForPosition and network reads.

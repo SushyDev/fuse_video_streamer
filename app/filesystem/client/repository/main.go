@@ -11,14 +11,19 @@ import (
 )
 
 type clientRepository struct {
-	loggerFactory interfaces_logger.LoggerFactory
-
-	logger interfaces_logger.Logger
-
 	clients []interfaces_fuse.Client
 }
 
 var _ interfaces_fuse.ClientRepository = &clientRepository{}
+
+// NewWithClients constructs a clientRepository from a pre-built list of clients.
+// Primarily intended for use in tests, where callers can supply mock clients directly
+// without requiring a real config or gRPC targets.
+func NewWithClients(clients []interfaces_fuse.Client) interfaces_fuse.ClientRepository {
+	return &clientRepository{
+		clients: clients,
+	}
+}
 
 func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory, logger interfaces_logger.Logger) (interfaces_fuse.ClientRepository, error) {
 	fileSystemProviders := config.GetFileServers()
@@ -33,13 +38,7 @@ func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory, l
 		providers = append(providers, provider)
 	}
 
-	return &clientRepository{
-		loggerFactory: loggerFactory,
-
-		logger: logger,
-
-		clients: providers,
-	}, nil
+	return NewWithClients(providers), nil
 }
 
 func (repository *clientRepository) GetClientByName(name string) (interfaces_fuse.Client, error) {
@@ -53,5 +52,7 @@ func (repository *clientRepository) GetClientByName(name string) (interfaces_fus
 }
 
 func (repository *clientRepository) GetClients() ([]interfaces_fuse.Client, error) {
-	return repository.clients, nil
+	result := make([]interfaces_fuse.Client, len(repository.clients))
+	copy(result, repository.clients)
+	return result, nil
 }

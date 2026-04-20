@@ -144,22 +144,26 @@ func (stream *Stream) Close() error {
 
 	stream.cancel()
 
-	// Close transfer first so its goroutines stop writing to the buffer.
+	// Close the buffer first to unblock any Transfer.copyData goroutine that
+	// may be stuck in buffer.Write waiting for free space. Without this, the
+	// transfer's WaitGroup.Wait in Transfer.Close would deadlock because the
+	// writer goroutine never returns.
 	stream.mu.Lock()
+	buffer := stream.buffer
+	stream.buffer = nil
 	t := stream.transfer
 	stream.transfer = nil
 	stream.mu.Unlock()
 
-	if t != nil {
-		if err := t.Close(); err != nil {
-			stream.logger.Error("error closing transfer", err)
+	if buffer != nil {
+		if err := buffer.Close(); err != nil {
+			stream.logger.Error("error closing buffer", err)
 		}
 	}
 
-	if stream.buffer != nil {
-		err := stream.buffer.Close()
-		if err != nil {
-			return fmt.Errorf("error closing buffer: %v", err)
+	if t != nil {
+		if err := t.Close(); err != nil {
+			stream.logger.Error("error closing transfer", err)
 		}
 	}
 
@@ -261,17 +265,25 @@ func (stream *Stream) newTransferLocked(seekPosition int64) error {
 		return nil
 	}
 
+	// Close the old buffer first to unblock any Transfer.copyData goroutine
+	// that may be stuck in buffer.Write waiting for free space. Without this,
+	// transfer.Close below would deadlock on wg.Wait.
+	oldBuffer := stream.buffer
+	oldBuffer.Close()
+
 	if stream.transfer != nil {
 		stream.transfer.Close()
 		stream.transfer = nil
 	}
 
+	// Create a fresh buffer so the new transfer starts with clean state.
+	bufferSize := calculateBufferSize(stream.size)
+	stream.buffer = ring_buffer.NewLockingRingBuffer(bufferSize, seekPosition)
+
 	conn, err := connection.NewConnection(stream.url, seekPosition)
 	if err != nil {
 		return err
 	}
-
-	stream.buffer.ResetToPosition(seekPosition)
 
 	logger, err := stream.loggerFactory.NewLogger("Stream Transfer")
 	if err != nil {

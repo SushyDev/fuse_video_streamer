@@ -1,9 +1,12 @@
 package factory
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"fuse_video_streamer/config"
@@ -11,7 +14,10 @@ import (
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 
 	"fuse_video_streamer/stream/drivers/http_ring_buffer"
+	interfaces_stream "fuse_video_streamer/stream/interfaces"
 )
+
+var _ interfaces_stream.StreamFactory = &Factory{}
 
 type CacheItem struct {
 	url        string
@@ -24,9 +30,15 @@ type Factory struct {
 
 	loggerFactory interfaces_logger.LoggerFactory
 
+	mu         sync.Mutex
 	cachedItem CacheItem
 
 	closed atomic.Bool
+
+	// newTimer is called to produce the backoff timer channel. In production
+	// this is time.After; tests may inject a zero-duration replacement so the
+	// retry loop completes immediately.
+	newTimer func(d time.Duration) <-chan time.Time
 }
 
 func New(
@@ -38,15 +50,16 @@ func New(
 		config:        config,
 		client:        client,
 		loggerFactory: loggerFactory,
+		newTimer:      time.After,
 	}
 }
 
-func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*http_ring_buffer.Stream, error) {
+func (factory *Factory) NewStream(ctx context.Context, nodeIdentifier uint64, size uint64) (interfaces_stream.Stream, error) {
 	if factory.isClosed() {
 		return nil, fmt.Errorf("factory is closed")
 	}
 
-	url, err := factory.getStreamURL(nodeIdentifier, 0)
+	url, err := factory.getStreamURL(ctx, nodeIdentifier)
 	if err != nil {
 		return nil, err
 	}
@@ -54,38 +67,52 @@ func (factory *Factory) NewStream(nodeIdentifier uint64, size uint64) (*http_rin
 	return http_ring_buffer.New(factory.config, factory.loggerFactory, url, int64(size))
 }
 
-func (factory *Factory) getStreamURL(identifier uint64, tries int) (string, error) {
+func (factory *Factory) getStreamURL(ctx context.Context, identifier uint64) (string, error) {
 	const maxRetries = 30
 	const maxBackoff = 30 * time.Second
 
-	if factory.cachedItem.url != "" && factory.cachedItem.expiration.After(time.Now()) {
-		return factory.cachedItem.url, nil
-	}
+	for tries := 0; tries < maxRetries; tries++ {
+		factory.mu.Lock()
+		cached := factory.cachedItem
+		factory.mu.Unlock()
 
-	if tries >= maxRetries {
-		return "", fmt.Errorf("failed to get video url for node with id %d after %d retries", identifier, maxRetries)
-	}
+		if cached.url != "" && cached.expiration.After(time.Now()) {
+			return cached.url, nil
+		}
 
-	fileSystem := factory.client.GetFileSystem()
+		fileSystem := factory.client.GetFileSystem()
 
-	url, err := fileSystem.GetStreamUrl(identifier)
-	if err != nil {
+		url, err := fileSystem.GetStreamUrl(identifier)
+		if err != nil {
+			// Permanent filesystem errors (e.g. ENOENT — node does not exist) must
+			// not be retried; no amount of waiting will make the node appear.
+			if _, isPermanent := err.(syscall.Errno); isPermanent {
+				return "", err
+			}
+		} else if url != "" {
+			factory.mu.Lock()
+			factory.cachedItem = CacheItem{
+				url:        url,
+				expiration: time.Now().Add(15 * time.Minute),
+			}
+			factory.mu.Unlock()
+
+			return url, nil
+		}
+
 		backoffDuration := min(
 			time.Duration(100*math.Pow(2, float64(tries)))*time.Millisecond,
 			maxBackoff,
 		)
 
-		time.Sleep(backoffDuration)
-
-		return factory.getStreamURL(identifier, tries+1)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-factory.newTimer(backoffDuration):
+		}
 	}
 
-	factory.cachedItem = CacheItem{
-		url:        url,
-		expiration: time.Now().Add(15 * time.Minute),
-	}
-
-	return url, nil
+	return "", syscall.EAGAIN
 }
 
 func (factory *Factory) Close() error {
@@ -94,6 +121,12 @@ func (factory *Factory) Close() error {
 	}
 
 	return nil
+}
+
+// SetNewTimer replaces the timer function used for backoff delays. Tests use
+// this to inject an instant timer so retry loops complete immediately.
+func (factory *Factory) SetNewTimer(fn func(d time.Duration) <-chan time.Time) {
+	factory.newTimer = fn
 }
 
 func (factory *Factory) isClosed() bool {

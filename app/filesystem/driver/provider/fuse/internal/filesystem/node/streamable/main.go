@@ -112,10 +112,14 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		return nil, syscall.ENOENT
 	}
 
-	node.mu.RLock()
-	defer node.mu.RUnlock()
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
-	handle, err := node.handleService.NewHandle()
+	if node.IsClosed() {
+		return nil, syscall.ENOENT
+	}
+
+	handle, err := node.handleService.NewHandle(ctx)
 	if err != nil {
 		message := "failed to create file handle"
 		node.logger.Error(message, err)
@@ -134,9 +138,16 @@ func (node *Node) Close() error {
 		return nil
 	}
 
+	node.mu.Lock()
+
 	node.handleService.Close()
 
-	for _, handle := range node.handles {
+	handles := node.handles
+	node.handles = nil
+
+	node.mu.Unlock()
+
+	for _, handle := range handles {
 		handle.Close()
 	}
 

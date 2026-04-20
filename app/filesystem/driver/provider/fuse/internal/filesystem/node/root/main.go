@@ -92,16 +92,20 @@ func (node *node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
-	return node, nil
-}
-
-func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
 	if node.IsClosed() {
 		return nil, syscall.ENOENT
 	}
 
+	return node, nil
+}
+
+func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest, lookupResponse *fuse.LookupResponse) (fs.Node, error) {
 	node.mu.RLock()
 	defer node.mu.RUnlock()
+
+	if node.IsClosed() {
+		return nil, syscall.ENOENT
+	}
 
 	// Check if looking up the health check file
 	if lookupRequest.Name == healthcheck.HealthCheckFileName {
@@ -133,12 +137,12 @@ func (node *node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 }
 
 func (node *node) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
+	node.mu.RLock()
+	defer node.mu.RUnlock()
+
 	if node.IsClosed() {
 		return nil, nil
 	}
-
-	node.mu.RLock()
-	defer node.mu.RUnlock()
 
 	clients, err := node.fileSystemProviderRepository.GetClients()
 	if err != nil {
@@ -174,6 +178,9 @@ func (node *node) Close() error {
 	if !node.closed.CompareAndSwap(false, true) {
 		return nil
 	}
+
+	node.mu.Lock()
+	defer node.mu.Unlock()
 
 	if node.healthCheckNode != nil {
 		node.healthCheckNode.Close()

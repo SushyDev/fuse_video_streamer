@@ -1,6 +1,8 @@
 package handle
 
 import (
+	"context"
+
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_fuse_filesystem_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
 	interfaces_fuse "fuse_video_streamer/filesystem/driver/provider/fuse/internal/interfaces"
@@ -78,7 +80,7 @@ type FileHandleService interface {
 type StreamableHandleService interface {
 	interfaces_fuse.UseClosable
 
-	NewHandle() (StreamableHandle, error)
+	NewHandle(ctx context.Context) (StreamableHandle, error)
 }
 
 // Factory

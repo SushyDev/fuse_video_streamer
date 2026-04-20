@@ -32,10 +32,10 @@ var _ interfaces_handle.DirectoryHandle = &Handle{}
 var incrementId uint64
 
 func NewHandle(directory interfaces_node.DirectoryNode, logger interfaces_logger.Logger) *Handle {
-	incrementId++
+	id := atomic.AddUint64(&incrementId, 1)
 
 	handle := &Handle{
-		id: incrementId,
+		id: id,
 
 		directory: directory,
 

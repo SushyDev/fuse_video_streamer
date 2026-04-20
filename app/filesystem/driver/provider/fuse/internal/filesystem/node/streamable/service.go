@@ -21,7 +21,7 @@ type Service struct {
 	loggerFactory                  interfaces_logger.LoggerFactory
 	tree                           node.Tree
 
-	registry *registry.Registry
+	registry registry.Registry
 
 	closed atomic.Bool
 }
@@ -34,9 +34,8 @@ func NewService(
 	loggerFactory interfaces_logger.LoggerFactory,
 	logger interfaces_logger.Logger,
 	tree node.Tree,
+	registry registry.Registry,
 ) (node.StreamableNodeService, error) {
-	registry := registry.GetInstance(client)
-
 	service := &Service{
 		client:                         client,
 		streamableHandleServiceFactory: streamableHandleServiceFactory,

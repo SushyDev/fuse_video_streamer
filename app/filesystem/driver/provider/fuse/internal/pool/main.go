@@ -11,54 +11,61 @@ const (
 	MaxBufferSize     = int64(1024 * 1024 * 1024) // 1GB absolute max
 )
 
-type BufferPool struct {
+type defaultBufferPool struct {
 	smallPool  *sync.Pool
 	mediumPool *sync.Pool
 	largePool  *sync.Pool
 	maxPool    *sync.Pool
 }
 
-var globalBufferPool = &BufferPool{
-	smallPool: &sync.Pool{
-		New: func() any {
-			return make([]byte, SmallVideoBuffer)
-		},
-	},
-	mediumPool: &sync.Pool{
-		New: func() any {
-			return make([]byte, MediumVideoBuffer)
-		},
-	},
-	largePool: &sync.Pool{
-		New: func() any {
-			return make([]byte, LargeVideoBuffer)
-		},
-	},
-	maxPool: &sync.Pool{
-		New: func() any {
-			return make([]byte, MaxBufferSize)
-		},
-	},
-}
+var _ BufferPool = &defaultBufferPool{}
 
-// GetBuffer returns a buffer appropriate for the given file size
-func GetBuffer(fileSize int64) []byte {
-	bufferSize := calculateBufferSize(fileSize)
-
-	switch bufferSize {
-	case SmallVideoBuffer:
-		return globalBufferPool.smallPool.Get().([]byte)
-	case MediumVideoBuffer:
-		return globalBufferPool.mediumPool.Get().([]byte)
-	case LargeVideoBuffer:
-		return globalBufferPool.largePool.Get().([]byte)
-	default:
-		return globalBufferPool.maxPool.Get().([]byte)
+func newDefaultBufferPool() *defaultBufferPool {
+	return &defaultBufferPool{
+		smallPool: &sync.Pool{
+			New: func() any {
+				return make([]byte, SmallVideoBuffer)
+			},
+		},
+		mediumPool: &sync.Pool{
+			New: func() any {
+				return make([]byte, MediumVideoBuffer)
+			},
+		},
+		largePool: &sync.Pool{
+			New: func() any {
+				return make([]byte, LargeVideoBuffer)
+			},
+		},
+		maxPool: &sync.Pool{
+			New: func() any {
+				return make([]byte, MaxBufferSize)
+			},
+		},
 	}
 }
 
-// PutBuffer returns a buffer to the appropriate pool based on its size
-func PutBuffer(buffer []byte) {
+// NewBufferPool returns a new injectable BufferPool instance.
+func NewBufferPool() BufferPool {
+	return newDefaultBufferPool()
+}
+
+func (bufferPool *defaultBufferPool) Get(size int) []byte {
+	bufferSize := calculateBufferSize(int64(size))
+
+	switch bufferSize {
+	case SmallVideoBuffer:
+		return bufferPool.smallPool.Get().([]byte)
+	case MediumVideoBuffer:
+		return bufferPool.mediumPool.Get().([]byte)
+	case LargeVideoBuffer:
+		return bufferPool.largePool.Get().([]byte)
+	default:
+		return bufferPool.maxPool.Get().([]byte)
+	}
+}
+
+func (bufferPool *defaultBufferPool) Put(buffer []byte) {
 	if buffer == nil {
 		return
 	}
@@ -67,13 +74,13 @@ func PutBuffer(buffer []byte) {
 
 	switch bufferSize {
 	case SmallVideoBuffer:
-		globalBufferPool.smallPool.Put(buffer)
+		bufferPool.smallPool.Put(buffer)
 	case MediumVideoBuffer:
-		globalBufferPool.mediumPool.Put(buffer)
+		bufferPool.mediumPool.Put(buffer)
 	case LargeVideoBuffer:
-		globalBufferPool.largePool.Put(buffer)
+		bufferPool.largePool.Put(buffer)
 	case MaxBufferSize:
-		globalBufferPool.maxPool.Put(buffer)
+		bufferPool.maxPool.Put(buffer)
 	default:
 		// Don't pool buffers of unexpected sizes
 		return
@@ -81,8 +88,6 @@ func PutBuffer(buffer []byte) {
 }
 
 func calculateBufferSize(fileSize int64) int64 {
-	return SmallVideoBuffer
-
 	switch {
 	case fileSize < 1024*1024*1024: // < 1GB
 		return SmallVideoBuffer

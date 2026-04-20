@@ -11,7 +11,7 @@ import (
 )
 
 type MetricsCollection struct {
-	web_port int
+	webPort int
 
 	started atomic.Bool
 
@@ -32,7 +32,7 @@ func NewFileNodeMetrics(identifier uint64) *FileNodeMetrics {
 	return &FileNodeMetrics{}
 }
 
-func (s *ApplicationState) String() []byte {
+func FormatApplicationState() []byte {
 	metricsJson := &MetricsCollectionJson{}
 
 	webDebugger.streamTransfersMu.RLock()
@@ -49,8 +49,11 @@ func (s *ApplicationState) String() []byte {
 			return -1 // j is finished, i is not
 		}
 
-		if i.StreamId != j.StreamId {
-			return int(i.StreamId - j.StreamId)
+		if i.StreamId < j.StreamId {
+			return -1
+		}
+		if i.StreamId > j.StreamId {
+			return 1
 		}
 		return strings.Compare(i.UUID, j.UUID)
 	})
@@ -64,18 +67,20 @@ func (s *ApplicationState) String() []byte {
 	return data
 }
 
-var webDebugger *MetricsCollection
+var (
+	metricsOnce sync.Once
+	webDebugger *MetricsCollection
+)
 
 func GetMetricsCollection() *MetricsCollection {
-	if webDebugger != nil {
-		return webDebugger
-	}
+	metricsOnce.Do(func() {
+		const port = 3131
 
-	const port = 3131
-
-	webDebugger = &MetricsCollection{
-		web_port: port,
-	}
+		webDebugger = &MetricsCollection{
+			webPort:         port,
+			streamTransfers: make(map[uint64]*StreamTransferMetrics),
+		}
+	})
 
 	return webDebugger
 }
@@ -86,19 +91,17 @@ func (service *MetricsCollection) StartWebDebugger() error {
 		return nil // Already started
 	}
 
-	fmt.Printf("Starting Web Debugger Service on port %d\n", service.web_port)
+	fmt.Printf("Starting Web Debugger Service on port %d\n", service.webPort)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		applicationState, _ := service.GetState()
-
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(applicationState.String()))
+		w.Write(FormatApplicationState())
 	})
 
-	addr := fmt.Sprintf(":%d", service.web_port)
+	addr := fmt.Sprintf(":%d", service.webPort)
 	return http.ListenAndServe(addr, nil)
 }
 
 func (service *MetricsCollection) GetState() (*ApplicationState, error) {
-	return nil, nil
+	return &ApplicationState{}, nil
 }

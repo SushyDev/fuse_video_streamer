@@ -136,13 +136,15 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 // rather than hanging for hours.
 func (connection *Connection) readWithTimeout(body io.ReadCloser, buf []byte) (int, error) {
 	type result struct {
-		n   int
-		err error
+		data []byte
+		n    int
+		err  error
 	}
 	ch := make(chan result, 1)
+	goBuf := make([]byte, len(buf))
 	go func() {
-		n, err := body.Read(buf)
-		ch <- result{n, err}
+		n, err := body.Read(goBuf)
+		ch <- result{data: goBuf, n: n, err: err}
 	}()
 
 	timer := time.NewTimer(readTimeout)
@@ -150,6 +152,9 @@ func (connection *Connection) readWithTimeout(body io.ReadCloser, buf []byte) (i
 
 	select {
 	case res := <-ch:
+		if res.n > 0 {
+			copy(buf, res.data[:res.n])
+		}
 		return res.n, res.err
 	case <-timer.C:
 		// Read timed out - close connection to unblock the body.Read goroutine.

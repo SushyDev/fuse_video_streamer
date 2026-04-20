@@ -23,7 +23,7 @@ type Service struct {
 	logger                   interfaces_logger.Logger
 	tree                     interfaces_node.Tree
 
-	registry *registry.Registry
+	registry registry.Registry
 
 	mu sync.RWMutex
 
@@ -40,9 +40,8 @@ func NewService(
 	loggerFactory interfaces_logger.LoggerFactory,
 	logger interfaces_logger.Logger,
 	tree interfaces_node.Tree,
+	registry registry.Registry,
 ) (interfaces_node.FileNodeService, error) {
-	registry := registry.GetInstance(client)
-
 	return &Service{
 		client:                   client,
 		fileHandleServiceFactory: fileHandleFactory,

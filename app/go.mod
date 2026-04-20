@@ -1,12 +1,13 @@
 module fuse_video_streamer
 
-go 1.25.4
+go 1.26.2
 
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/anacrolix/fuse v0.3.2
 	github.com/google/uuid v1.6.0
 	github.com/sushydev/ring_buffer_go v0.1.10
+	go.uber.org/goleak v1.3.0
 	go.uber.org/zap v1.27.1
 	google.golang.org/grpc v1.77.0
 	sushydev.github.io/stream_mount_api/go v0.0.0-20251207124320-a0ace8ebc642

@@ -14,6 +14,8 @@ import (
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/server"
 	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/tree"
 
+	filesystem_client_repository "fuse_video_streamer/filesystem/client/repository"
+
 	"github.com/anacrolix/fuse"
 )
 
@@ -26,7 +28,17 @@ type FuseService struct {
 var _ interfaces_filesystem.FileSystemServerService = &FuseService{}
 
 func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory) (*FuseService, error) {
-	rootNodeServiceFactory, err := node_root.NewFactory(config, loggerFactory)
+	filesystemClientRepositoryLogger, err := loggerFactory.NewLogger("Filesystem Client Repository")
+	if err != nil {
+		return nil, err
+	}
+
+	filesystemClientRepository, err := filesystem_client_repository.New(config, loggerFactory, filesystemClientRepositoryLogger)
+	if err != nil {
+		return nil, err
+	}
+
+	rootNodeServiceFactory, err := node_root.NewFactory(filesystemClientRepository, config, loggerFactory)
 	if err != nil {
 		return nil, err
 	}

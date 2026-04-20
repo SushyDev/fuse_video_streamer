@@ -11,8 +11,6 @@ import (
 
 	handle_directory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/handle/directory"
 	node_directory "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node/directory"
-
-	filesystem_client_repository "fuse_video_streamer/filesystem/client/repository"
 )
 
 type ServiceFactory struct {
@@ -26,19 +24,14 @@ type ServiceFactory struct {
 
 var _ interfaces_node.RootNodeServiceFactory = &ServiceFactory{}
 
-func NewFactory(config *config.Config, loggerFactory interfaces_logger.LoggerFactory) (*ServiceFactory, error) {
-	filesystemClientRepositoryLogger, err := loggerFactory.NewLogger("Filesystem Client Repository")
-	if err != nil {
-		return nil, err
-	}
-
-	filesystemClientRepository, err := filesystem_client_repository.New(config, loggerFactory, filesystemClientRepositoryLogger)
-	if err != nil {
-		return nil, err
-	}
-
+func NewFactory(
+	filesystemClientRepository interfaces_filesystem_client.ClientRepository,
+	config *config.Config,
+	loggerFactory interfaces_logger.LoggerFactory,
+) (*ServiceFactory, error) {
 	directoryHandleServiceFactory := handle_directory.NewFactory(loggerFactory)
-	directoryNodeServiceFactory := node_directory.NewFactory(config, loggerFactory)
+	// Pass nil registry: directory factory creates a fresh registry per NewService call.
+	directoryNodeServiceFactory := node_directory.NewFactory(config, loggerFactory, nil)
 
 	return &ServiceFactory{
 		filesystemClientRepository: filesystemClientRepository,

@@ -9,26 +9,35 @@ import (
 
 	node_file "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node/file"
 	node_streamable "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node/streamable"
+	"fuse_video_streamer/filesystem/driver/provider/fuse/internal/registry"
 )
 
 type Factory struct {
 	config        *config.Config
 	loggerFactory interfaces_logger.LoggerFactory
+	registry      registry.Registry
 }
 
 var _ interfaces_node.DirectoryNodeServiceFactory = &Factory{}
 
-func NewFactory(config *config.Config, loggerFactory interfaces_logger.LoggerFactory) *Factory {
+func NewFactory(config *config.Config, loggerFactory interfaces_logger.LoggerFactory, registry registry.Registry) *Factory {
 	return &Factory{
 		config:        config,
 		loggerFactory: loggerFactory,
+		registry:      registry,
 	}
 }
 
 func (factory *Factory) NewService(client interfaces_filesystem_client.Client, tree interfaces_node.Tree) (interfaces_node.DirectoryNodeService, error) {
-	directoryNodeServiceFactory := NewFactory(factory.config, factory.loggerFactory)
-	streamableNodeServiceFactory := node_streamable.NewFactory(factory.config, factory.loggerFactory)
-	fileNodeServiceFactory := node_file.NewFactory(factory.loggerFactory)
+	// Use the injected registry, or create a fresh one per client service when none provided.
+	serviceRegistry := factory.registry
+	if serviceRegistry == nil {
+		serviceRegistry = registry.New()
+	}
+
+	directoryNodeServiceFactory := NewFactory(factory.config, factory.loggerFactory, serviceRegistry)
+	streamableNodeServiceFactory := node_streamable.NewFactory(factory.config, factory.loggerFactory, serviceRegistry)
+	fileNodeServiceFactory := node_file.NewFactory(factory.loggerFactory, serviceRegistry)
 
 	logger, err := factory.loggerFactory.NewLogger("Directory Node Service")
 	if err != nil {
@@ -43,5 +52,6 @@ func (factory *Factory) NewService(client interfaces_filesystem_client.Client, t
 		factory.loggerFactory,
 		logger,
 		tree,
+		serviceRegistry,
 	)
 }

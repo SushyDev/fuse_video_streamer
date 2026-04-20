@@ -28,9 +28,16 @@ func main() {
 		return
 	}
 
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Fatal: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	config, err := config_model.Get()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	mountpoint := config.GetMountPoint()
@@ -40,13 +47,14 @@ func main() {
 
 	fuseService, err := filesystem_server_provider_fuse.New(config, zapLoggerFactory)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create fuse provider: %w", err)
 	}
 
 	fileSystem, err := filesystem_server_service.New(mountpoint, volumeName, fuseService)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create filesystem service: %w", err)
 	}
+	defer fileSystem.Close()
 
 	go fileSystem.Serve()
 
@@ -57,7 +65,7 @@ func main() {
 
 	<-ctx.Done()
 
-	fileSystem.Close()
+	return nil
 }
 
 func performHealthCheck() {

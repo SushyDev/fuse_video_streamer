@@ -109,8 +109,12 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 		return nil, syscall.ENOENT
 	}
 
-	node.mu.RLock()
-	defer node.mu.RUnlock()
+	node.mu.Lock()
+	defer node.mu.Unlock()
+
+	if node.IsClosed() {
+		return nil, syscall.ENOENT
+	}
 
 	handle, err := node.directoryHandleService.NewHandle(node)
 	if err != nil {
@@ -366,9 +370,15 @@ func (node *Node) Close() error {
 		return nil
 	}
 
-	for _, handle := range node.handles {
+	node.mu.Lock()
+
+	handles := node.handles
+	node.handles = nil
+
+	node.mu.Unlock()
+
+	for _, handle := range handles {
 		handle.Close()
-		handle = nil
 	}
 
 	return nil
