@@ -10,7 +10,6 @@ import (
 	"fuse_video_streamer/healthcheck"
 
 	filesystem_server_provider_fuse "fuse_video_streamer/filesystem/driver/provider/fuse"
-	filesystem_server_service "fuse_video_streamer/filesystem/driver/service"
 	zap_logger "fuse_video_streamer/logger/drivers/zap"
 
 	"net/http"
@@ -50,7 +49,7 @@ func run() error {
 		return fmt.Errorf("failed to create fuse provider: %w", err)
 	}
 
-	fileSystem, err := filesystem_server_service.New(mountpoint, volumeName, fuseService)
+	fileSystem, err := fuseService.New(mountpoint, volumeName)
 	if err != nil {
 		return fmt.Errorf("failed to create filesystem service: %w", err)
 	}
