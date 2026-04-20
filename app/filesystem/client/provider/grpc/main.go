@@ -94,7 +94,7 @@ func (provider *provider) GetName() string {
 }
 
 func (provider *provider) GetDirectory() string {
-	return filepath.Join(provider.config.GetMountPoint(), provider.name)
+	return filepath.Join(provider.config.MountPoint, provider.name)
 }
 
 func (provider *provider) GetFileSystem() interfaces_filesystem_client.FileSystem {

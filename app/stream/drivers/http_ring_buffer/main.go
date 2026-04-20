@@ -79,7 +79,7 @@ func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory, u
 		logger: logger,
 	}
 
-	if config.GetEnableDiskCache() {
+	if config.EnableDiskCache {
 		diskCache, err := disk_cache.NewDiskCache(url, size)
 		if err != nil {
 			return nil, fmt.Errorf("error creating disk cache: %v", err)

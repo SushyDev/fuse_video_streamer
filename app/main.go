@@ -39,8 +39,8 @@ func run() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	mountpoint := config.GetMountPoint()
-	volumeName := config.GetVolumeName()
+	mountpoint := config.MountPoint
+	volumeName := config.VolumeName
 
 	zapLoggerFactory := zap_logger.NewFactory()
 
@@ -89,7 +89,7 @@ func performHealthCheck() {
 		os.Exit(1)
 	}
 
-	mountpoint := config.GetMountPoint()
+	mountpoint := config.MountPoint
 	healthChecker := healthcheck.New(mountpoint)
 
 	err = healthChecker.Check()

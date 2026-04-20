@@ -55,26 +55,3 @@ func validate(cfg Config) error {
 
 	return nil
 }
-
-func (config *Config) GetMountPoint() string {
-	return config.MountPoint
-}
-
-func (config *Config) GetVolumeName() string {
-	return config.VolumeName
-}
-
-func (config *Config) GetDebug() bool {
-	return config.Debug
-}
-
-func (config *Config) GetEnableDiskCache() bool {
-	return config.EnableDiskCache
-}
-
-func (config *Config) GetFileServers() []FileSystemProvider {
-	servers := make([]FileSystemProvider, len(config.FileServers))
-	copy(servers, config.FileServers)
-
-	return servers
-}
