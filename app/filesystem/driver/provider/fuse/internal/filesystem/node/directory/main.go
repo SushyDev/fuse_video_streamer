@@ -154,8 +154,6 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	foundNode, err := client_filesystem.Lookup(node.GetRemoteIdentifier(), lookupRequest.Name)
 
 	if err == syscall.ENOENT {
-		// node.logger.Error(fmt.Sprintf("node: %s not found in directory with ID: %d", lookupRequest.Name, node.GetRemoteIdentifier()), nil)
-
 		return nil, syscall.ENOENT
 	} else if err != nil {
 		node.logger.Error(fmt.Sprintf("failed to lookup node: %s in directory with ID: %d", lookupRequest.Name, node.GetRemoteIdentifier()), err)
@@ -164,11 +162,8 @@ func (node *Node) Lookup(ctx context.Context, lookupRequest *fuse.LookupRequest,
 	}
 
 	if foundNode == nil {
-		// node.logger.Error(fmt.Sprintf("node: %s not found in directory with ID: %d", lookupRequest.Name, node.GetRemoteIdentifier()), nil)
 		return nil, syscall.ENOENT
 	}
-
-	// node.logger.Debug(fmt.Sprintf("found node: %s with ID: %d in directory with ID: %d", foundNode.GetName(), foundNode.GetId(), node.GetRemoteIdentifier()))
 
 	// Check file type using mode bits, not exact equality
 	// Modes include both type bits and permission bits
@@ -203,7 +198,6 @@ func (node *Node) Remove(ctx context.Context, removeRequest *fuse.RemoveRequest)
 
 	err := fileSystem.Remove(node.GetRemoteIdentifier(), removeRequest.Name)
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return err
 	}
 
@@ -227,7 +221,6 @@ func (node *Node) Rename(ctx context.Context, request *fuse.RenameRequest, newDi
 
 	err := fileSystem.Rename(node.GetRemoteIdentifier(), request.OldName, newDirectory.GetRemoteIdentifier(), request.NewName)
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return err
 	}
 
@@ -246,25 +239,21 @@ func (node *Node) Create(ctx context.Context, request *fuse.CreateRequest, respo
 
 	err := fileSystem.Create(node.GetRemoteIdentifier(), request.Name, io_fs.FileMode(request.Mode))
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return nil, nil, err
 	}
 
 	foundNode, err := fileSystem.Lookup(node.GetRemoteIdentifier(), request.Name)
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return nil, nil, err
 	}
 
 	fileNode, err := node.fileNodeService.NewNode(node, foundNode.GetId())
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return nil, nil, err
 	}
 
 	handle, err := fileNode.Open(ctx, &fuse.OpenRequest{}, &fuse.OpenResponse{})
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return nil, nil, err
 	}
 
@@ -283,7 +272,6 @@ func (node *Node) Mkdir(ctx context.Context, request *fuse.MkdirRequest) (fs.Nod
 
 	remoteDirectoryNode, err := fileSystem.MkDir(node.GetRemoteIdentifier(), request.Name)
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return nil, err
 	}
 
@@ -318,14 +306,12 @@ func (node *Node) Link(ctx context.Context, request *fuse.LinkRequest, oldNode f
 	// Create the hard link via gRPC
 	err := fileSystem.Link(node.GetRemoteIdentifier(), request.NewName, targetNodeId)
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return nil, err
 	}
 
 	// Lookup the newly created hard link to get its node info
 	foundNode, err := fileSystem.Lookup(node.GetRemoteIdentifier(), request.NewName)
 	if err != nil {
-		// Return error without logging - caller will handle it
 		return nil, err
 	}
 
