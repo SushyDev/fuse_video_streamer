@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -30,6 +31,7 @@ import (
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
 	mock_logger "fuse_video_streamer/logger/mock"
 	http_ring_buffer "fuse_video_streamer/stream/drivers/http_ring_buffer"
+	ring_buffer "github.com/sushydev/ring_buffer_go"
 )
 
 // ─── Netflix demo content ────────────────────────────────────────────────────
@@ -275,7 +277,7 @@ func TestRealWorld_Netflix_PartialRead(t *testing.T) {
 	t.Parallel()
 
 	stream := newStreamWithLogger(t, netflixURL, netflixSize)
-	defer stream.Close()
+	defer func() { stream.Close() }()
 
 	rng := mrand.New(mrand.NewSource(time.Now().UnixNano()))
 	readSize := 64 * 1024
@@ -597,7 +599,11 @@ func TestRealWorld_UnstableProxy_LocalContent(t *testing.T) {
 					errorCount.Add(1)
 					return
 				}
-				defer stream.Close()
+				defer func() {
+					if stream != nil {
+						stream.Close()
+					}
+				}()
 
 				rng := mrand.New(mrand.NewSource(time.Now().UnixNano()))
 				buffer := make([]byte, 32*1024)
@@ -610,12 +616,15 @@ func TestRealWorld_UnstableProxy_LocalContent(t *testing.T) {
 
 					if readErr != nil {
 						errorCount.Add(1)
-						stream.Close()
+						if stream != nil {
+							stream.Close()
+						}
 						stream, err = http_ring_buffer.New(
 							mock_config.MinimalConfig(), mock_logger.NoopLoggerFactory{},
 							proxy.URL(), int64(contentSize),
 						)
 						if err != nil {
+							stream = nil
 							return
 						}
 						continue
@@ -889,6 +898,75 @@ func TestStreamIsolation_StuckStreamDoesNotBlockOther(t *testing.T) {
 }
 
 // ─── Gap 2: WaitForPosition unblocks on HTTP error (EOF marker) ──────────────
+
+// TestConcurrentReads_ErrOutOfRange verifies that concurrent ReadAt calls on
+// the same stream never propagate ErrOutOfRange to their callers.
+//
+// The ring buffer has a monotonically advancing shared read cursor. Without a
+// fix, the second goroutine to call ReadAt at offset 0 would find the cursor
+// already past its position and receive ErrOutOfRange. The stream must handle
+// this internally — either by retrying or by proactively starting a fresh
+// transfer before reaching ReadAt — and must never surface ErrOutOfRange.
+func TestConcurrentReads_ErrOutOfRange(t *testing.T) {
+	t.Parallel()
+
+	contentSize := 1 * 1024 * 1024
+	content := make([]byte, contentSize)
+	if _, err := rand.Read(content); err != nil {
+		t.Fatalf("rand.Read: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := int64(0)
+		if rng := r.Header.Get("Range"); rng != "" {
+			fmt.Sscanf(rng, "bytes=%d-", &start)
+		}
+		if start >= int64(contentSize) {
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		remaining := content[start:]
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(remaining)))
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, contentSize-1, contentSize))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(remaining)
+	}))
+	defer server.Close()
+
+	stream := newStream(t, server.URL+"/video.mkv", int64(contentSize))
+	defer stream.Close()
+
+	const goroutines = 20
+	var wg sync.WaitGroup
+	var outOfRangeCount atomic.Int64
+
+	// Barrier so all goroutines start their ReadAt calls simultaneously,
+	// maximising the chance of the race.
+	barrier := make(chan struct{})
+
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			defer wg.Done()
+			<-barrier
+			buf := make([]byte, 512)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			_, err := stream.ReadAt(ctx, buf, 0)
+			if errors.Is(err, ring_buffer.ErrOutOfRange) {
+				outOfRangeCount.Add(1)
+			}
+		}()
+	}
+
+	close(barrier) // release all goroutines at once
+	wg.Wait()
+
+	if outOfRangeCount.Load() > 0 {
+		t.Errorf("ErrOutOfRange propagated to %d caller(s); must be handled internally",
+			outOfRangeCount.Load())
+	}
+}
 
 // TestWaitForPosition_UnblocksOnHTTPError verifies that when the HTTP server
 // returns an error mid-transfer, the transfer's copyData goroutine exits,

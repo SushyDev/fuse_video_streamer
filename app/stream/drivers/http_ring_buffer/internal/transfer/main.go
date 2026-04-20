@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -27,6 +28,16 @@ type Transfer struct {
 	wg *sync.WaitGroup
 
 	closed atomic.Bool
+}
+
+// isBadContentLengthError checks if an error is due to a bad Content-Length header
+func isBadContentLengthError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	return strings.Contains(errStr, "Content-Length")
 }
 
 var _ io.Closer = &Transfer{}
@@ -86,7 +97,7 @@ func (transfer *Transfer) start() {
 			if errors.Is(err, os.ErrClosed) {
 				break
 			}
-			transfer.logger.Error("Error copying from connection", err)
+			transfer.logger.Error("Error copying from connection (context cancelled)", err)
 		}
 	case err := <-done:
 		switch err {
@@ -100,7 +111,13 @@ func (transfer *Transfer) start() {
 			if errors.Is(err, os.ErrClosed) {
 				break
 			}
-			transfer.logger.Error("Error copying from connection", err)
+
+			// Log Content-Length errors separately - they're server-side issues
+			if isBadContentLengthError(err) {
+				transfer.logger.Error("Server returned invalid Content-Length header - stream interrupted", err)
+			} else {
+				transfer.logger.Error("Error copying from connection", err)
+			}
 		}
 	}
 

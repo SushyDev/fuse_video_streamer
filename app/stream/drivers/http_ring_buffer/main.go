@@ -205,10 +205,12 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 		return 0, fmt.Errorf("buffer is closed")
 	}
 
-	if stream.transfer == nil || !stream.buffer.IsPositionInCapacity(seekPosition, 16*1024*1024) {
+	if stream.transfer == nil || !stream.buffer.IsPositionInCapacity(seekPosition, 0) {
 		if err := stream.newTransferLocked(seekPosition); err != nil {
 			return 0, fmt.Errorf("error before read at: %v", err)
 		}
+		// Re-read buffer reference after newTransfer (buffer is the same object,
+		// but transfer may have changed). The buffer itself is not replaced.
 	}
 
 	buf := stream.buffer
@@ -253,6 +255,21 @@ func (stream *Stream) readFromBuffer(ctx context.Context, p []byte, seekPosition
 	return buf.ReadAt(p, seekPosition)
 }
 
+// SeekTo restarts the underlying HTTP transfer from the given byte position.
+// It is safe for concurrent use. This is the mechanism by which a media
+// player's backward-seek (which causes ErrOutOfRange from the ring buffer)
+// is recovered without closing the stream entirely.
+func (stream *Stream) SeekTo(position int64) error {
+	if stream.IsClosed() {
+		return fmt.Errorf("stream is closed")
+	}
+
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+
+	return stream.newTransferLocked(position)
+}
+
 // newTransferLocked creates a new transfer. Caller must hold stream.mu (write lock).
 func (stream *Stream) newTransferLocked(seekPosition int64) error {
 	if stream.buffer == nil {
@@ -261,7 +278,7 @@ func (stream *Stream) newTransferLocked(seekPosition int64) error {
 
 	// Double-check under lock: another goroutine may have already created
 	// a suitable transfer while we were waiting for the lock.
-	if stream.transfer != nil && stream.buffer.IsPositionInCapacity(seekPosition, 16*1024*1024) {
+	if stream.transfer != nil && stream.buffer.IsPositionInCapacity(seekPosition, 0) {
 		return nil
 	}
 

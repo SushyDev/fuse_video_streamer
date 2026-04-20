@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +41,16 @@ var sharedTransport = &http.Transport{
 // readTimeout is the maximum time to wait for a single Read() call on the
 // HTTP response body before considering the connection stalled.
 const readTimeout = 5 * time.Minute
+
+// isBadContentLengthError checks if an error is due to a bad Content-Length header
+func isBadContentLengthError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	return strings.Contains(errStr, "Content-Length")
+}
 
 type Connection struct {
 	url           string
@@ -109,21 +120,25 @@ func (connection *Connection) Read(buf []byte) (int, error) {
 
 	response, err := client.Do(request)
 	if err != nil {
-		return 0, fmt.Errorf("failed to do request: %w", err)
+		return 0, fmt.Errorf("failed to do request: %w (URL: %s, Range: %s)", err, connection.url, rangeHeader)
 	}
+
+	contentLength := response.Header.Get("Content-Length")
 
 	// When requesting from a non-zero position, the server must respond with
 	// 206 Partial Content. A 200 OK means the server ignored the Range header
 	// and is serving from byte 0, which would silently rewind the stream.
 	// For startPosition == 0 we accept both 200 and 206.
-	if connection.startPosition > 0 {
-		if response.StatusCode != http.StatusPartialContent {
-			response.Body.Close()
-			return 0, fmt.Errorf("expected 206 Partial Content for range request at offset %d, got %d", connection.startPosition, response.StatusCode)
-		}
-	} else if response.StatusCode != http.StatusPartialContent && response.StatusCode != http.StatusOK {
+	validStatus := response.StatusCode == http.StatusPartialContent || (connection.startPosition == 0 && response.StatusCode == http.StatusOK)
+	if !validStatus {
 		response.Body.Close()
-		return 0, fmt.Errorf("failed to get partial content: %d", response.StatusCode)
+
+		expectedStr := "206 Partial Content"
+		if connection.startPosition == 0 {
+			expectedStr = "206 Partial Content or 200 OK"
+		}
+
+		return 0, fmt.Errorf("unexpected HTTP status %d at offset %d, expected %s (Content-Length: %s)", response.StatusCode, connection.startPosition, expectedStr, contentLength)
 	}
 
 	connection.body = response.Body
@@ -155,6 +170,13 @@ func (connection *Connection) readWithTimeout(body io.ReadCloser, buf []byte) (i
 		if res.n > 0 {
 			copy(buf, res.data[:res.n])
 		}
+
+		// Log bad Content-Length errors with server context but don't retry
+		// The error is server-side (invalid header), not transient
+		if isBadContentLengthError(res.err) {
+			res.err = fmt.Errorf("%w (URL: %s, Range: bytes=%d-, server returned invalid Content-Length header)", res.err, connection.url, connection.startPosition)
+		}
+
 		return res.n, res.err
 	case <-timer.C:
 		// Read timed out - close connection to unblock the body.Read goroutine.
@@ -189,4 +211,12 @@ func (connection *Connection) Close() error {
 
 func (connection *Connection) isClosed() bool {
 	return connection.closed.Load()
+}
+
+func (connection *Connection) GetURL() string {
+	return connection.url
+}
+
+func (connection *Connection) GetStartPosition() int64 {
+	return connection.startPosition
 }
