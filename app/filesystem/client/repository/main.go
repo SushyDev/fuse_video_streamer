@@ -52,5 +52,7 @@ func (repository *clientRepository) GetClientByName(name string) (interfaces_fus
 }
 
 func (repository *clientRepository) GetClients() ([]interfaces_fuse.Client, error) {
-	return repository.clients, nil
+	result := make([]interfaces_fuse.Client, len(repository.clients))
+	copy(result, repository.clients)
+	return result, nil
 }

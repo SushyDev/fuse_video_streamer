@@ -16,20 +16,17 @@ import (
 
 var LogDir = "logs"
 
-var loggersMu sync.RWMutex
-var loggers = make(map[string]*zap.SugaredLogger)
-
 func createLogger(fileName string) (*zap.SugaredLogger, error) {
 	filePath := filepath.Join(LogDir, fileName)
 
 	// Create the log directory if it doesn't exist
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 
 	// Open the log file
-	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
@@ -47,63 +44,17 @@ func createLogger(fileName string) (*zap.SugaredLogger, error) {
 	return logger.Sugar(), nil
 }
 
-func getLogger(fileName string) (*zap.SugaredLogger, error) {
-	loggersMu.RLock()
-	logger, ok := loggers[fileName]
-	loggersMu.RUnlock()
-
-	if ok {
-		return logger, nil
-	}
-
-	loggersMu.Lock()
-	defer loggersMu.Unlock()
-
-	// Double-check after acquiring write lock.
-	if logger, ok := loggers[fileName]; ok {
-		return logger, nil
-	}
-
-	logger, err := createLogger(fileName)
-	if err != nil {
-		return nil, err
-	}
-
-	loggers[fileName] = logger
-
-	return logger, nil
-}
-
 type Logger struct {
 	logger  *zap.SugaredLogger
 	service string
 
 	debugLogsEnabled bool
+
+	// cache is the Factory cache this logger was obtained from, used for cleanup.
+	cache *loggerCache
 }
 
 var _ interfaces.Logger = &Logger{}
-
-func NewLogger(service string) (*Logger, error) {
-	filename := strings.ToLower(strings.ReplaceAll(service, " ", "_"))
-
-	logger, err := getLogger(filename + ".log")
-	if err != nil {
-		return nil, err
-	}
-
-	// debug, err := config.GetDebug()
-	// if err != nil {
-	// 	return nil, fmt.Errorf("error getting debug config: %v", err)
-	// }
-
-	debug := true
-
-	return &Logger{
-		logger:           logger,
-		service:          service,
-		debugLogsEnabled: debug,
-	}, nil
-}
 
 func (instance *Logger) Info(message string) {
 	loggerMessage := strings.ReplaceAll(message, "\t", " ")
@@ -113,7 +64,7 @@ func (instance *Logger) Info(message string) {
 	log.Println(formattedMessage)
 }
 
-func (instance Logger) Warn(message string) {
+func (instance *Logger) Warn(message string) {
 	loggerMessage := strings.ReplaceAll(message, "\t", " ")
 	instance.logger.Warn(loggerMessage)
 
@@ -121,7 +72,7 @@ func (instance Logger) Warn(message string) {
 	log.Println(formattedMessage)
 }
 
-func (instance Logger) Error(message string, err error) {
+func (instance *Logger) Error(message string, err error) {
 	loggerMessage := fmt.Sprintf("%s: %v", message, err)
 	instance.logger.Error(loggerMessage)
 
@@ -151,8 +102,70 @@ func (instance *Logger) Debug(message string) {
 
 func (instance *Logger) Close() {
 	instance.logger.Sync()
+	instance.cache.remove(instance.service)
+}
 
-	loggersMu.Lock()
-	delete(loggers, instance.service)
-	loggersMu.Unlock()
+// loggerCache holds a per-Factory cache of named SugaredLoggers, eliminating
+// the package-level global state that made testing difficult.
+type loggerCache struct {
+	mu      sync.RWMutex
+	loggers map[string]*zap.SugaredLogger
+}
+
+func newLoggerCache() *loggerCache {
+	return &loggerCache{
+		loggers: make(map[string]*zap.SugaredLogger),
+	}
+}
+
+func (c *loggerCache) get(fileName string) (*zap.SugaredLogger, error) {
+	c.mu.RLock()
+	logger, ok := c.loggers[fileName]
+	c.mu.RUnlock()
+
+	if ok {
+		return logger, nil
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Double-check after acquiring write lock.
+	if logger, ok := c.loggers[fileName]; ok {
+		return logger, nil
+	}
+
+	logger, err := createLogger(fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	c.loggers[fileName] = logger
+
+	return logger, nil
+}
+
+func (c *loggerCache) remove(service string) {
+	c.mu.Lock()
+	delete(c.loggers, service)
+	c.mu.Unlock()
+}
+
+// newLogger creates a Logger backed by the given cache.
+func newLogger(cache *loggerCache, service string) (*Logger, error) {
+	filename := strings.ToLower(strings.ReplaceAll(service, " ", "_"))
+
+	logger, err := cache.get(filename + ".log")
+	if err != nil {
+		return nil, err
+	}
+
+	debug := true
+
+	return &Logger{
+		logger:           logger,
+		service:          service,
+		debugLogsEnabled: debug,
+		cache:            cache,
+	}, nil
 }

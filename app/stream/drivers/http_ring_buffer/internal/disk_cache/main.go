@@ -42,7 +42,7 @@ func NewDiskCache(url string, size int64) (*DiskCache, error) {
 	}
 
 	lockPath := getFilePath(url) + ".lock"
-	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0666)
+	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		file.Close()
 		return nil, err
@@ -102,7 +102,7 @@ func fileExists(url string) (bool, error) {
 
 func fileOpen(url string, size int64) (*os.File, error) {
 	filePath := getFilePath(url)
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func fileOpen(url string, size int64) (*os.File, error) {
 		return nil, err
 	}
 
-	if err := file.Chmod(0666); err != nil {
+	if err := file.Chmod(0644); err != nil {
 		file.Close()
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func fileCreate(url string, size int64) (*os.File, error) {
 		return nil, err
 	}
 
-	if err := file.Chmod(0666); err != nil {
+	if err := file.Chmod(0644); err != nil {
 		file.Close()
 		return nil, err
 	}

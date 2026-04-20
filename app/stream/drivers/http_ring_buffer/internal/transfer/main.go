@@ -2,8 +2,9 @@ package transfer
 
 import (
 	"context"
+	"errors"
 	"io"
-	"strings"
+	"os"
 	"sync"
 	"sync/atomic"
 
@@ -32,7 +33,7 @@ var _ io.Closer = &Transfer{}
 
 // Buffer pool for efficient memory reuse
 var bufferPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return make([]byte, 64*1024) // 64KB buffers
 	},
 }
@@ -82,7 +83,7 @@ func (transfer *Transfer) start() {
 		case io.EOF, context.Canceled, nil:
 			break
 		default:
-			if strings.HasPrefix(err.Error(), "Buffer is closed") || strings.Contains(err.Error(), "file already closed") {
+			if errors.Is(err, os.ErrClosed) {
 				break
 			}
 			transfer.logger.Error("Error copying from connection", err)
@@ -96,7 +97,7 @@ func (transfer *Transfer) start() {
 		case nil:
 			break
 		default:
-			if strings.HasPrefix(err.Error(), "Buffer is closed") || strings.Contains(err.Error(), "file already closed") {
+			if errors.Is(err, os.ErrClosed) {
 				break
 			}
 			transfer.logger.Error("Error copying from connection", err)

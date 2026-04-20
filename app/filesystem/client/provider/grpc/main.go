@@ -1,8 +1,10 @@
 package grpc
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"fuse_video_streamer/config"
 	"fuse_video_streamer/filesystem/client/provider/grpc/internal/filesystem"
@@ -14,6 +16,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 )
@@ -60,7 +63,21 @@ func New(entry config.FileSystemProvider, config *config.Config, loggerFactory i
 
 	fileSystem := filesystem.New(client, logger)
 
-	// TODO healthcheck endpoint
+	// Eagerly initiate the connection so that transient failures surface at
+	// startup rather than on the first filesystem operation. gRPC connections
+	// are lazy by default (IDLE); Connect() moves the state machine forward.
+	connection.Connect()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// Wait until the state changes from IDLE (i.e. a connection attempt has begun).
+	connection.WaitForStateChange(ctx, connectivity.Idle)
+
+	state := connection.GetState()
+	if state == connectivity.TransientFailure || state == connectivity.Shutdown {
+		logger.Warn(fmt.Sprintf("File system provider connection unhealthy (%s): %s", state, entry.Name))
+	}
+
 	logger.Info(fmt.Sprintf("Connected to file system provider:	%s", entry.Name))
 
 	return &provider{
@@ -88,7 +105,5 @@ func (provider *provider) IsConnected() bool {
 	if provider.connection == nil {
 		return false
 	}
-	state := provider.connection.GetState()
-	// Check if connection is in READY state
-	return state.String() == "READY"
+	return provider.connection.GetState() == connectivity.Ready
 }

@@ -45,8 +45,6 @@ func newDefaultBufferPool() *defaultBufferPool {
 	}
 }
 
-var globalBufferPool = newDefaultBufferPool()
-
 // NewBufferPool returns a new injectable BufferPool instance.
 func NewBufferPool() BufferPool {
 	return newDefaultBufferPool()
@@ -87,18 +85,6 @@ func (bufferPool *defaultBufferPool) Put(buffer []byte) {
 		// Don't pool buffers of unexpected sizes
 		return
 	}
-}
-
-// GetBuffer returns a buffer appropriate for the given file size.
-// Deprecated: inject BufferPool via NewBufferPool() instead.
-func GetBuffer(fileSize int64) []byte {
-	return globalBufferPool.Get(int(fileSize))
-}
-
-// PutBuffer returns a buffer to the appropriate pool based on its size.
-// Deprecated: inject BufferPool via NewBufferPool() instead.
-func PutBuffer(buffer []byte) {
-	globalBufferPool.Put(buffer)
 }
 
 func calculateBufferSize(fileSize int64) int64 {
