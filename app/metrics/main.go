@@ -17,7 +17,4 @@ func New(
 }
 
 func (m Metrics) Serve() {
-
-	m.fileSystemServer.GetMetrics()
-
 }

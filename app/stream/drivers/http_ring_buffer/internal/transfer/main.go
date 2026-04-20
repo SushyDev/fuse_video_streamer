@@ -5,9 +5,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	ring_buffer "github.com/sushydev/ring_buffer_go"
 

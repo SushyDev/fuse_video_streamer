@@ -275,7 +275,7 @@ func TestRealWorld_Netflix_PartialRead(t *testing.T) {
 	t.Parallel()
 
 	stream := newStreamWithLogger(t, netflixURL, netflixSize)
-	defer stream.Close()
+	defer func() { stream.Close() }()
 
 	rng := mrand.New(mrand.NewSource(time.Now().UnixNano()))
 	readSize := 64 * 1024
