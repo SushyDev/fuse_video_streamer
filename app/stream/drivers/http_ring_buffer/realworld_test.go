@@ -597,7 +597,11 @@ func TestRealWorld_UnstableProxy_LocalContent(t *testing.T) {
 					errorCount.Add(1)
 					return
 				}
-				defer stream.Close()
+				defer func() {
+					if stream != nil {
+						stream.Close()
+					}
+				}()
 
 				rng := mrand.New(mrand.NewSource(time.Now().UnixNano()))
 				buffer := make([]byte, 32*1024)
@@ -610,12 +614,15 @@ func TestRealWorld_UnstableProxy_LocalContent(t *testing.T) {
 
 					if readErr != nil {
 						errorCount.Add(1)
-						stream.Close()
+						if stream != nil {
+							stream.Close()
+						}
 						stream, err = http_ring_buffer.New(
 							mock_config.MinimalConfig(), mock_logger.NoopLoggerFactory{},
 							proxy.URL(), int64(contentSize),
 						)
 						if err != nil {
+							stream = nil
 							return
 						}
 						continue
