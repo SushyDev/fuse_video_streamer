@@ -11,10 +11,6 @@ import (
 )
 
 type clientRepository struct {
-	loggerFactory interfaces_logger.LoggerFactory
-
-	logger interfaces_logger.Logger
-
 	clients []interfaces_fuse.Client
 }
 

@@ -86,6 +86,7 @@ func (factory *integrationHandleServiceFactory) NewService(
 		factory.streamFactory,
 		factory.bufferPool,
 		logger,
+		false,
 	), nil
 }
 
@@ -164,10 +165,10 @@ func TestFuseIntegration_ConcurrentOpenReadRelease(t *testing.T) {
 	wg.Add(goroutines)
 
 	for g := 0; g < goroutines; g++ {
-		go func() {
+		go func(gIndex int) {
 			defer wg.Done()
 
-			rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(gIndex)))
 
 			for time.Now().Before(deadline) {
 				nodeIndex := rng.Intn(nodeCount)
@@ -198,7 +199,7 @@ func TestFuseIntegration_ConcurrentOpenReadRelease(t *testing.T) {
 				// Read at random offsets 1-10 times.
 				reads := 1 + rng.Intn(10)
 				for r := 0; r < reads; r++ {
-					offset := int64(rng.Intn(int(fileSize)))
+					offset := rng.Int63n(int64(fileSize))
 					readReq := &fuse.ReadRequest{
 						Offset: offset,
 						Size:   64,
@@ -210,7 +211,7 @@ func TestFuseIntegration_ConcurrentOpenReadRelease(t *testing.T) {
 				releaseReq := &fuse.ReleaseRequest{}
 				_ = streamableHandle.Release(context.Background(), releaseReq)
 			}
-		}()
+		}(g)
 	}
 
 	wg.Wait()

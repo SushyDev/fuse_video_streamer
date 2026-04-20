@@ -49,7 +49,7 @@ func newTestService(factory *mockStreamFactory) *Service {
 	node := &stubStreamableNode{} // reuse from main_test.go (same package)
 	logger := mock_logger.NoopLogger{}
 	loggerFactory := mockLoggerFactory{}
-	return NewService(node, nil, loggerFactory, factory, bufferPool, logger)
+	return NewService(node, nil, loggerFactory, factory, bufferPool, logger, true)
 }
 
 // TestNewHandle_Concurrent exercises concurrent NewHandle calls on a single

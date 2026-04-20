@@ -33,7 +33,7 @@ func (factory *Factory) NewService(node interfaces_node.StreamableNode, client i
 		return nil, err
 	}
 
-	service := NewService(node, client, factory.loggerFactory, factory.streamFactory, factory.bufferPool, streamableServiceLogger)
+	service := NewService(node, client, factory.loggerFactory, factory.streamFactory, factory.bufferPool, streamableServiceLogger, false)
 
 	return service, nil
 }

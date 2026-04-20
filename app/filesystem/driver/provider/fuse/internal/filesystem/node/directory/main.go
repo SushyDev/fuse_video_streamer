@@ -112,6 +112,10 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
+	if node.IsClosed() {
+		return nil, syscall.ENOENT
+	}
+
 	handle, err := node.directoryHandleService.NewHandle(node)
 	if err != nil {
 		message := "failed to open directory"

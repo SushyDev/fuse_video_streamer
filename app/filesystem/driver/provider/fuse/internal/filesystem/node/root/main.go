@@ -92,6 +92,10 @@ func (node *node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.RLock()
 	defer node.mu.RUnlock()
 
+	if node.IsClosed() {
+		return nil, syscall.ENOENT
+	}
+
 	return node, nil
 }
 

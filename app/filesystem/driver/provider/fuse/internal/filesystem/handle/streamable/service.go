@@ -2,7 +2,7 @@ package streamable
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 
 	interfaces_filesystem_client "fuse_video_streamer/filesystem/client/interfaces"
 	interfaces_logger "fuse_video_streamer/logger/interfaces"
@@ -23,7 +23,12 @@ type Service struct {
 
 	logger interfaces_logger.Logger
 
-	closed atomic.Bool
+	mu       sync.Mutex
+	cond     *sync.Cond
+	inflight int
+	closed   bool
+
+	ownsStreamFactory bool
 }
 
 var _ interfaces_handle.StreamableHandleService = &Service{}
@@ -35,22 +40,37 @@ func NewService(
 	streamFactory interfaces_stream.StreamFactory,
 	bufferPool pool.BufferPool,
 	logger interfaces_logger.Logger,
+	ownsStreamFactory bool,
 ) *Service {
-	return &Service{
-		node:          node,
-		client:        client,
-		loggerFactory: loggerFactory,
-		streamFactory: streamFactory,
-		bufferPool:    bufferPool,
-		logger:        logger,
+	s := &Service{
+		node:              node,
+		client:            client,
+		loggerFactory:     loggerFactory,
+		streamFactory:     streamFactory,
+		bufferPool:        bufferPool,
+		logger:            logger,
+		ownsStreamFactory: ownsStreamFactory,
 	}
+	s.cond = sync.NewCond(&s.mu)
+	return s
 }
 
 func (service *Service) NewHandle(ctx context.Context) (interfaces_handle.StreamableHandle, error) {
-	if service.IsClosed() {
+	service.mu.Lock()
+	if service.closed {
+		service.mu.Unlock()
 		service.logger.Warn("Attempted to create a new Streamable Handle after service was closed")
 		return nil, nil
 	}
+	service.inflight++
+	service.mu.Unlock()
+
+	defer func() {
+		service.mu.Lock()
+		service.inflight--
+		service.cond.Signal()
+		service.mu.Unlock()
+	}()
 
 	logger, err := service.loggerFactory.NewLogger("File Handle")
 	if err != nil {
@@ -68,15 +88,28 @@ func (service *Service) NewHandle(ctx context.Context) (interfaces_handle.Stream
 }
 
 func (service *Service) Close() error {
-	if !service.closed.CompareAndSwap(false, true) {
+	service.mu.Lock()
+	if service.closed {
+		service.mu.Unlock()
 		return nil
 	}
+	service.closed = true
+	// Wait for all in-flight NewHandle calls to finish before closing the
+	// streamFactory, preventing a race between NewStream and Close.
+	for service.inflight > 0 {
+		service.cond.Wait()
+	}
+	service.mu.Unlock()
 
-	service.streamFactory.Close()
+	if service.ownsStreamFactory {
+		service.streamFactory.Close()
+	}
 
 	return nil
 }
 
 func (service *Service) IsClosed() bool {
-	return service.closed.Load()
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return service.closed
 }

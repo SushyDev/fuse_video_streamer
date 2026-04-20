@@ -2,7 +2,6 @@ package file
 
 import (
 	"context"
-	"os"
 	"sync"
 	"testing"
 
@@ -133,9 +132,12 @@ func TestClose_WhileOpenInFlight(t *testing.T) {
 	const openGoroutines = 50
 	wg.Add(openGoroutines + 1)
 
+	start := make(chan struct{})
+
 	for i := 0; i < openGoroutines; i++ {
 		go func() {
 			defer wg.Done()
+			<-start
 			resp := &fuse.OpenResponse{}
 			handle, err := node.Open(context.Background(), openRequest(), resp)
 			if err != nil {
@@ -149,9 +151,11 @@ func TestClose_WhileOpenInFlight(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
+		<-start
 		node.Close()
 	}()
 
+	close(start)
 	wg.Wait()
 }
 
@@ -196,6 +200,3 @@ func TestHandleId_Unique(t *testing.T) {
 
 // Compile-time check: Node satisfies fs.Node.
 var _ fs.Node = (*Node)(nil)
-
-// Ensure os.FileMode is referenced (prevents unused import).
-var _ os.FileMode = 0

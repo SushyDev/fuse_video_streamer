@@ -48,14 +48,18 @@ func TestAdd_Concurrent(t *testing.T) {
 
 // TestCloseNodes_Concurrent calls CloseNodes while Add is still in flight.
 // Before the RWMutex fix this could deadlock or corrupt the slice.
+// It also verifies that the pre-populated nodes are actually closed.
 func TestCloseNodes_Concurrent(t *testing.T) {
 	t.Parallel()
 
 	registry := New()
 
-	// Pre-populate so CloseNodes has work to do.
-	for i := 0; i < 50; i++ {
-		registry.Add(&stubNode{})
+	// Pre-populate so CloseNodes has work to do; keep references to assert closure.
+	const preCount = 50
+	prePopulated := make([]*stubNode, preCount)
+	for i := range prePopulated {
+		prePopulated[i] = &stubNode{}
+		registry.Add(prePopulated[i])
 	}
 
 	var wg sync.WaitGroup
@@ -78,4 +82,11 @@ func TestCloseNodes_Concurrent(t *testing.T) {
 	}()
 
 	wg.Wait()
+
+	// Verify that every pre-populated node was actually closed.
+	for i, node := range prePopulated {
+		if !node.IsClosed() {
+			t.Errorf("pre-populated node %d was not closed after CloseNodes()", i)
+		}
+	}
 }

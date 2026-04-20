@@ -115,6 +115,10 @@ func (node *Node) Open(ctx context.Context, openRequest *fuse.OpenRequest, openR
 	node.mu.Lock()
 	defer node.mu.Unlock()
 
+	if node.IsClosed() {
+		return nil, syscall.ENOENT
+	}
+
 	handle, err := node.handleService.NewHandle(ctx)
 	if err != nil {
 		message := "failed to create file handle"

@@ -191,6 +191,7 @@ func (factory *realHandleServiceFactory) NewService(
 		factory.streamFactory,
 		factory.bufferPool,
 		logger,
+		false,
 	), nil
 }
 

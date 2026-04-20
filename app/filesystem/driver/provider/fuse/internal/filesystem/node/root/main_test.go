@@ -182,9 +182,12 @@ func TestLookup_RacesWithClose(t *testing.T) {
 	const lookups = 50
 	wg.Add(lookups + 1)
 
+	start := make(chan struct{})
+
 	for i := 0; i < lookups; i++ {
 		go func() {
 			defer wg.Done()
+			<-start
 			resp := &fuse.LookupResponse{}
 			_, _ = rootNode.Lookup(context.Background(), lookupRequest("clientA"), resp)
 		}()
@@ -192,9 +195,11 @@ func TestLookup_RacesWithClose(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
+		<-start
 		rootNode.Close()
 	}()
 
+	close(start)
 	wg.Wait()
 }
 
@@ -212,18 +217,23 @@ func TestReadDirAll_RacesWithClose(t *testing.T) {
 	const readers = 50
 	wg.Add(readers + 1)
 
+	start := make(chan struct{})
+
 	for i := 0; i < readers; i++ {
 		go func() {
 			defer wg.Done()
+			<-start
 			_, _ = rootNode.ReadDirAll(context.Background())
 		}()
 	}
 
 	go func() {
 		defer wg.Done()
+		<-start
 		rootNode.Close()
 	}()
 
+	close(start)
 	wg.Wait()
 }
 
