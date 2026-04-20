@@ -1,3 +1,5 @@
+// Package config handles loading and validation of the application configuration
+// from a TOML file.
 package config
 
 import (
@@ -7,11 +9,13 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// FileSystemProvider represents a single remote filesystem server to connect to.
 type FileSystemProvider struct {
 	Name   string `toml:"name"`
 	Target string `toml:"target"`
 }
 
+// Config holds the application configuration loaded from config.toml.
 type Config struct {
 	MountPoint      string               `toml:"mount_point"`
 	VolumeName      string               `toml:"volume_name"`
@@ -20,6 +24,7 @@ type Config struct {
 	FileServers     []FileSystemProvider `toml:"file_servers"`
 }
 
+// Get reads and validates the configuration from config.toml in the current directory.
 func Get() (*Config, error) {
 	configData, err := os.ReadFile("config.toml")
 	if err != nil {
@@ -54,27 +59,4 @@ func validate(cfg Config) error {
 	}
 
 	return nil
-}
-
-func (config *Config) GetMountPoint() string {
-	return config.MountPoint
-}
-
-func (config *Config) GetVolumeName() string {
-	return config.VolumeName
-}
-
-func (config *Config) GetDebug() bool {
-	return config.Debug
-}
-
-func (config *Config) GetEnableDiskCache() bool {
-	return config.EnableDiskCache
-}
-
-func (config *Config) GetFileServers() []FileSystemProvider {
-	servers := make([]FileSystemProvider, len(config.FileServers))
-	copy(servers, config.FileServers)
-
-	return servers
 }

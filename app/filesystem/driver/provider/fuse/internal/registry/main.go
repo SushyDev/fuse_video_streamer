@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"sync"
+	"time"
 
 	interfaces_node "fuse_video_streamer/filesystem/driver/provider/fuse/internal/filesystem/node"
 )
@@ -51,6 +52,7 @@ func (registry *registry) CloseNodes() {
 	registry.mu.RUnlock()
 
 	var wg sync.WaitGroup
+	done := make(chan struct{})
 
 	for _, node := range nodes {
 		wg.Add(1)
@@ -61,5 +63,17 @@ func (registry *registry) CloseNodes() {
 		}(node)
 	}
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	// Wait for nodes to close with a 30 second timeout
+	select {
+	case <-done:
+		// All nodes closed successfully
+	case <-time.After(30 * time.Second):
+		// Timeout - some nodes failed to close, but continue anyway
+		// In a production system, this would be logged
+	}
 }

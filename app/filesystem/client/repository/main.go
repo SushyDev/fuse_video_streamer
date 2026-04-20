@@ -26,7 +26,7 @@ func NewWithClients(clients []interfaces_fuse.Client) interfaces_fuse.ClientRepo
 }
 
 func New(config *config.Config, loggerFactory interfaces_logger.LoggerFactory, logger interfaces_logger.Logger) (interfaces_fuse.ClientRepository, error) {
-	fileSystemProviders := config.GetFileServers()
+	fileSystemProviders := config.FileServers
 
 	var providers []interfaces_fuse.Client
 	for _, fileSystemProvider := range fileSystemProviders {
