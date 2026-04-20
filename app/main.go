@@ -1,3 +1,18 @@
+// Package main implements a FUSE filesystem that streams video files from remote servers.
+//
+// The application mounts a FUSE filesystem at the configured mountpoint and proxies
+// filesystem operations to remote gRPC file servers. Video files are streamed on-demand
+// using HTTP range requests with ring buffer optimization.
+//
+// Graceful Shutdown:
+//   - The application handles SIGINT, SIGTERM, and SIGQUIT signals
+//   - On signal receipt, Close() is called on the filesystem to unmount cleanly
+//   - The main goroutine waits for Serve() to complete before exiting
+//   - All active streams and file handles are closed during shutdown
+//
+// Usage:
+//   fuse_video_streamer              # Start the FUSE server
+//   fuse_video_streamer --health     # Check if mount is healthy
 package main
 
 import (
